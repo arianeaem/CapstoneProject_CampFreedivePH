@@ -1,0 +1,38 @@
+[
+  {
+    "month": "October 2026",
+    "monthly_average": 15.6,
+    "overall_mean": 14.8,
+    "standard_deviation": 5.1,
+    "upper_threshold": 17.0,
+    "lower_threshold": 13.3,
+    "classification": "Off-Peak"
+  },
+  {
+    "month": "November 2026",
+    "monthly_average": 12.8,
+    "overall_mean": 14.8,
+    "standard_deviation": 5.1,
+    "upper_threshold": 17.0,
+    "lower_threshold": 13.3,
+    "classification": "Off-Peak"
+  },
+  {
+    "month": "December 2026",
+    "monthly_average": 14.6,
+    "overall_mean": 14.8,
+    "standard_deviation": 5.1,
+    "upper_threshold": 17.0,
+    "lower_threshold": 13.3,
+    "classification": "Shoulder"
+  },
+  {
+    "month": "January 2027",
+    "monthly_average": 9.0,
+    "overall_mean": 14.8,
+    "standard_deviation": 5.1,
+    "upper_threshold": 17.0,
+    "lower_threshold": 13.3,
+    "classification": "Off-Peak"
+  }
+]

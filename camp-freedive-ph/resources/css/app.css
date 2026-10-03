@@ -1,0 +1,753 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views';
+
+@theme {
+    --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --font-heading: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+
+    --text-xs: 0.875rem; /* 14px minimum */
+    --text-xs--line-height: 1.35rem;
+    --text-sm: 0.9375rem; /* 15px */
+    --text-sm--line-height: 1.45rem;
+    --text-base: 1rem; /* 16px */
+    --text-base--line-height: 1.5rem;
+    --text-lg: 1.125rem; /* 18px */
+    --text-lg--line-height: 1.625rem;
+    --text-xl: 1.25rem; /* 20px */
+    --text-xl--line-height: 1.75rem;
+    --text-2xl: 1.5rem; /* 24px */
+    --text-2xl--line-height: 2rem;
+
+    --color-primary: #780000;
+    --color-primary-hover: #5E0000;
+    --color-primary-pressed: #470000;
+    --color-primary-subtle: #F8EAEA;
+
+    --color-success: #10B981;
+    --color-warning: #D97706;
+    --color-danger: #DC2626;
+
+    /* Neutral Modern System Grayscale Palette */
+    --color-gray-50: #F2F2F7;
+    --color-gray-100: #F2F2F7; /* Swatch 6 (System Gray 6) */
+    --color-gray-200: #E5E5EA; /* Swatch 5 (System Gray 5) */
+    --color-gray-300: #D1D1D6; /* Swatch 4 (System Gray 4) */
+    --color-gray-400: #C7C7CC; /* Swatch 3 (System Gray 3) */
+    --color-gray-500: #AEAEB2; /* Swatch 2 (System Gray 2) */
+    --color-gray-600: #8E8E93; /* Swatch 1 (System Gray 1) */
+    --color-gray-700: #6E6E73;
+    --color-gray-800: #3A3A3C;
+    --color-gray-900: #1D1D1F;
+
+    --color-system-gray-1: #8E8E93;
+    --color-system-gray-2: #AEAEB2;
+    --color-system-gray-3: #C7C7CC;
+    --color-system-gray-4: #D1D1D6;
+    --color-system-gray-5: #E5E5EA;
+    --color-system-gray-6: #F2F2F7;
+
+    --color-text-primary: #1D1D1F;
+    --color-text-secondary: #6E6E73;
+    --color-text-tertiary: #8E8E93;
+
+    --color-border-neutral: #D1D1D6;
+    --color-divider-neutral: #E5E5EA;
+
+    --color-bg-secondary: #F2F2F7;
+    --color-bg-tertiary: #F2F2F7;
+
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --radius-2xl: 12px;
+    --radius-3xl: 14px;
+
+    /* Consistent, simple, subtle shadow scale (no heavy, dark, or exaggerated blur) */
+    --shadow-2xs: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+    --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+    --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.03);
+    --shadow-md: 0 3px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+    --shadow-lg: 0 6px 12px -2px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+    --shadow-xl: 0 10px 20px -3px rgba(0, 0, 0, 0.07), 0 3px 6px -3px rgba(0, 0, 0, 0.03);
+    --shadow-2xl: 0 14px 28px -4px rgba(0, 0, 0, 0.08), 0 4px 8px -2px rgba(0, 0, 0, 0.03);
+}
+
+/* Custom Base & Component Styles */
+@layer base {
+    html {
+        font-size: 16px;
+    }
+    body {
+        color: #1D1D1F;
+        background-color: #F2F2F7;
+        font-family: var(--font-sans);
+        font-size: 0.9375rem; /* 15px */
+        -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6, .font-heading {
+        font-family: var(--font-heading);
+    }
+
+    /* Enforce 14px minimum across all text sizes */
+    small, .text-xs, [class*="text-[10px]"], [class*="text-[11px]"], [class*="text-[12px]"], [class*="text-[13px]"], [class*="text-[9px]"], [class*="text-[8px]"] {
+        font-size: 14px !important;
+        line-height: 1.35;
+    }
+
+    /* Universal Native Select Inputs */
+    select, .form-select {
+        appearance: none !important;
+        -webkit-appearance: none !important;
+        -moz-appearance: none !important;
+        background-color: #FFFFFF;
+        border: 1px solid #D1D1D6;
+        border-radius: 0.75rem; /* 12px */
+        color: #1D1D1F;
+        font-size: 0.9375rem; /* 15px */
+        font-weight: 500;
+        line-height: 1.45;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236E6E73' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
+        background-position: right 0.75rem center !important;
+        background-repeat: no-repeat !important;
+        background-size: 1.15em 1.15em !important;
+        padding-right: 2.25rem !important;
+        cursor: pointer;
+        transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+    }
+
+    select:hover, .form-select:hover {
+        border-color: #AEAEB2;
+    }
+
+    select:focus, .form-select:focus {
+        outline: none !important;
+        border-color: #780000 !important;
+        box-shadow: 0 0 0 1px #780000 !important;
+    }
+
+    select:disabled, .form-select:disabled {
+        background-color: #F2F2F7 !important;
+        color: #8E8E93 !important;
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    /* Clean input focus to ensure 2px #780000 selected state */
+    input:focus, textarea:focus, .form-input:focus {
+        outline: none !important;
+        border-color: #780000 !important;
+        box-shadow: 0 0 0 1px #780000 !important;
+    }
+}
+
+/* ========================================================================= */
+/* BESPOKE COMPONENT SYSTEM (Cards, Forms, Tables, Badges, Modals, Toolbars) */
+/* ========================================================================= */
+
+/* 1. Cards & Containers (Standardized Radii, Borders, Padding) */
+.card {
+    background-color: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    padding: 1.5rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: all 150ms ease;
+}
+
+.card-compact {
+    background-color: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    padding: 1rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.card-interactive {
+    background-color: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    padding: 1.25rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    transition: all 150ms ease;
+    cursor: pointer;
+}
+
+.card-interactive:hover {
+    border-color: #780000;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #E5E5EA;
+}
+
+/* 2. Form System (Unified Sizing, Borders, Focus States) */
+.form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #1D1D1F;
+    margin-bottom: 0.5rem;
+}
+
+.form-label-required::after {
+    content: " *";
+    color: #780000;
+}
+
+.form-input, .form-select, .form-textarea {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    border-radius: 12px;
+    border: 1px solid #D1D1D6;
+    font-size: 0.875rem;
+    color: #1D1D1F;
+    background-color: #ffffff;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    min-height: 42px;
+}
+
+.form-textarea {
+    min-height: 80px;
+}
+
+.form-input:hover, .form-select:hover, .form-textarea:hover {
+    border-color: #8E8E93;
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+    border-color: #780000 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 1px #780000 !important;
+}
+
+.form-hint {
+    font-size: 0.875rem;
+    color: #6E6E73;
+    margin-top: 0.375rem;
+    display: block;
+}
+
+.form-error {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #DC2626;
+    margin-top: 0.375rem;
+    display: block;
+}
+
+/* 3. Badges & Status Pills (Bespoke Semantic Hierarchy - Borderless) */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    border: none;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.badge-emerald {
+    background-color: #ECFDF5;
+    color: #065F46;
+}
+
+.badge-amber {
+    background-color: #FFFBEB;
+    color: #92400E;
+}
+
+.badge-rose {
+    background-color: #FEF2F2;
+    color: #991B1B;
+}
+
+.badge-blue {
+    background-color: #EFF6FF;
+    color: #1E40AF;
+}
+
+.badge-neutral {
+    background-color: #F2F2F7;
+    color: #6E6E73;
+}
+
+.badge-brand {
+    background-color: #F8EAEA;
+    color: #780000;
+}
+
+/* 4. Table Design System (Clean Dividers, Crisp Header) */
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.data-table {
+    width: 100%;
+    text-align: left;
+    font-size: 0.875rem;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background-color: #F2F2F7;
+    border-bottom: 1px solid #E5E5EA;
+    color: #6E6E73;
+    font-weight: 700;
+}
+
+.data-table th {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.data-table td {
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid #E5E5EA;
+    font-size: 0.875rem;
+    color: #1D1D1F;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+    background-color: #F2F2F7;
+}
+
+/* 5. Modals & Dialog Panels (Solid Overlay & Crisp White Card) */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.modal-panel {
+    background-color: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #E5E5EA;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
+    width: 100%;
+    max-width: 32rem;
+    padding: 1.5rem;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #E5E5EA;
+    margin-bottom: 1.25rem;
+}
+
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #E5E5EA;
+    margin-top: 1.5rem;
+}
+
+/* 6. KPI Stat Tiles (Executive Metric Cards) */
+.kpi-tile {
+    background-color: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.kpi-label {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #6E6E73;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.kpi-value {
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: #1D1D1F;
+    margin-top: 0.25rem;
+    font-family: var(--font-heading);
+    letter-spacing: -0.02em;
+}
+
+.kpi-sub {
+    font-size: 0.875rem;
+    color: #8E8E93;
+    margin-top: 0.25rem;
+}
+
+/* 7. Toolbars & Filter Bars */
+.toolbar {
+    background-color: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #E5E5EA;
+    padding: 0.75rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+@media (min-width: 1024px) {
+    .toolbar {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+/* 8. Unified Dropdown Menus & Popovers */
+.dropdown-menu, .dropdown-card, .filter-dropdown {
+    background-color: #ffffff;
+    border-radius: 16px; /* 1rem */
+    border: 1px solid #E5E5EA;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
+    padding: 1rem;
+    z-index: 50;
+}
+
+/* 9. Alerts & Notices */
+.alert-box {
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.alert-warning {
+    background-color: #FFFBEB;
+    border: 1px solid #FDE68A;
+    color: #92400E;
+}
+
+.alert-danger {
+    background-color: #FEF2F2;
+    border: 1px solid #FECACA;
+    color: #991B1B;
+}
+
+.alert-success {
+    background-color: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    color: #065F46;
+}
+
+.alert-info {
+    background-color: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    color: #1E40AF;
+}
+
+/* ========================================================================= */
+/* BUTTON DESIGN SYSTEM (Primary, Secondary, Tertiary, Quaternary, Danger, Ghost) */
+/* ========================================================================= */
+
+/* Base Button Properties */
+.btn-primary, .btn-secondary, .btn-tertiary, .btn-quaternary, .btn-danger, .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    min-height: 40px;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+                color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 150ms cubic-bezier(0.4, 0, 0.2, 1),
+                transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* 1. Primary Button: Used once per screen/modal for primary completion action */
+.btn-primary {
+    background-color: #780000;
+    color: #ffffff;
+    font-weight: 700;
+    border: 1px solid transparent;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-primary:hover {
+    background-color: #5E0000;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.btn-primary:active {
+    background-color: #470000;
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-primary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(120, 0, 0, 0.35);
+}
+
+.btn-primary:disabled, .btn-primary[disabled] {
+    background-color: #F2F2F7;
+    color: #8E8E93;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* 2. Secondary Button: Standard outlined button for secondary actions */
+.btn-secondary {
+    background-color: #ffffff;
+    color: #1D1D1F;
+    border: 1px solid #D1D1D6;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.btn-secondary:hover {
+    background-color: #F2F2F7;
+    border-color: #8E8E93;
+    color: #1D1D1F;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.btn-secondary:active {
+    background-color: #F2F2F7;
+    border-color: #6E6E73;
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.btn-secondary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
+}
+
+.btn-secondary:disabled, .btn-secondary[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* 3. Tertiary Button: Neutral filled button for muted secondary actions */
+.btn-tertiary {
+    background-color: #F2F2F7;
+    color: #1D1D1F;
+    border: 1px solid transparent;
+    font-weight: 600;
+}
+
+.btn-tertiary:hover {
+    background-color: #E5E5EA;
+    color: #1D1D1F;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+.btn-tertiary:active {
+    background-color: #D1D1D6;
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.btn-tertiary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.12);
+}
+
+.btn-tertiary:disabled, .btn-tertiary[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* 4. Quaternary Button: Text-only action (never gets background/border on hover) */
+.btn-quaternary {
+    background: transparent !important;
+    border: none !important;
+    color: #6E6E73;
+    font-weight: 600;
+    min-height: auto;
+    padding: 0.375rem 0.5rem;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.btn-quaternary:hover {
+    background: transparent !important;
+    border: none !important;
+    color: #1D1D1F;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.btn-quaternary:active {
+    color: #780000;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.btn-quaternary:focus-visible {
+    outline: none;
+    text-decoration: underline;
+    box-shadow: 0 0 0 2px rgba(120, 0, 0, 0.25);
+}
+
+.btn-quaternary:disabled, .btn-quaternary[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+/* 5. Danger Button: For destructive actions (always paired with confirmation modal) */
+.btn-danger {
+    background-color: #DC2626;
+    color: #ffffff;
+    border: 1px solid #B91C1C;
+    font-weight: 700;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-danger:hover {
+    background-color: #B91C1C;
+    border-color: #991B1B;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.btn-danger:active {
+    background-color: #991B1B;
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-danger:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.35);
+}
+
+.btn-danger:disabled, .btn-danger[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Subtle / Outline Danger Variant for Pre-Modal Triggers */
+.btn-danger-subtle {
+    background-color: #FEF2F2;
+    color: #DC2626;
+    border: 1px solid #FECACA;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.btn-danger-subtle:hover {
+    background-color: #FEE2E2;
+    border-color: #FCA5A5;
+    color: #B91C1C;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.btn-danger-subtle:active {
+    background-color: #FECACA;
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.btn-danger-subtle:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25);
+}
+
+/* 6. Ghost Button: For icon actions or utility toolbars */
+.btn-ghost {
+    background-color: transparent;
+    color: #6E6E73;
+    border: 1px solid transparent;
+    font-weight: 600;
+    padding: 0.375rem 0.625rem;
+    min-height: 36px;
+    border-radius: 8px;
+}
+
+.btn-ghost:hover {
+    background-color: #F2F2F7;
+    color: #1D1D1F;
+    transform: translateY(-1px);
+}
+
+.btn-ghost:active {
+    background-color: #E5E5EA;
+    transform: translateY(0);
+}
+
+.btn-ghost:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Icon-only button utility */
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    min-height: 36px;
+    border-radius: 8px;
+}
+
+[x-cloak] {
+    display: none !important;
+}

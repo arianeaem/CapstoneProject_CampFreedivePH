@@ -1,0 +1,5 @@
+month,batches_in_month,predicted_participants,predicted_bookings,predicted_revenue_php,instructors_needed_total,season_period
+2026-10,3,46.8,26.2,105149.72,13,Off-Peak
+2026-11,5,64.2,19.8,94729.99,18,Off-Peak
+2026-12,4,58.6,38.7,121472.97,16,Shoulder
+2027-01,1,9.0,7.9,17383.54,3,Off-Peak

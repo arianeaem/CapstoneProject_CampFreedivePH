@@ -1,0 +1,18 @@
+User-agent: *
+Allow: /
+Allow: /book
+Allow: /terms-and-conditions
+Allow: /privacy-policy
+Allow: /manage-booking
+
+# Disallow Private & Admin Areas
+Disallow: /admin/
+Disallow: /owner/
+Disallow: /coach/
+Disallow: /login
+Disallow: /staff/
+Disallow: /api/
+Disallow: /webhooks/
+
+# Sitemap Location
+Sitemap: https://campfreedive.ph/sitemap.xml
