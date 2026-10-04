@@ -54,6 +54,7 @@ class ForcePasswordChangeController extends Controller
         $user->update([
             'password' => Hash::make($request->password),
             'must_change_password' => false,
+            'last_login_at' => now(),
         ]);
 
         AuditLogger::log('PASSWORD_CHANGED', "Temporary password updated on first login by: {$user->email} (Role: {$user->role})", $user, $user->name, $request);

@@ -139,10 +139,10 @@ class AvailabilityController extends Controller
                 $status = $availRecord->status;
             }
 
-            // Determine if >48 hours away for emergency release request (06:30 AM start)
+            // Emergency release requests remain available regardless of lead time.
             $diveStart = $dayCursor->copy()->setTime(6, 30);
             $hoursUntilDive = max(0, Carbon::now()->diffInHours($diveStart, false));
-            $canRequestRelease = $isAssigned && ($hoursUntilDive > 48) && !$hasReleaseRequest;
+            $canRequestRelease = $isAssigned && !$hasReleaseRequest;
 
             $calendarDays[] = [
                 'date' => $dayCursor->copy(),
@@ -393,7 +393,7 @@ class AvailabilityController extends Controller
 
     /**
      * Submit an Emergency Release Request for an assigned batch/date.
-     * Enforces the 48-hour cutoff rule.
+     * Emergency releases may be requested at any time.
      */
     public function requestRelease(Request $request): RedirectResponse
     {
@@ -407,14 +407,6 @@ class AvailabilityController extends Controller
         $batch = Batch::findOrFail($request->input('batch_id'));
         $diveDate = Carbon::parse($request->input('dive_date'))->startOfDay();
 
-        // 48-Hour Staffing Cutoff Enforcement: Emergency coach release locked out within 48h of 06:30 AM departure
-        $diveStart = $diveDate->copy()->setTime(6, 30);
-        $hoursUntilDive = Carbon::now()->diffInHours($diveStart, false);
-
-        if ($hoursUntilDive <= 48) {
-            return back()->with('error', "Emergency release requests cannot be submitted within 48 hours of dive departure (Lead time: {$hoursUntilDive}h). For urgent situations, please contact Camp Operations directly.");
-        }
-
         // Check if existing pending request
         $existing = AssignmentReleaseRequest::where('coach_id', $coach->id)
             ->where('batch_id', $batch->id)
@@ -425,7 +417,7 @@ class AvailabilityController extends Controller
             return back()->with('error', 'You already have a pending release request submitted for this session.');
         }
 
-        AssignmentReleaseRequest::create([
+        $release = AssignmentReleaseRequest::create([
             'coach_id' => $coach->id,
             'batch_id' => $batch->id,
             'dive_date' => $diveDate,
@@ -433,6 +425,8 @@ class AvailabilityController extends Controller
             'status' => 'pending',
             'requested_at' => now(),
         ]);
+
+        app(\App\Services\AdminNotificationService::class)->coachEmergencyRelease($release->load(['coach', 'batch']));
 
         return back()->with('success', 'Your emergency release request has been submitted to Camp Admin for review.');
     }

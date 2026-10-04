@@ -216,6 +216,8 @@ class ManageBookingController extends Controller
             Log::warning('Reschedule email failed: ' . $e->getMessage());
         }
 
+        app(\App\Services\AdminNotificationService::class)->customerRequest('reschedule', $booking, $rescheduleRequest->reason);
+
         return redirect()->route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin])
             ->with('success', "Your reschedule request has been sent to the camp for approval. You'll be notified once it's confirmed.");
     }
@@ -255,6 +257,9 @@ class ManageBookingController extends Controller
         if ($booking->status === 'cancelled' || $booking->status === 'cancellation_requested') {
             return back()->with('error', 'A cancellation is already processed or pending review.');
         }
+        if (!$policy['cancel_allowed']) {
+            return back()->with('error', 'Cancellation is not allowed: ' . $policy['cancel_message']);
+        }
 
         $cancellationRequest = CancellationRequest::create([
             'booking_id' => $booking->id,
@@ -273,6 +278,8 @@ class ManageBookingController extends Controller
         } catch (\Exception $e) {
             Log::warning('Cancellation email failed: ' . $e->getMessage());
         }
+
+        app(\App\Services\AdminNotificationService::class)->customerRequest('cancellation', $booking, $cancellationRequest->reason);
 
         return redirect()->route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin])
             ->with('success', "Your cancellation request has been submitted for camp review. You'll be notified once processed.");

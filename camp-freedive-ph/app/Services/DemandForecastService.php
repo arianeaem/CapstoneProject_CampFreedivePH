@@ -130,6 +130,7 @@ class DemandForecastService
                     'capacity' => $r->capacity,
                     'predicted_participants' => $r->predicted_participants,
                     'predicted_bookings' => $r->predicted_bookings,
+                    'predicted_revenue_php' => $r->predicted_revenue_php,
                     'lower_bound' => $r->lower_bound,
                     'upper_bound' => $r->upper_bound,
                     'predicted_fill_rate' => $r->predicted_fill_rate,
@@ -165,6 +166,8 @@ class DemandForecastService
             $count = count($rows);
             $pax = array_sum(array_column($rows, 'predicted_participants'));
             $bkg = array_sum(array_column($rows, 'predicted_bookings'));
+            $rev = array_sum(array_column($rows, 'predicted_revenue_php'));
+            $coaches = array_map(fn ($r) => (int) ceil($r['predicted_participants'] / 4), $rows);
             $avg = $count ? $pax / $count : 0;
             $month = (int) substr($key, 5, 2);
 
@@ -174,6 +177,9 @@ class DemandForecastService
                 'batches' => $count,
                 'predicted_participants' => round($pax, 1),
                 'predicted_bookings' => round($bkg, 1),
+                'predicted_revenue_php' => round($rev, 2),
+                'coaches_peak' => max($coaches),
+                'coach_slots' => array_sum($coaches),
                 'avg_participants_per_batch' => round($avg, 1),
                 'demand_level' => DemandRules::demandLevel($avg),
                 'season_period' => DemandRules::seasonForMonth($month),

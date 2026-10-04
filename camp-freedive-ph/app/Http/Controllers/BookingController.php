@@ -314,11 +314,6 @@ class BookingController extends Controller
 
         $allowedSuffixes = ['', 'Jr.', 'Sr.', 'II', 'III', 'IV', 'V', 'None'];
 
-        // Normalize hasAgreedToTerms if frontend sends camelCase
-        if ($request->has('hasAgreedToTerms') && !$request->has('has_agreed_to_terms')) {
-            $request->merge(['has_agreed_to_terms' => $request->input('hasAgreedToTerms')]);
-        }
-
         $validated = $request->validate([
             'class_type' => 'required|string|in:discovery,fundive,refinement',
             'is_certified_diver' => ['required_if:class_type,fundive', 'nullable', 'boolean'],
@@ -349,7 +344,9 @@ class BookingController extends Controller
             'participants.*.no_middle_name' => 'nullable|boolean',
             'participants.*.last_name' => ['required', 'string', 'min:2', 'max:120', 'regex:/^(?=.*[\p{L}])[\p{L}\s\.\'\-]+$/u'],
             'participants.*.suffix' => ['nullable', 'string', Rule::in($allowedSuffixes)],
-            'participants.*.age' => 'required|integer|min:8|max:85',
+            'participants.*.birthdate' => 'nullable|date|before_or_equal:today',
+            'participants.*.gender' => 'nullable|in:male,female,non_binary,prefer_not_to_say',
+            'participants.*.age' => 'required_without:participants.*.birthdate|nullable|integer|min:8|max:85',
             'participants.*.health_condition' => 'nullable|string|max:500',
             'participants.*.swimmer_status' => 'nullable|string|in:non_swimmer,beginner,intermediate,advanced,swimmer,casual_swimmer,confident_swimmer',
             'contact_name' => 'nullable|string|max:255',
@@ -390,9 +387,28 @@ class BookingController extends Controller
             'contact_last_name.required' => 'Primary contact last name is required.',
             'contact_last_name.min' => 'Primary contact last name must be at least 2 characters.',
             'contact_last_name.regex' => 'Primary contact last name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'has_agreed_to_terms.accepted' => 'You must agree to the Terms & Conditions and policies to complete your booking.',
             'confirmation_ack.accepted' => 'You must confirm that all details provided are accurate.',
+            'has_agreed_to_terms.accepted' => 'You must agree to the Terms & Conditions and Privacy Policy to complete your booking.',
         ]);
+
+        // Re-check the selected dates server-side. The browser preview is advisory
+        // and must not be able to bypass a critical safety classification.
+        $weatherForecast = $this->weatherSafetyService->getForecast(
+            $validated['start_date'],
+            $validated['end_date']
+        );
+        $criticalRisk = ($weatherForecast['risk_level'] ?? null) === 'critical_risk'
+            || ($weatherForecast['overall_classification'] ?? null) === 'Critical Risk'
+            || ($weatherForecast['day1']['classification'] ?? null) === 'Critical Risk'
+            || ($weatherForecast['day2']['classification'] ?? null) === 'Critical Risk';
+
+        if ($criticalRisk || ($weatherForecast['is_bookable'] ?? true) === false) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This date cannot be booked because the forecast is classified as Critical Risk. Please choose another date.',
+                'weather' => $weatherForecast,
+            ], 422);
+        }
 
         $cfn = trim($validated['contact_first_name'] ?? '');
         $cmn = (!empty($validated['contact_no_middle_name'])) ? '' : trim($validated['contact_middle_name'] ?? '');
@@ -522,7 +538,11 @@ class BookingController extends Controller
 
                         $booking->participants()->create([
                             'name' => $pName ?: 'Participant',
-                            'age' => (int) $pData['age'],
+                            'birthdate' => !empty($pData['birthdate']) ? $pData['birthdate'] : null,
+                            'gender' => $pData['gender'] ?? null,
+                            'age' => !empty($pData['birthdate'])
+                                ? Carbon::parse($pData['birthdate'])->age
+                                : (int) $pData['age'],
                             'health_condition' => $pData['health_condition'] ?? 'None',
                             'swimmer_status' => $pData['swimmer_status'] ?? 'beginner',
                             'price_per_person' => $classPrice,
@@ -597,6 +617,8 @@ class BookingController extends Controller
                     );
 
                     DB::commit();
+
+                    app(\App\Services\AdminNotificationService::class)->newBooking($booking->fresh());
 
                     return response()->json([
                         'success' => true,

@@ -53,8 +53,8 @@ class WeatherForecastService
     }
 
     // Anilao / Mabini, Batangas Site Coordinates (Camp FreedivePH primary training basin)
-    public const LATITUDE = 13.7481;
-    public const LONGITUDE = 120.9408;
+    public const LATITUDE = 13.6874;
+    public const LONGITUDE = 120.8931;
     public const TIMEZONE = 'Asia/Manila';
     public const MAX_FORECAST_DAYS = 16;
 
@@ -237,7 +237,7 @@ class WeatherForecastService
      */
     public function assessBatch(Batch $batch, ?array $overrides = null, ?User $assessedBy = null): array
     {
-        return DB::transaction(function () use ($batch, $overrides, $assessedBy) {
+        $result = DB::transaction(function () use ($batch, $overrides, $assessedBy) {
             $startDate = $batch->start_date->copy()->startOfDay();
             $endDate = $batch->end_date ? $batch->end_date->copy()->startOfDay() : $startDate->copy()->addDay();
 
@@ -356,6 +356,17 @@ class WeatherForecastService
                 'ml_assessment' => $batchML,
             ];
         });
+
+        $classification = $result['overall_classification'] ?? 'Safe';
+        if (in_array($classification, ['High Risk', 'Critical Risk'], true)) {
+            $assessedBatch = $batch->fresh();
+            app(\App\Services\AdminNotificationService::class)->risk($assessedBatch, $classification);
+            if ($classification === 'Critical Risk') {
+                app(\App\Services\AdminNotificationService::class)->imminentCriticalRisk($assessedBatch);
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -1181,8 +1192,8 @@ class WeatherForecastService
         try {
             $marineRes = $this->apiClient->execute('open_meteo', 'GET', 'https://marine-api.open-meteo.com/v1/marine', [
                 'query' => [
-                    'latitude' => self::LATITUDE,
-                    'longitude' => self::LONGITUDE,
+                    'latitude' => config('forecast.site_lat', self::LATITUDE),
+                    'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'start_date' => $startDateStr,
                     'end_date' => $endDateStr,
@@ -1201,8 +1212,8 @@ class WeatherForecastService
         try {
             $weatherRes = $this->apiClient->execute('open_meteo', 'GET', 'https://api.open-meteo.com/v1/forecast', [
                 'query' => [
-                    'latitude' => self::LATITUDE,
-                    'longitude' => self::LONGITUDE,
+                    'latitude' => config('forecast.site_lat', self::LATITUDE),
+                    'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'start_date' => $startDateStr,
                     'end_date' => $endDateStr,
@@ -1498,8 +1509,8 @@ class WeatherForecastService
         try {
             $res = $this->apiClient->execute('open_meteo', 'GET', 'https://marine-api.open-meteo.com/v1/marine', [
                 'query' => [
-                    'latitude' => self::LATITUDE,
-                    'longitude' => self::LONGITUDE,
+                    'latitude' => config('forecast.site_lat', self::LATITUDE),
+                    'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'start_date' => $date,
                     'end_date' => $date,
@@ -1535,8 +1546,8 @@ class WeatherForecastService
         try {
             $res = $this->apiClient->execute('open_meteo', 'GET', 'https://api.open-meteo.com/v1/forecast', [
                 'query' => [
-                    'latitude' => self::LATITUDE,
-                    'longitude' => self::LONGITUDE,
+                    'latitude' => config('forecast.site_lat', self::LATITUDE),
+                    'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'start_date' => $date,
                     'end_date' => $date,
@@ -1830,8 +1841,8 @@ class WeatherForecastService
         try {
             $marineRes = $this->apiClient->execute('open_meteo', 'GET', 'https://marine-api.open-meteo.com/v1/marine', [
                 'query' => [
-                    'latitude' => self::LATITUDE,
-                    'longitude' => self::LONGITUDE,
+                    'latitude' => config('forecast.site_lat', self::LATITUDE),
+                    'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'start_date' => $date,
                     'end_date' => $date,
@@ -1850,8 +1861,8 @@ class WeatherForecastService
         try {
             $weatherRes = $this->apiClient->execute('open_meteo', 'GET', 'https://archive-api.open-meteo.com/v1/archive', [
                 'query' => [
-                    'latitude' => self::LATITUDE,
-                    'longitude' => self::LONGITUDE,
+                    'latitude' => config('forecast.site_lat', self::LATITUDE),
+                    'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'start_date' => $date,
                     'end_date' => $date,
@@ -1865,8 +1876,8 @@ class WeatherForecastService
             } else {
                 $forecastPastRes = $this->apiClient->execute('open_meteo', 'GET', 'https://api.open-meteo.com/v1/forecast', [
                     'query' => [
-                        'latitude' => self::LATITUDE,
-                        'longitude' => self::LONGITUDE,
+                        'latitude' => config('forecast.site_lat', self::LATITUDE),
+                        'longitude' => config('forecast.site_lon', self::LONGITUDE),
                         'timezone' => self::TIMEZONE,
                         'start_date' => $date,
                         'end_date' => $date,

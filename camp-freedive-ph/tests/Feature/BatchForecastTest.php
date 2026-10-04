@@ -158,6 +158,9 @@ class BatchForecastTest extends TestCase
         $this->assertSame(2, $rollup[0]['batches']);
         $this->assertEquals(30.0, $rollup[0]['predicted_participants']);
         $this->assertEquals(16.0, $rollup[0]['predicted_bookings']);
+        $this->assertEquals(120000.0, $rollup[0]['predicted_revenue_php']);
+        $this->assertSame(5, $rollup[0]['coaches_peak']);
+        $this->assertSame(8, $rollup[0]['coach_slots']);
         $this->assertEquals(15.0, $rollup[0]['avg_participants_per_batch']);
     }
 

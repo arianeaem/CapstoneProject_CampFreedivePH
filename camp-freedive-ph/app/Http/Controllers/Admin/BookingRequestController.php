@@ -91,6 +91,7 @@ class BookingRequestController extends Controller
     {
         $currentUser = Auth::user();
         $booking = $rescheduleRequest->booking;
+        $previousBatch = $booking->batch()->with('assigned_coaches')->first();
 
         $request->validate([
             'admin_notes' => 'nullable|string|max:500',
@@ -143,6 +144,15 @@ class BookingRequestController extends Controller
             $currentUser->name,
             $request
         );
+
+        if ($previousBatch) {
+            app(\App\Services\CoachNotificationService::class)->notifyBatchCoaches(
+                $previousBatch,
+                'Booking rescheduled',
+                "Booking #{$booking->booking_number} was rescheduled by Camp Administration. Please review the affected roster and schedule in the Coach Portal.",
+                $booking->booking_number,
+            );
+        }
 
         // Send email notification to guest
         if ($booking->contact_email) {
@@ -218,6 +228,7 @@ class BookingRequestController extends Controller
     {
         $currentUser = Auth::user();
         $booking = $cancellationRequest->booking;
+        $previousBatch = $booking->batch()->with('assigned_coaches')->first();
 
         $validated = $request->validate([
             'action_type' => 'nullable|string|in:policy_refund,full_refund,forfeit',
@@ -346,6 +357,15 @@ class BookingRequestController extends Controller
             $currentUser->name,
             $request
         );
+
+        if ($previousBatch) {
+            app(\App\Services\CoachNotificationService::class)->notifyBatchCoaches(
+                $previousBatch,
+                'Booking cancelled',
+                "Booking #{$booking->booking_number} was cancelled by Camp Administration. Please review the updated roster in the Coach Portal.",
+                $booking->booking_number,
+            );
+        }
 
         // Send email notification to guest
         if ($booking->contact_email) {

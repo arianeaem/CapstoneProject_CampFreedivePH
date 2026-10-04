@@ -13,6 +13,8 @@ class BookingParticipant extends Model
     protected $fillable = [
         'booking_id',
         'name',
+        'birthdate',
+        'gender',
         'age',
         'health_condition',
         'swimmer_status',
@@ -21,6 +23,7 @@ class BookingParticipant extends Model
 
     protected $casts = [
         'age' => 'integer',
+        'birthdate' => 'date',
         'price_per_person' => 'decimal:2',
     ];
 

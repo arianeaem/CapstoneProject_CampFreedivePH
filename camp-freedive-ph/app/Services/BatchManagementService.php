@@ -403,6 +403,20 @@ class BatchManagementService
                 $changer->name
             );
         });
+
+        if ($newStatus === 'cancelled_by_camp') {
+            app(CoachNotificationService::class)->notifyBatchCoaches(
+                $batch,
+                'Batch cancelled',
+                'This batch has been cancelled by Camp Administration. Please review the latest operational instructions in the Coach Portal.' . ($note ? " Reason: {$note}" : ''),
+            );
+        } elseif ($newStatus === 'rescheduled') {
+            app(CoachNotificationService::class)->notifyBatchCoaches(
+                $batch,
+                'Batch rescheduled',
+                'This batch schedule has been updated by Camp Administration. Please review the latest dates and roster in the Coach Portal.' . ($note ? " Note: {$note}" : ''),
+            );
+        }
     }
 
     /**

@@ -182,12 +182,28 @@
                             <!-- Available Coach Selection Grid -->
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 @forelse($availableCoaches as $coachItem)
-                                    <label class="p-2.5 rounded-xl bg-[#F2F2F7] hover:bg-white hover:shadow-2xs flex items-center gap-2 transition-all cursor-pointer select-none">
-                                        <input type="checkbox" 
-                                               :value="{{ $coachItem['id'] }}" 
+                                    <label class="p-2.5 rounded-xl bg-[#F2F2F7] hover:bg-white hover:shadow-2xs flex items-start gap-2 transition-all cursor-pointer select-none">
+                                        <input type="checkbox"
+                                               :value="{{ $coachItem['id'] }}"
                                                x-model="selectedCoaches"
-                                               class="rounded text-[#780000] focus:ring-[#780000] w-4 h-4 cursor-pointer shrink-0">
-                                        <span class="font-semibold text-sm text-[#1D1D1F] truncate">{{ $coachItem['name'] }}</span>
+                                               class="rounded text-[#780000] focus:ring-[#780000] w-4 h-4 cursor-pointer shrink-0 mt-0.5">
+                                        <span class="min-w-0 space-y-0.5">
+                                            <span class="flex items-center gap-1.5">
+                                                <span class="font-semibold text-sm text-[#1D1D1F] truncate">{{ $coachItem['name'] }}</span>
+                                                @if($coachItem['is_fairest_pick'])
+                                                    <span class="px-1.5 py-0.5 rounded-md text-[10px] leading-tight font-black bg-emerald-100 text-emerald-800 whitespace-nowrap">Fairest pick</span>
+                                                @endif
+                                            </span>
+                                            <span class="block text-xs text-[#6E6E73]">
+                                                {{ $coachItem['recent_student_count'] }} {{ Str::plural('student', $coachItem['recent_student_count']) }} in last 30 days
+                                                &middot;
+                                                @if($coachItem['days_since_last_assignment'] === null)
+                                                    never assigned
+                                                @else
+                                                    last assigned {{ $coachItem['days_since_last_assignment'] }} {{ Str::plural('day', $coachItem['days_since_last_assignment']) }} ago
+                                                @endif
+                                            </span>
+                                        </span>
                                     </label>
                                 @empty
                                     <div class="col-span-full p-3 rounded-xl text-center text-sm text-[#8E8E93] bg-[#F2F2F7]">

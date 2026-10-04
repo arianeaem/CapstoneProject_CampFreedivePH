@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Batch;
 use App\Models\Booking;
+use App\Services\WeatherSafetyService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -109,6 +110,29 @@ class BookingFlowTest extends TestCase
         ]);
     }
 
+    public function test_booking_is_blocked_when_selected_dates_are_critical_risk(): void
+    {
+        $this->mock(WeatherSafetyService::class, function ($mock): void {
+            $mock->shouldReceive('getForecast')->once()->andReturn([
+                'risk_level' => 'critical_risk',
+                'overall_classification' => 'Critical Risk',
+                'is_bookable' => false,
+                'day1' => ['classification' => 'Critical Risk'],
+                'day2' => ['classification' => 'High Risk'],
+            ]);
+        });
+
+        $response = $this->postJson('/book', $this->validPayload());
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('success', false);
+        $response->assertJsonPath('weather.is_bookable', false);
+        $response->assertJsonFragment([
+            'message' => 'This date cannot be booked because the forecast is classified as Critical Risk. Please choose another date.',
+        ]);
+        $this->assertDatabaseCount('bookings', 0);
+    }
+
     // -------------------------------------------------------------------------
     // Successful booking creation
     // -------------------------------------------------------------------------
@@ -152,6 +176,7 @@ class BookingFlowTest extends TestCase
             'pickup_option'      => 'own',
             'downpayment_amount' => 4000.00,
         ]);
+        $this->assertNotNull(Booking::where('contact_email', 'ariane@example.com')->first()->batch_id);
         $this->assertDatabaseCount('booking_participants', 2);
         $this->assertDatabaseCount('payments', 1);
     }

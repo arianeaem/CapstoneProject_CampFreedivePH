@@ -80,9 +80,9 @@ class LoginController extends Controller
 
             $authenticatedUser = Auth::user();
             
-            // Check if user has never logged in before or has must_change_password flag set
-            $isFirstLogin = is_null($authenticatedUser->last_login_at);
-            $needsPasswordChange = $authenticatedUser->must_change_password || $isFirstLogin;
+            // The explicit flag is the source of truth. Accounts seeded with a
+            // permanent password may legitimately have no recorded login yet.
+            $needsPasswordChange = (bool) $authenticatedUser->must_change_password;
 
             if ($needsPasswordChange) {
                 $authenticatedUser->update([

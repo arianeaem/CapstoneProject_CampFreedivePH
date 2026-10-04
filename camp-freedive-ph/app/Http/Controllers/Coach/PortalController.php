@@ -62,10 +62,10 @@ class PortalController extends Controller
                 'class' => 'bg-emerald-50 text-emerald-700',
             ];
 
-            // Check if within 48 hours of dive date (06:30 AM start)
+            // Emergency release requests are available regardless of lead time.
             $diveStart = $batch->start_date->copy()->setTime(6, 30);
             $hoursUntilDive = max(0, Carbon::now('Asia/Manila')->diffInHours($diveStart, false));
-            $canRequestRelease = $hoursUntilDive > 48;
+            $canRequestRelease = true;
 
             $nextSessionData = [
                 'batch' => $batch,

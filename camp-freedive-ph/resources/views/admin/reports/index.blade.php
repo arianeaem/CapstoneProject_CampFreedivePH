@@ -56,9 +56,9 @@
                      x-cloak 
                      class="absolute right-0 mt-2 w-52 bg-white rounded-xl border border-[#E5E5EA] p-1.5 shadow-xl z-30 space-y-1">
                     @if($isOwner)
-                        <a href="{{ (auth()->user()->isOwner() ? route('owner.reports.export') : route('admin.reports.export')) . '?' . http_build_query(['type' => 'financials', 'preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')]) }}" 
+                        <a href="{{ (auth()->user()->isOwner() ? route('owner.reports.export') : route('admin.reports.export')) . '?' . http_build_query(['type' => 'revenue', 'preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')]) }}" 
                            class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-[#1D1D1F] hover:bg-[#F8EAEA] hover:text-[#780000] transition-colors">
-                            <span>Financial Transactions</span>
+                            <span>Revenue</span>
                         </a>
                     @endif
 
@@ -104,7 +104,7 @@
                     @click="activeTab = 'financial'"
                     class="pb-3 text-sm sm:text-sm transition-all border-b-2 whitespace-nowrap"
                     :class="activeTab === 'financial' ? 'border-[#780000] text-[#780000] font-bold' : 'border-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:border-[#D1D1D6] font-semibold'">
-                Financial & Revenue
+                Revenue
             </button>
         @endif
 

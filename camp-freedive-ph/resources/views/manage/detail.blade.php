@@ -368,12 +368,12 @@
                     <div class="flex items-center justify-between">
                         <span class="font-bold text-[#1D1D1F]">Cancel / Refund</span>
                         <span class="text-sm font-bold px-2 py-0.5 rounded {{ $policy['cancel_allowed'] ? 'bg-[#FEF3C7] text-amber-900' : 'bg-[#E5E5EA] text-[#6E6E73]' }}">
-                            {{ $policy['cancel_allowed'] ? 'Eligible' : 'Non-Refundable' }}
+                            {{ $policy['cancel_allowed'] ? 'Eligible' : 'Closed' }}
                         </span>
                     </div>
                     <p class="text-sm text-[#6E6E73] leading-relaxed">{{ $policy['cancel_message'] }}</p>
 
-                    @if($policy['cancel_allowed'] || $booking->status === 'confirmed')
+                    @if($policy['cancel_allowed'])
                         <button type="button" 
                                 @click="openCancelModal = true" 
                                 class="btn-secondary min-h-[44px] w-full py-2.5 px-4 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 mt-1">

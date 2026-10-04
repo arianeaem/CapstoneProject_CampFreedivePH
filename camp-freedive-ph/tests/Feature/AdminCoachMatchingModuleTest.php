@@ -72,6 +72,7 @@ class AdminCoachMatchingModuleTest extends TestCase
 
     public function test_admin_can_assign_students_to_available_coach(): void
     {
+        \Illuminate\Support\Facades\Mail::fake();
         $admin = User::where('email', 'admin@campfreedive.ph')->first();
         $this->actingAs($admin);
 
@@ -94,6 +95,10 @@ class AdminCoachMatchingModuleTest extends TestCase
             'batch_id' => $batch->id,
             'status' => 'assigned',
         ]);
+        \Illuminate\Support\Facades\Mail::assertSent(
+            \App\Mail\CoachScheduleNotificationMail::class,
+            fn ($mail) => $mail->hasTo($coachMary->email)
+        );
     }
 
     public function test_assigning_over_four_students_records_ratio_override_exception(): void
@@ -207,6 +212,7 @@ class AdminCoachMatchingModuleTest extends TestCase
 
     public function test_admin_can_review_and_approve_coach_request(): void
     {
+        \Illuminate\Support\Facades\Mail::fake();
         $admin = User::where('email', 'admin@campfreedive.ph')->first();
         $this->actingAs($admin);
 
@@ -244,6 +250,10 @@ class AdminCoachMatchingModuleTest extends TestCase
 
         $this->assertEquals('approved', $requestMark->fresh()->status);
         $this->assertEquals('not_selected', $requestChristine->fresh()->status);
+        \Illuminate\Support\Facades\Mail::assertSent(
+            \App\Mail\CoachScheduleNotificationMail::class,
+            fn ($mail) => $mail->hasTo($coachMark->email)
+        );
     }
 
     public function test_admin_can_perform_balanced_batch_assignment_across_multiple_coaches(): void

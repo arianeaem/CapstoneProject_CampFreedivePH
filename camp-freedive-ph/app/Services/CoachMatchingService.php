@@ -107,6 +107,14 @@ class CoachMatchingService
                 $assignedBy->name
             );
 
+            app(CoachNotificationService::class)->notifyBatchCoaches(
+                $batch,
+                'New coaching assignment',
+                "You have been assigned by {$assignedBy->name} to coach the upcoming batch.",
+                null,
+                $coaches,
+            );
+
             return [
                 'success' => true,
                 'coaches' => $coaches,
@@ -212,7 +220,7 @@ class CoachMatchingService
             throw new Exception("Cannot assign inactive coach {$coach->name}.");
         }
 
-        return DB::transaction(function () use ($participantIds, $coach, $batch, $assignedBy) {
+        $result = DB::transaction(function () use ($participantIds, $coach, $batch, $assignedBy) {
             $participants = BookingParticipant::with('booking')
                 ->whereIn('id', $participantIds)
                 ->get();
@@ -280,6 +288,16 @@ class CoachMatchingService
                 'total_load' => $newTotal,
             ];
         });
+
+        app(CoachNotificationService::class)->notifyBatchCoaches(
+            $batch,
+            'New coaching assignment',
+            "You have been assigned by {$assignedBy->name} to coach participants in the upcoming batch.",
+            null,
+            collect([$coach]),
+        );
+
+        return $result;
     }
 
     /**
@@ -627,6 +645,8 @@ class CoachMatchingService
             $postedBy,
             $postedBy->name
         );
+
+        app(CoachNotificationService::class)->notifyOpening($opening);
 
         return $opening;
     }
