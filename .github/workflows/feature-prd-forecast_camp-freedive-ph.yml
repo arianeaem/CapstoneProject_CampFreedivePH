@@ -21,24 +21,38 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.4'
 
       - name: Check if composer.json exists
         id: check_files
         uses: andstor/file-existence-action@v1
         with:
-          files: 'composer.json'
+          files: 'camp-freedive-ph/composer.json'
 
       - name: Run composer install if composer.json exists
         if: steps.check_files.outputs.files_exists == 'true'
-        run: composer validate --no-check-publish && composer install --prefer-dist --no-progress
+        working-directory: camp-freedive-ph
+        run: composer validate --no-check-publish && composer install --no-dev --prefer-dist --no-progress --optimize-autoloader
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: camp-freedive-ph/package-lock.json
+
+      - name: Build frontend
+        working-directory: camp-freedive-ph
+        run: |
+          npm ci
+          npm run build
 
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: php-app
-          path: .
+          path: camp-freedive-ph
 
   deploy:
     runs-on: ubuntu-latest
