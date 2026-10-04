@@ -82,5 +82,5 @@ jobs:
           app-name: 'camp-freedive-ph'
           slot-name: 'Production'
           package: .
-          startup-command: 'php -S 0.0.0.0:8080 -t public'
+          startup-command: 'cp /home/site/wwwroot/default /etc/nginx/sites-available/default && service nginx reload'
           
