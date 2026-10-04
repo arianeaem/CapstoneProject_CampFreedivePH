@@ -64,12 +64,12 @@
 
                     <a href="{{ (auth()->user()->isOwner() ? route('owner.reports.export') : route('admin.reports.export')) . '?' . http_build_query(['type' => 'batches', 'preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')]) }}" 
                        class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] transition-colors">
-                        <span>Camp Batches</span>
+                        <span>Batches & Coaches</span>
                     </a>
 
                     <a href="{{ (auth()->user()->isOwner() ? route('owner.reports.export') : route('admin.reports.export')) . '?' . http_build_query(['type' => 'divers', 'preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')]) }}" 
                        class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] transition-colors">
-                        <span>Guest Masterlist</span>
+                        <span>Bookings</span>
                     </a>
                 </div>
             </div>
@@ -112,14 +112,14 @@
                 @click="activeTab = 'bookings'"
                 class="pb-3 text-sm sm:text-sm transition-all border-b-2 whitespace-nowrap"
                 :class="activeTab === 'bookings' ? 'border-[#780000] text-[#780000] font-bold' : 'border-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:border-[#D1D1D6] font-semibold'">
-            Bookings & Guests
+            Bookings
         </button>
 
         <button type="button" 
                 @click="activeTab = 'operations'"
                 class="pb-3 text-sm sm:text-sm transition-all border-b-2 whitespace-nowrap"
                 :class="activeTab === 'operations' ? 'border-[#780000] text-[#780000] font-bold' : 'border-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:border-[#D1D1D6] font-semibold'">
-            Batches & Coach Workload
+            Batches & Coaches
         </button>
 
         <button type="button" 

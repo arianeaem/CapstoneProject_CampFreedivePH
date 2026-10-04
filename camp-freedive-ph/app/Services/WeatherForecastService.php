@@ -10,6 +10,8 @@ use App\Models\BatchStatusLog;
 use App\Models\Booking;
 use App\Models\BookingStatusLog;
 use App\Models\ForecastAccuracyLog;
+use App\Models\ForecastDaily;
+use App\Models\ForecastHourly;
 use App\Models\ForecastSnapshot;
 use App\Models\HourlyAssessment;
 use App\Models\ManualOverride;
@@ -1490,10 +1492,52 @@ class WeatherForecastService
 
     /**
      * Retrieve pre-cached 24-hour forecast for a specific date if available.
+     * Integrates multi-source forecast_daily and forecast_hourly tables when FORECAST_SOURCE=prd.
      */
-    public function getCachedDayForecast(string $date): ?array
+    public function getCachedDayForecast(Carbon|string $date): ?array
     {
-        return Cache::get("forecast:date:{$date}");
+        $dateStr = is_string($date) ? $date : $date->format('Y-m-d');
+        $source = config('forecast.forecast_source', env('FORECAST_SOURCE', 'prd'));
+
+        if ($source === 'legacy') {
+            return Cache::get("forecast:date:{$dateStr}");
+        }
+
+        $daily = ForecastDaily::where('forecast_date', $dateStr)
+            ->orderByDesc('issued_at')
+            ->first();
+
+        if (!$daily) {
+            $siteForecast = $this->forecastSite();
+            $daily = ForecastDaily::where('forecast_date', $dateStr)
+                ->orderByDesc('issued_at')
+                ->first();
+            if (!$daily) {
+                return null;
+            }
+        }
+
+        $hourly = ForecastHourly::where('forecast_daily_id', $daily->id)
+            ->orWhere(function ($q) use ($dateStr) {
+                $q->whereDate('forecast_time', $dateStr);
+            })
+            ->orderBy('forecast_time')
+            ->get();
+
+        return [
+            'date' => $dateStr,
+            'daily' => $daily->toArray(),
+            'hourly' => $hourly->toArray(),
+            'day_tier' => $daily->daily_tier,
+            'day_label' => $daily->daily_label,
+            'rain_daily_mm' => $daily->rain_daily_mm_p50,
+            'rain_score' => $daily->rain_score,
+            'rain_label' => $daily->rain_label,
+            'p_wet' => $daily->p_wet,
+            'p_wet_ci' => [$daily->p_wet_ci_lo, $daily->p_wet_ci_hi],
+            'p_high_gust' => $daily->p_high_gust,
+            'p_high_gust_ci' => [$daily->p_high_gust_ci_lo, $daily->p_high_gust_ci_hi],
+        ];
     }
 
     /**
@@ -2167,4 +2211,399 @@ class WeatherForecastService
             ],
         ];
     }
+
+    /**
+     * Scores daily precipitation (mm/day) against operational rain bands.
+     *
+     * Bands:
+     * 0: < 1 mm/day (Dry / None)
+     * 1: < 10 mm/day (Light Rain)
+     * 2: < 25 mm/day (Moderate Rain)
+     * 3: < 50 mm/day (Heavy Rain)
+     * 4: >= 50 mm/day (Torrential Rain)
+     */
+    public function scoreRainDaily(float $v): array
+    {
+        $bands = config('forecast.rain.bands', [
+            ['band' => 0, 'max_mm' => 1.0,  'label' => 'Dry / None',      'description' => 'Negligible rain (< 1 mm/day)'],
+            ['band' => 1, 'max_mm' => 10.0, 'label' => 'Light Rain',      'description' => 'Light showers (< 10 mm/day)'],
+            ['band' => 2, 'max_mm' => 25.0, 'label' => 'Moderate Rain',   'description' => 'Moderate rainfall (< 25 mm/day)'],
+            ['band' => 3, 'max_mm' => 50.0, 'label' => 'Heavy Rain',      'description' => 'Heavy rainfall (< 50 mm/day)'],
+            ['band' => 4, 'max_mm' => null, 'label' => 'Torrential Rain', 'description' => 'Extreme/Torrential rain (>= 50 mm/day)'],
+        ]);
+
+        foreach ($bands as $b) {
+            if ($b['max_mm'] === null || $v < $b['max_mm']) {
+                return [
+                    'band' => $b['band'],
+                    'label' => $b['label'],
+                    'description' => $b['description'],
+                    'daily_mm' => $v,
+                ];
+            }
+        }
+
+        return [
+            'band' => 4,
+            'label' => 'Torrential Rain',
+            'description' => 'Extreme/Torrential rain (>= 50 mm/day)',
+            'daily_mm' => $v,
+        ];
+    }
+
+    /**
+     * Calculates freediving safety tier from p50 median prediction,
+     * applying adverse tail (p90) escalation ONLY when source is 'model'.
+     */
+    public function calculateTierAndLabel(array $hourlyData): array
+    {
+        $hsSource = $hourlyData['hs']['source'] ?? 'climatology';
+        $currentSource = $hourlyData['current_speed']['source'] ?? 'climatology';
+
+        $hsP50 = (float)($hourlyData['hs']['p50'] ?? 0);
+        $hsP90 = (float)($hourlyData['hs']['p90'] ?? 0);
+
+        $currP50 = (float)($hourlyData['current_speed']['p50'] ?? 0);
+        $currP90 = (float)($hourlyData['current_speed']['p90'] ?? 0);
+
+        $windP50 = (float)($hourlyData['wind_speed']['p50'] ?? 0);
+        $gustP50 = (float)($hourlyData['wind_gust']['p50'] ?? 0);
+
+        // 1. Evaluate baseline tier from p50
+        $tier = 'Very Safe';
+        $label = 'Optimal Freediving Conditions (Calm & Clear)';
+
+        if ($hsP50 >= 2.0 || $currP50 >= 1.2 || $windP50 >= 45.0 || $gustP50 >= 55.0) {
+            $tier = 'Critical Risk';
+            $label = 'Critical Marine Hazard (Operations Suspended)';
+        } elseif ($hsP50 >= 1.5 || $currP50 >= 0.8 || $windP50 >= 35.0 || $gustP50 >= 45.0) {
+            $tier = 'High Risk';
+            $label = 'High Risk Sea State (Rough Chop / Strong Currents)';
+        } elseif ($hsP50 >= 1.0 || $currP50 >= 0.5 || $windP50 >= 25.0 || $gustP50 >= 35.0) {
+            $tier = 'Moderate';
+            $label = 'Moderate Conditions (Exercise Caution in Open Water)';
+        } elseif ($hsP50 >= 0.5 || $currP50 >= 0.25 || $windP50 >= 15.0) {
+            $tier = 'Safe';
+            $label = 'Generally Safe (Light Breeze / Gentle Currents)';
+        }
+
+        // 2. Adverse-tail check: STRICTLY APPLIED ONLY IF source == 'model'
+        $adverseTriggered = false;
+        $adverseNotes = [];
+
+        if ($hsSource === 'model') {
+            if ($hsP90 >= 1.8 && (self::RISK_RANK[$tier] ?? 1) < self::RISK_RANK['High Risk']) {
+                $tier = 'High Risk';
+                $adverseTriggered = true;
+                $adverseNotes[] = "Model P90 Wave Height ({$hsP90}m >= 1.8m)";
+            } elseif ($hsP90 >= 1.2 && (self::RISK_RANK[$tier] ?? 1) < self::RISK_RANK['Moderate']) {
+                $tier = 'Moderate';
+                $adverseTriggered = true;
+                $adverseNotes[] = "Model P90 Wave Height ({$hsP90}m >= 1.2m)";
+            }
+        }
+
+        if ($currentSource === 'model') {
+            if ($currP90 >= 1.0 && (self::RISK_RANK[$tier] ?? 1) < self::RISK_RANK['High Risk']) {
+                $tier = 'High Risk';
+                $adverseTriggered = true;
+                $adverseNotes[] = "Model P90 Current Speed ({$currP90}m/s >= 1.0m/s)";
+            } elseif ($currP90 >= 0.65 && (self::RISK_RANK[$tier] ?? 1) < self::RISK_RANK['Moderate']) {
+                $tier = 'Moderate';
+                $adverseTriggered = true;
+                $adverseNotes[] = "Model P90 Current Speed ({$currP90}m/s >= 0.65m/s)";
+            }
+        }
+
+        if ($adverseTriggered) {
+            $label .= ' [Adverse Tail Alert: ' . implode(', ', $adverseNotes) . ']';
+        }
+
+        if ($hsSource === 'climatology' && $currentSource === 'climatology') {
+            $label .= ' (Climatological Outlook - Long Range)';
+        }
+
+        return [
+            'tier' => $tier,
+            'label' => $label,
+            'adverse_tail_triggered' => $adverseTriggered,
+        ];
+    }
+
+    /**
+     * Primary multi-source site forecast engine with circuit breaker, caching,
+     * and automatic persistence to forecast_hourly and forecast_daily.
+     */
+    public function forecastSite(
+        ?float $lat = null,
+        ?float $lon = null,
+        ?string $issuedAt = null,
+        int $days = 10,
+        bool $forceStale = false
+    ): array
+    {
+        $lat = $lat ?? (float) config('forecast.site_lat', self::LATITUDE);
+        $lon = $lon ?? (float) config('forecast.site_lon', self::LONGITUDE);
+
+        $cacheKey = "site_forecast_" . round($lat, 4) . "_" . round($lon, 4) . "_{$days}";
+        if (!$forceStale && Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        // Circuit breaker check
+        $cbFailuresKey = 'forecast_circuit_breaker_failures';
+        $failures = (int) Cache::get($cbFailuresKey, 0);
+        $maxFailures = (int) config('forecast.circuit_breaker.max_failures', 5);
+
+        $apiUrl = config('forecast.api_url', 'http://127.0.0.1:8001');
+        $timeout = (float) config('forecast.circuit_breaker.timeout_seconds', 5.0);
+
+        $payload = [
+            'latitude' => $lat,
+            'longitude' => $lon,
+            'issued_at' => $issuedAt,
+            'days' => $days,
+            'force_stale' => $forceStale,
+        ];
+
+        $data = null;
+        if ($failures < $maxFailures) {
+            try {
+                $response = Http::timeout($timeout)->post("{$apiUrl}/forecast/site", $payload);
+                if ($response->successful()) {
+                    $data = $response->json();
+                    Cache::forget($cbFailuresKey); // reset circuit breaker on success
+                } else {
+                    Log::warning("Forecast microservice returned HTTP {$response->status()}", ['body' => $response->body()]);
+                    Cache::put($cbFailuresKey, $failures + 1, 300);
+                }
+            } catch (Exception $e) {
+                Log::error("Forecast microservice call failed: {$e->getMessage()}");
+                Cache::put($cbFailuresKey, $failures + 1, 300);
+            }
+        } else {
+            Log::warning("Forecast circuit breaker OPEN ({$failures} failures). Bypassing remote microservice.");
+        }
+
+        // If remote microservice is unreachable, generate local climatology degradation
+        if ($data === null) {
+            $data = $this->generateLocalClimatologyFallback($lat, $lon, $issuedAt, $days);
+        }
+
+        $persistedDailyMap = [];
+        $issuedTimestamp = Carbon::parse($data['issued_at']);
+
+        // Group hourly by date to evaluate daily metrics
+        $dailyGroups = [];
+        foreach ($data['forecast_hourly'] as &$hRow) {
+            $eval = $this->calculateTierAndLabel($hRow);
+            $hRow['tier'] = $eval['tier'];
+            $hRow['label'] = $eval['label'];
+            $hRow['adverse_tail_triggered'] = $eval['adverse_tail_triggered'];
+
+            $dateKey = Carbon::parse($hRow['forecast_time'])->format('Y-m-d');
+            $dailyGroups[$dateKey][] = $hRow;
+        }
+        unset($hRow);
+
+        // Process daily rows and save to DB
+        foreach ($data['forecast_daily'] as &$dRow) {
+            $dateStr = $dRow['date'];
+            $rainScoreInfo = $this->scoreRainDaily((float)$dRow['rain_daily_mm_p50']);
+            $dRow['rain_score'] = $rainScoreInfo['band'];
+            $dRow['rain_label'] = $rainScoreInfo['label'];
+
+            // Find worst hourly tier for daytime (06:00 - 18:00)
+            $dayHours = $dailyGroups[$dateStr] ?? [];
+            $maxRank = 0;
+            $worstTier = 'Safe';
+            $worstLabel = '';
+            foreach ($dayHours as $h) {
+                $hTime = Carbon::parse($h['forecast_time'])->hour;
+                if ($hTime >= 6 && $hTime <= 18) {
+                    $rank = self::RISK_RANK[$h['tier']] ?? 1;
+                    if ($rank > $maxRank) {
+                        $maxRank = $rank;
+                        $worstTier = $h['tier'];
+                        $worstLabel = $h['label'];
+                    }
+                }
+            }
+            $dRow['daily_tier'] = $worstTier;
+            $dRow['daily_label'] = $worstLabel ?: 'Conditions evaluated across operational daylight hours';
+
+            // DB persist
+            try {
+                $dailyRecord = ForecastDaily::updateOrCreate(
+                    [
+                        'site_lat' => $lat,
+                        'site_lon' => $lon,
+                        'forecast_date' => $dateStr,
+                    ],
+                    [
+                        'issued_at' => $issuedTimestamp,
+                        'rain_daily_mm_p50' => $dRow['rain_daily_mm_p50'],
+                        'rain_daily_mm_p90' => $dRow['rain_daily_mm_p90'],
+                        'rain_score' => $dRow['rain_score'],
+                        'rain_label' => $dRow['rain_label'],
+                        'p_wet' => $dRow['p_wet'],
+                        'p_wet_ci_lo' => $dRow['p_wet_ci'][0] ?? 0,
+                        'p_wet_ci_hi' => $dRow['p_wet_ci'][1] ?? 0,
+                        'p_high_gust' => $dRow['p_high_gust'],
+                        'p_high_gust_ci_lo' => $dRow['p_high_gust_ci'][0] ?? 0,
+                        'p_high_gust_ci_hi' => $dRow['p_high_gust_ci'][1] ?? 0,
+                        'prob_band_0_offshore_nne' => $dRow['prob_band_0_offshore_nne'] ?? 0,
+                        'prob_band_1_ese' => $dRow['prob_band_1_ese'] ?? 0,
+                        'prob_band_2_s_wnw' => $dRow['prob_band_2_s_wnw'] ?? 0,
+                        'prob_band_3_onshore_habagat' => $dRow['prob_band_3_onshore_habagat'] ?? 0,
+                        'daily_tier' => $dRow['daily_tier'],
+                        'daily_label' => $dRow['daily_label'],
+                    ]
+                );
+                $persistedDailyMap[$dateStr] = $dailyRecord->id;
+            } catch (Exception $ex) {
+                Log::error("Failed saving ForecastDaily to database: {$ex->getMessage()}");
+            }
+        }
+        unset($dRow);
+
+        // Persist hourly rows to DB via bulk upsert
+        $hourlyRows = [];
+        $nowStr = now()->toDateTimeString();
+        foreach ($data['forecast_hourly'] as $h) {
+            $fTime = Carbon::parse($h['forecast_time']);
+            $dateStr = $fTime->format('Y-m-d');
+            $dailyId = $persistedDailyMap[$dateStr] ?? null;
+
+            $hourlyRows[] = [
+                'site_lat' => $lat,
+                'site_lon' => $lon,
+                'forecast_time' => $fTime->toDateTimeString(),
+                'forecast_daily_id' => $dailyId,
+                'issued_at' => $issuedTimestamp->toDateTimeString(),
+                'lead_hours' => $h['lead_hours'],
+                'hs_source' => $h['hs']['source'],
+                'hs_p10' => $h['hs']['p10'],
+                'hs_p50' => $h['hs']['p50'],
+                'hs_p90' => $h['hs']['p90'],
+                'current_speed_source' => $h['current_speed']['source'],
+                'current_speed_p10' => $h['current_speed']['p10'],
+                'current_speed_p50' => $h['current_speed']['p50'],
+                'current_speed_p90' => $h['current_speed']['p90'],
+                'wind_speed_p50' => $h['wind_speed']['p50'] ?? null,
+                'wind_gust_p50' => $h['wind_gust']['p50'] ?? null,
+                'slp_p50' => $h['slp']['p50'] ?? null,
+                'tp_p50' => $h['tp']['p50'] ?? null,
+                'swell_height_p50' => $h['swell_height']['p50'] ?? null,
+                'wind_wave_height_p50' => $h['wind_wave_height']['p50'] ?? null,
+                'wind_dir_circ_mean_deg' => $h['wind_dir_circ_mean_deg'] ?? null,
+                'tier' => $h['tier'],
+                'label' => $h['label'],
+                'adverse_tail_triggered' => $h['adverse_tail_triggered'] ? 1 : 0,
+                'created_at' => $nowStr,
+                'updated_at' => $nowStr,
+            ];
+        }
+
+        try {
+            foreach (array_chunk($hourlyRows, 100) as $chunk) {
+                ForecastHourly::upsert(
+                    $chunk,
+                    ['site_lat', 'site_lon', 'forecast_time'],
+                    [
+                        'forecast_daily_id', 'issued_at', 'lead_hours',
+                        'hs_source', 'hs_p10', 'hs_p50', 'hs_p90',
+                        'current_speed_source', 'current_speed_p10', 'current_speed_p50', 'current_speed_p90',
+                        'wind_speed_p50', 'wind_gust_p50', 'slp_p50', 'tp_p50',
+                        'swell_height_p50', 'wind_wave_height_p50', 'wind_dir_circ_mean_deg',
+                        'tier', 'label', 'adverse_tail_triggered', 'updated_at'
+                    ]
+                );
+            }
+        } catch (Exception $ex) {
+            Log::error("Failed bulk upsert of ForecastHourly: {$ex->getMessage()}");
+        }
+
+        // Cache 1 hour
+        $cacheTtl = (int) config('forecast.circuit_breaker.cache_ttl_seconds', 3600);
+        Cache::put($cacheKey, $data, $cacheTtl);
+
+        return $data;
+    }
+
+    /**
+     * Generates local fallback climatology response when remote microservice is unreachable.
+     */
+    protected function generateLocalClimatologyFallback(
+        float $lat,
+        float $lon,
+        ?string $issuedAt,
+        int $days
+    ): array
+    {
+        $t0 = $issuedAt ? Carbon::parse($issuedAt) : Carbon::now('Asia/Manila');
+        $totalHours = min(max(1, $days * 24), 384);
+
+        $hourly = [];
+        $daily = [];
+        $daysSeen = [];
+
+        for ($h = 1; $h <= $totalHours; $h++) {
+            $t = $t0->copy()->addHours($h);
+            $dStr = $t->format('Y-m-d');
+
+            $hourly[] = [
+                'forecast_time' => $t->toIso8601String(),
+                'lead_hours' => $h,
+                'hs' => ['source' => 'climatology', 'p10' => 0.15, 'p50' => 0.32, 'p90' => 0.65],
+                'current_speed' => ['source' => 'climatology', 'p10' => 0.16, 'p50' => 0.35, 'p90' => 0.68],
+                'wind_speed' => ['source' => 'climatology', 'p10' => 8.0, 'p50' => 15.0, 'p90' => 24.0],
+                'wind_gust' => ['source' => 'climatology', 'p10' => 12.0, 'p50' => 22.0, 'p90' => 35.0],
+                'slp' => ['source' => 'climatology', 'p10' => 1008.0, 'p50' => 1010.5, 'p90' => 1013.0],
+                'tp' => ['source' => 'climatology', 'p10' => 4.5, 'p50' => 6.2, 'p90' => 8.5],
+                'swell_height' => ['source' => 'climatology', 'p10' => 0.08, 'p50' => 0.20, 'p90' => 0.45],
+                'wind_wave_height' => ['source' => 'climatology', 'p10' => 0.10, 'p50' => 0.25, 'p90' => 0.50],
+                'wind_dir_circ_mean_deg' => 65.0,
+                'wind_dir_resultant_R' => 0.75,
+            ];
+
+            if (!isset($daysSeen[$dStr])) {
+                $daysSeen[$dStr] = true;
+                $daily[] = [
+                    'date' => $dStr,
+                    'day_of_year' => $t->dayOfYear,
+                    'rain_daily_mm_p50' => 3.5,
+                    'rain_daily_mm_p90' => 25.0,
+                    'p_wet' => 0.45,
+                    'p_wet_ci' => [0.35, 0.55],
+                    'p_high_gust' => 0.05,
+                    'p_high_gust_ci' => [0.02, 0.12],
+                    'prob_band_0_offshore_nne' => 0.30,
+                    'prob_band_1_ese' => 0.25,
+                    'prob_band_2_s_wnw' => 0.25,
+                    'prob_band_3_onshore_habagat' => 0.20,
+                ];
+            }
+        }
+
+        return [
+            'site' => [
+                'name' => 'Camp FreedivePH (Bagalangit / Mainit Point, Batangas)',
+                'latitude' => $lat,
+                'longitude' => $lon,
+                'timezone' => 'Asia/Manila',
+            ],
+            'issued_at' => $t0->toIso8601String(),
+            'degraded' => true,
+            'degraded_reason' => 'Local fallback generated due to remote microservice degradation or offline status',
+            'operational_cutoffs' => [
+                'hs_hours' => 48,
+                'current_speed_hours' => 72,
+                'rule' => 'Beyond cutoff, variable source transitions to climatology.',
+            ],
+            'forecast_hourly' => $hourly,
+            'forecast_daily' => $daily,
+        ];
+    }
 }
+

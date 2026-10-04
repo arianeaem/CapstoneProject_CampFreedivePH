@@ -1407,7 +1407,7 @@
                             </div>
 
                             <div id="booking-confirmations"
-                                 class="mt-4 p-3.5 sm:p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5] space-y-3 scroll-mt-24"
+                                 class="mt-4 p-3.5 sm:p-4 space-y-3 scroll-mt-24"
                                  :class="touchedStep3 && (!form.confirmation_ack || !form.hasAgreedToTerms) ? 'border-2 border-[#D70015] bg-red-50/40 ring-2 ring-[#D70015]/20' : ''">
                                 <label tabindex="0" role="checkbox"
                                        :aria-checked="form.confirmation_ack"
