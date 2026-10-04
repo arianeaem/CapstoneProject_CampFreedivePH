@@ -151,10 +151,6 @@
                                     class="flex-1 px-4 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold transition-all flex items-center justify-center gap-1.5">
                                 <span>Request Release</span>
                             </button>
-                        @else
-                            <span class="flex-1 px-3.5 py-2.5 rounded-xl text-sm font-bold bg-[#F2F2F7] text-[#8E8E93] text-center" title="Release requests are locked within 48 hours of dive start">
-                                Locked (&lt;48h to dive)
-                            </span>
                         @endif
 
                         <!-- Secondary: View Full Schedule -->

@@ -29,6 +29,12 @@ Schedule::command('weather:assess-batches')
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/weather_schedule.log'));
 
+Schedule::command('coaches:notify-matching')
+    ->hourly()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/coach_matching_alerts.log'));
+
 /**
  * Automated Nightly Forecast Accuracy Archive & Verification
  * Runs daily at 00:05 to compare multi-horizon predictions against realized ocean observations.
@@ -59,7 +65,6 @@ Schedule::command('ml:rebenchmark')
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path('logs/ml_rebenchmark.log'));
-
 
 
 

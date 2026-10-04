@@ -150,9 +150,9 @@ class CoachPortalModuleTest extends TestCase
     }
 
     /**
-     * Test 5: Emergency Release Request 48-Hour Cutoff Enforcement.
+     * Test 5: Emergency Release Request is available at any lead time.
      */
-    public function test_emergency_release_request_enforces_48h_cutoff(): void
+    public function test_emergency_release_request_is_available_within_48_hours(): void
     {
         // 1. Assign coach to a batch that departs in 24 hours (within cutoff)
         $urgentBatch = Batch::create([
@@ -165,14 +165,18 @@ class CoachPortalModuleTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
-        $responseBlocked = $this->actingAs($this->coach)->post('/coach/availability/release', [
+        $responseUrgent = $this->actingAs($this->coach)->post('/coach/availability/release', [
             'batch_id' => $urgentBatch->id,
             'dive_date' => $urgentBatch->start_date->format('Y-m-d'),
             'reason' => 'Sudden emergency unable to dive.',
         ]);
 
-        $responseBlocked->assertSessionHas('error');
-        $this->assertEquals(0, AssignmentReleaseRequest::count());
+        $responseUrgent->assertSessionHas('success');
+        $this->assertDatabaseHas('assignment_release_requests', [
+            'coach_id' => $this->coach->id,
+            'batch_id' => $urgentBatch->id,
+            'status' => 'pending',
+        ]);
 
         // 2. Request release for batch 7 days out (>48 hours) -> Allowed
         $responseAllowed = $this->actingAs($this->coach)->post('/coach/availability/release', [

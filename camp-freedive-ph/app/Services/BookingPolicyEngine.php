@@ -18,9 +18,9 @@ use Carbon\Carbon;
  *    to protect diver safety and comply with Philippine Coast Guard advisory orders.
  * 2. > 14 Days Out: 100% refund or free reschedule allowed as resort slots and outrigger
  *    bancas can still be re-allocated to waitlisted divers.
- * 3. 7 to 14 Days Out: Rescheduling is free, but cancellation forfeits downpayment (0% refund)
- *    to offset committed resort room reservations.
- * 4. < 7 Days Out: Reschedule locked out and downpayment forfeited because instructor payroll,
+ * 3. 7 to 14 Days Out: Rescheduling is free, but cancellation is accepted with 0% refund
+ *    under the capstone policy.
+ * 4. < 7 Days Out: Cancellation and rescheduling are locked out because instructor payroll,
  *    boat fuel, and gear transport are non-refundable and committed.
  */
 class BookingPolicyEngine
@@ -83,7 +83,7 @@ class BookingPolicyEngine
             $refundPercentage = 100;
             $calculatedRefund = (float) $booking->downpayment_amount;
             $rescheduleAllowed = true;
-            $cancelAllowed = true;
+            $cancelAllowed = false;
             $rescheduleMessage = "Allowed: More than {$fullRefundDays} days before dive date. Free reschedule to any available safe batch.";
             $cancelMessage = 'Eligible for 100% Full Downpayment Refund (₱' . number_format($booking->downpayment_amount, 2) . ') or Free Reschedule.';
         } elseif ($daysUntilDive >= $rescheduleOnlyDays && $daysUntilDive <= $fullRefundDays) {
@@ -101,9 +101,9 @@ class BookingPolicyEngine
             $refundPercentage = 0;
             $calculatedRefund = 0.00;
             $rescheduleAllowed = false;
-            $cancelAllowed = true;
+            $cancelAllowed = false;
             $rescheduleMessage = "Not Allowed: Rescheduling closes {$rescheduleOnlyDays} days before the dive date as coach, boat, and resort commitments are locked in.";
-            $cancelMessage = "Non-Refundable & Non-Reschedulable: Cancellations within {$rescheduleOnlyDays} days forfeit downpayment unless an official Typhoon/Coast Guard Gale warning is active.";
+            $cancelMessage = "Not Allowed: Cancellations within {$rescheduleOnlyDays} days of the dive date are not accepted unless an official Typhoon/Coast Guard Gale warning creates a force-majeure situation.";
         }
 
         // Status-specific overrides for self-service submission limits to prevent duplicate processing

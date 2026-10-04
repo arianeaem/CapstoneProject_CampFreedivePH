@@ -290,7 +290,7 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.1 Customer Cancellation More Than Fourteen (14) Days Before the Scheduled Activity</h3>
                         <p class="mb-2">
-                            Where a customer cancels more than fourteen (14) days before the scheduled activity, the customer may request either a refund or rescheduling, subject to the applicable administrative processing fee, availability, and the conditions stated in the booking confirmation.
+                            Where a customer cancels more than fourteen (14) days before the scheduled activity, the customer may request a 100% downpayment refund or rescheduling, subject to availability.
                         </p>
                         <p>
                             Where rescheduling is selected, the reservation may be transferred to another available camp date within the permitted rescheduling period.
@@ -300,14 +300,14 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.2 Customer Cancellation Within Fourteen (14) Days</h3>
                         <p>
-                            For cancellations made fourteen (14) days or fewer before the scheduled activity, the applicable cancellation and rescheduling conditions stated at the time of booking shall apply. Because operational arrangements may already have been committed, including instructor scheduling, boat arrangements, transportation, and participant capacity, the reservation deposit may be retained in accordance with the applicable cancellation policy.
+                            From seven (7) through fourteen (14) days before the scheduled activity, rescheduling is allowed, but cancellation is not allowed and the downpayment is non-refundable.
                         </p>
                     </div>
 
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.3 Cancellation Within Seven (7) Days and No-Show</h3>
                         <p>
-                            For cancellations made within seven (7) days of the scheduled activity, the reservation deposit is generally non-refundable. The same condition may apply where a participant fails to appear at the designated meeting point or fails to arrive within the required arrival period without prior coordination with Camp Freedive PH.
+                            Within seven (7) days of the scheduled activity, cancellation and rescheduling are not allowed. The same condition applies to no-shows.
                         </p>
                     </div>
 

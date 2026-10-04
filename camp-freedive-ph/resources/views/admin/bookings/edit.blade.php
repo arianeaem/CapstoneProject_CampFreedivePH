@@ -52,6 +52,8 @@
                  'no_middle_name' => false,
                  'last_name' => $parsed['last_name'],
                  'suffix' => $parsed['suffix'],
+                 'birthdate' => optional($p->birthdate)->format('Y-m-d'),
+                 'gender' => $p->gender,
                  'age' => $p->age,
                  'swimmer_status' => $p->swimmer_status,
                  'health_condition' => $p->health_condition,
@@ -241,8 +243,15 @@
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
-                                <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Age <span class="text-[#780000]">*</span></label>
-                                <input type="number" :name="'participants[' + index + '][age]'" x-model="p.age" required min="8" max="85" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Birthdate <span class="text-[#780000]">*</span></label>
+                                <input type="date" :name="'participants[' + index + '][birthdate]'" x-model="p.birthdate" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                <select :name="'participants[' + index + '][gender]'" x-model="p.gender" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                    <option value="">Select gender</option>
+                                    <option value="female">Female</option>
+                                    <option value="male">Male</option>
+                                    <option value="non_binary">Non-binary</option>
+                                    <option value="prefer_not_to_say">Prefer not to say</option>
+                                </select>
                             </div>
                             <div>
                                 <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Swimming Status</label>

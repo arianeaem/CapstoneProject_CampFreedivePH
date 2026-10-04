@@ -8,6 +8,7 @@ use App\Models\BookingParticipant;
 use App\Models\BookingStatusLog;
 use App\Models\Payment;
 use App\Services\AuditLogger;
+use App\Services\BatchManagementService;
 use App\Services\BookingPolicyEngine;
 use App\Services\WeatherSafetyService;
 use Carbon\Carbon;
@@ -21,7 +22,8 @@ class BookingController extends Controller
 {
     public function __construct(
         protected WeatherSafetyService $weatherService,
-        protected BookingPolicyEngine $policyEngine
+        protected BookingPolicyEngine $policyEngine,
+        protected BatchManagementService $batchService
     ) {}
 
     /**
@@ -205,7 +207,9 @@ class BookingController extends Controller
             'end_date' => 'required|date|after:start_date',
             'participants' => 'required|array|min:1|max:45',
             'participants.*.name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
-            'participants.*.age' => 'required|integer|min:8|max:85',
+            'participants.*.birthdate' => 'nullable|date|before_or_equal:today',
+            'participants.*.gender' => 'nullable|in:male,female,non_binary,prefer_not_to_say',
+            'participants.*.age' => 'required_without:participants.*.birthdate|nullable|integer|min:8|max:85',
             'participants.*.health_condition' => 'nullable|string|max:1000',
             'participants.*.swimmer_status' => 'nullable|string|max:50',
             'contact_name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
@@ -277,9 +281,15 @@ class BookingController extends Controller
             $bookingNumber = 'CFP-' . date('Y') . '-' . str_pad(mt_rand(1000, 9999), 4, '0', STR_PAD_LEFT);
         }
         $pin = (string) mt_rand(1000, 9999);
+        $batch = $this->batchService->findOrCreateBatchForDates(
+            $validated['start_date'],
+            $validated['end_date'],
+            $currentUser
+        );
 
         $booking = DB::transaction(function () use (
             $validated,
+            $batch,
             $bookingNumber,
             $pin,
             $pricePerPerson,
@@ -297,6 +307,7 @@ class BookingController extends Controller
             $booking = Booking::create([
                 'booking_number' => $bookingNumber,
                 'pin' => $pin,
+                'batch_id' => $batch->id,
                 'class_type' => $validated['class_type'],
                 'is_certified_diver' => $validated['is_certified_diver'] ?? false,
                 'start_date' => $validated['start_date'],
@@ -324,7 +335,9 @@ class BookingController extends Controller
                 BookingParticipant::create([
                     'booking_id' => $booking->id,
                     'name' => $p['name'],
-                    'age' => $p['age'],
+                    'birthdate' => !empty($p['birthdate']) ? $p['birthdate'] : null,
+                    'gender' => $p['gender'] ?? null,
+                    'age' => !empty($p['birthdate']) ? Carbon::parse($p['birthdate'])->age : $p['age'],
                     'health_condition' => $p['health_condition'] ?? 'None declared',
                     'swimmer_status' => $p['swimmer_status'] ?? 'swimmer',
                     'price_per_person' => $pricePerPerson,
@@ -362,6 +375,8 @@ class BookingController extends Controller
             $currentUser->name,
             $request
         );
+
+        app(\App\Services\AdminNotificationService::class)->newBooking($booking->fresh());
 
         return redirect()->route('admin.bookings.show', $booking)
             ->with('success', "Booking #{$booking->booking_number} created successfully!");
@@ -423,7 +438,9 @@ class BookingController extends Controller
             'participants' => 'required|array|min:1|max:45',
             'participants.*.id' => 'nullable|integer',
             'participants.*.name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
-            'participants.*.age' => 'required|integer|min:8|max:85',
+            'participants.*.birthdate' => 'nullable|date|before_or_equal:today',
+            'participants.*.gender' => 'nullable|in:male,female,non_binary,prefer_not_to_say',
+            'participants.*.age' => 'required_without:participants.*.birthdate|nullable|integer|min:8|max:85',
             'participants.*.health_condition' => 'nullable|string|max:1000',
             'participants.*.swimmer_status' => 'nullable|string|max:50',
             'edit_reason' => 'required|string|max:500',
@@ -447,28 +464,15 @@ class BookingController extends Controller
         $pickupLocation = ($pickupOption === 'carpool') ? ($validated['pickup_location'] ?? $booking->pickup_location) : null;
         $boatDive = (bool)$booking->boat_dive;
 
-        $settingService = app(\App\Services\SystemSettingService::class);
-        $pricePerPerson = app(\App\Services\PricingRuleEngine::class)->getBasePrice(
-            $booking->class_type,
-            (bool)$booking->is_certified_diver
-        );
-
-        $carpoolRate = (float) ($settingService->get('addons.carpool_fee_per_head') ?? $settingService->get('addons.carpool_roundtrip_fee', 1200.00) ?? 1200.00);
-        $boatDiveRate = (float) ($settingService->get('addons.boat_dive_fee_per_head') ?? $settingService->get('addons.boat_dive_fee', 600.00) ?? 600.00);
-        $lguRate = (float) ($settingService->get('addons.lgu_tourism_pass_fee') ?? $settingService->get('addons.municipal_environmental_fee', 300.00) ?? 300.00);
-        $envRate = (float) ($settingService->get('addons.environmental_fee', 50.00) ?? 50.00);
-
-        $subtotal = $pricePerPerson * $participantCount;
-        $carpoolFee = ($pickupOption === 'carpool') ? ($carpoolRate * $participantCount) : 0.00;
-        $boatDiveFee = $boatDive ? ($boatDiveRate * $participantCount) : 0.00;
-        $lguFee = $lguRate * $participantCount;
-        $environmentalFee = $envRate * $participantCount;
-        $totalAmount = $subtotal + $carpoolFee + $boatDiveFee + $lguFee + $environmentalFee;
-
-        $carpoolDp = (float) ($settingService->get('program_pricing.downpayment_carpool', 3000.00) ?? 3000.00);
-        $ownTranspoDp = (float) ($settingService->get('program_pricing.downpayment_own_transpo', 2000.00) ?? 2000.00);
-        $downpaymentPerHead = ($pickupOption === 'carpool') ? $carpoolDp : $ownTranspoDp;
-        $downpaymentAmount = min($downpaymentPerHead * $participantCount, $totalAmount);
+        // Pricing is a snapshot taken when the booking is created. Editing guest
+        // details or dates must not re-evaluate current rules for this booking.
+        $carpoolFee = (float) $booking->carpool_fee;
+        $boatDiveFee = (float) $booking->boat_dive_fee;
+        $lguFee = (float) $booking->lgu_fee;
+        $environmentalFee = (float) $booking->environmental_fee;
+        $subtotal = (float) $booking->subtotal;
+        $totalAmount = (float) $booking->total_amount;
+        $downpaymentAmount = (float) $booking->downpayment_amount;
         $balanceAmount = $totalAmount - $booking->payments()->whereIn('status', ['completed', 'paid'])->sum('amount');
 
         // Track changes for immutable audit trail (RA 10173)
@@ -533,7 +537,9 @@ class BookingController extends Controller
                     if ($participant && $participant->booking_id === $booking->id) {
                         $participant->update([
                             'name' => $pData['name'],
-                            'age' => $pData['age'],
+                            'birthdate' => !empty($pData['birthdate']) ? $pData['birthdate'] : null,
+                            'gender' => $pData['gender'] ?? null,
+                            'age' => !empty($pData['birthdate']) ? Carbon::parse($pData['birthdate'])->age : $pData['age'],
                             'health_condition' => $pData['health_condition'] ?? 'None declared',
                             'swimmer_status' => $pData['swimmer_status'] ?? 'swimmer',
                         ]);

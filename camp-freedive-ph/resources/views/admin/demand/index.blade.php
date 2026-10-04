@@ -169,6 +169,8 @@
                             <th class="py-1.5 pr-4">Booked so far</th>
                             <th class="py-1.5 pr-4">Predicted participants</th>
                             <th class="py-1.5 pr-4">Predicted bookings</th>
+                            <th class="py-1.5 pr-4">Projected revenue</th>
+                            <th class="py-1.5 pr-4">Peak coaches</th>
                             <th class="py-1.5 pr-4">Fill rate</th>
                             <th class="py-1.5 pr-4">Demand</th>
                             <th class="py-1.5 pr-4">Season</th>
@@ -188,6 +190,8 @@
                                     @endif
                                 </td>
                                 <td class="py-2 pr-4">{{ $fmt($b['predicted_bookings']) }}</td>
+                                <td class="py-2 pr-4">₱{{ number_format($b['predicted_revenue_php'], 0) }}</td>
+                                <td class="py-2 pr-4">{{ (int) ceil($b['predicted_participants'] / 4) }}</td>
                                 <td class="py-2 pr-4">{{ $b['predicted_fill_rate'] !== null ? round($b['predicted_fill_rate'] * 100) . '%' : '—' }}</td>
                                 <td class="py-2 pr-4"><span class="rounded-full px-2 py-0.5 text-xs font-bold {{ $lvlTone($b['demand_level']) }}">{{ $b['demand_level'] }}</span></td>
                                 <td class="py-2 pr-4">{{ $b['season_period'] }}</td>
@@ -215,6 +219,8 @@
                             <th class="py-1.5 pr-4">Batches</th>
                             <th class="py-1.5 pr-4">Total participants</th>
                             <th class="py-1.5 pr-4">Total bookings</th>
+                            <th class="py-1.5 pr-4">Projected revenue</th>
+                            <th class="py-1.5 pr-4">Peak coaches</th>
                             <th class="py-1.5 pr-4">Avg participants / batch</th>
                             <th class="py-1.5 pr-4">Demand</th>
                             <th class="py-1.5 pr-4">Season</th>
@@ -227,6 +233,8 @@
                                 <td class="py-2 pr-4">{{ $m['batches'] }}</td>
                                 <td class="py-2 pr-4">{{ $fmt($m['predicted_participants']) }}</td>
                                 <td class="py-2 pr-4">{{ $fmt($m['predicted_bookings']) }}</td>
+                                <td class="py-2 pr-4">₱{{ number_format($m['predicted_revenue_php'], 0) }}</td>
+                                <td class="py-2 pr-4">{{ $m['coaches_peak'] }}</td>
                                 <td class="py-2 pr-4">{{ $fmt($m['avg_participants_per_batch']) }}</td>
                                 <td class="py-2 pr-4"><span class="rounded-full px-2 py-0.5 text-xs font-bold {{ $lvlTone($m['demand_level']) }}">{{ $m['demand_level'] }}</span></td>
                                 <td class="py-2 pr-4">{{ $m['season_period'] }}</td>

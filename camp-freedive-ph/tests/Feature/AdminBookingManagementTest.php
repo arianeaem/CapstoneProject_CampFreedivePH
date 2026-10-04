@@ -66,7 +66,8 @@ class AdminBookingManagementTest extends TestCase
             'participants' => [
                 [
                     'name' => 'Walkin Diver One',
-                    'age' => 28,
+                    'birthdate' => Carbon::now()->subYears(28)->subDays(3)->format('Y-m-d'),
+                    'gender' => 'female',
                     'swimmer_status' => 'swimmer',
                     'health_condition' => 'No medical issues',
                 ],
@@ -81,12 +82,16 @@ class AdminBookingManagementTest extends TestCase
 
         $booking = Booking::where('contact_name', 'Walkin Guest')->first();
         $this->assertNotNull($booking);
+        $this->assertNotNull($booking->batch_id);
+        $this->assertSame($startDate, $booking->batch->start_date->toDateString());
         $response->assertRedirect(route('admin.bookings.show', $booking));
 
         // Verify participant
         $this->assertDatabaseHas('booking_participants', [
             'booking_id' => $booking->id,
             'name' => 'Walkin Diver One',
+            'gender' => 'female',
+            'age' => 28,
         ]);
 
         // Verify offline payment
@@ -145,6 +150,15 @@ class AdminBookingManagementTest extends TestCase
 
         $booking = Booking::where('booking_number', 'CFP-2026-1001')->first();
         $participant = $booking->participants->first();
+        $originalPricing = $booking->only([
+            'carpool_fee',
+            'boat_dive_fee',
+            'lgu_fee',
+            'environmental_fee',
+            'subtotal',
+            'total_amount',
+            'downpayment_amount',
+        ]);
 
         $participantsData = $booking->participants->map(function ($p, $index) {
             return [
@@ -173,6 +187,11 @@ class AdminBookingManagementTest extends TestCase
         $response->assertRedirect(route('admin.bookings.show', $booking));
         $this->assertEquals('Ariane Mae Ramos-Updated', $booking->fresh()->contact_name);
         $this->assertEquals('Cleared by physician for equalizing', $participant->fresh()->health_condition);
+        $this->assertEquals(
+            $originalPricing,
+            $booking->fresh()->only(array_keys($originalPricing)),
+            'Editing a booking must retain the original pricing snapshot after pricing rules change.'
+        );
 
         // Verify immutable system audit log
         $this->assertDatabaseHas('audit_logs', [

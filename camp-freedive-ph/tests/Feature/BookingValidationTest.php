@@ -236,45 +236,38 @@ class BookingValidationTest extends TestCase
     // 3. TERMS & CONDITIONS AND CONFIRMATION ACKNOWLEDGMENT
     // =========================================================================
 
-    public function test_booking_rejects_missing_or_unaccepted_terms_and_confirmation(): void
+    public function test_booking_rejects_missing_or_unaccepted_confirmation(): void
     {
-        // 1. Missing has_agreed_to_terms
-        $payload = $this->basePayload();
-        unset($payload['has_agreed_to_terms']);
-        $res = $this->postJson('/book', $payload);
-        $res->assertStatus(422);
-        $res->assertJsonValidationErrors(['has_agreed_to_terms']);
-
-        // 2. has_agreed_to_terms = false
-        $payload = $this->basePayload(['has_agreed_to_terms' => false]);
-        $res = $this->postJson('/book', $payload);
-        $res->assertStatus(422);
-        $res->assertJsonValidationErrors(['has_agreed_to_terms']);
-
-        // 3. has_agreed_to_terms = 0
-        $payload = $this->basePayload(['has_agreed_to_terms' => 0]);
-        $res = $this->postJson('/book', $payload);
-        $res->assertStatus(422);
-        $res->assertJsonValidationErrors(['has_agreed_to_terms']);
-
-        // 4. Missing confirmation_ack
+        // Missing confirmation_ack
         $payload = $this->basePayload();
         unset($payload['confirmation_ack']);
         $res = $this->postJson('/book', $payload);
         $res->assertStatus(422);
         $res->assertJsonValidationErrors(['confirmation_ack']);
 
-        // 5. confirmation_ack = false
+        // confirmation_ack = false
         $payload = $this->basePayload(['confirmation_ack' => false]);
         $res = $this->postJson('/book', $payload);
         $res->assertStatus(422);
         $res->assertJsonValidationErrors(['confirmation_ack']);
 
-        // 6. confirmation_ack = 0
+        // confirmation_ack = 0
         $payload = $this->basePayload(['confirmation_ack' => 0]);
         $res = $this->postJson('/book', $payload);
         $res->assertStatus(422);
         $res->assertJsonValidationErrors(['confirmation_ack']);
+
+        // Terms and Privacy confirmation is separate from accuracy confirmation.
+        $payload = $this->basePayload();
+        unset($payload['has_agreed_to_terms']);
+        $res = $this->postJson('/book', $payload);
+        $res->assertStatus(422);
+        $res->assertJsonValidationErrors(['has_agreed_to_terms']);
+
+        $payload = $this->basePayload(['has_agreed_to_terms' => false]);
+        $res = $this->postJson('/book', $payload);
+        $res->assertStatus(422);
+        $res->assertJsonValidationErrors(['has_agreed_to_terms']);
     }
 
     // =========================================================================

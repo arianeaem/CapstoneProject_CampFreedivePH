@@ -7,6 +7,7 @@ use App\Models\Batch;
 use App\Models\BookingParticipant;
 use App\Models\CoachOpening;
 use App\Models\CoachRequest;
+use App\Models\ParticipantAssignment;
 use App\Models\User;
 use App\Services\CoachMatchingService;
 use App\Services\DemandForecastService;
@@ -18,6 +19,8 @@ use Illuminate\View\View;
 
 class CoachMatchingController extends Controller
 {
+    private const RECENT_WORKLOAD_DAYS = 30;
+
     public function __construct(
         protected CoachMatchingService $matchingService,
         protected DemandForecastService $forecastService
@@ -52,11 +55,24 @@ class CoachMatchingController extends Controller
             ->orderBy('name', 'asc')
             ->get();
 
+        $recentWorkloadStart = now()->subDays(self::RECENT_WORKLOAD_DAYS);
+        $recentStudentCounts = ParticipantAssignment::query()
+            ->whereIn('coach_id', $activeCoaches->pluck('id'))
+            ->where('assigned_at', '>=', $recentWorkloadStart)
+            ->selectRaw('coach_id, COUNT(DISTINCT participant_id) as recent_student_count')
+            ->groupBy('coach_id')
+            ->pluck('recent_student_count', 'coach_id');
+        $lastAssignedDates = ParticipantAssignment::query()
+            ->whereIn('coach_id', $activeCoaches->pluck('id'))
+            ->selectRaw('coach_id, MAX(assigned_at) as last_assigned_at')
+            ->groupBy('coach_id')
+            ->pluck('last_assigned_at', 'coach_id');
+
         $settingService = app(\App\Services\SystemSettingService::class);
         $coachRatio = (int) ($settingService->get('camp_operations.coach_student_ratio', 4) ?? 4);
 
         // 3. Build simplified batch staffing data
-        $batchData = $batches->map(function ($batch) use ($activeCoaches, $coachRatio) {
+        $batchData = $batches->map(function ($batch) use ($activeCoaches, $coachRatio, $recentStudentCounts, $lastAssignedDates) {
             $totalParticipants = (int) $batch->total_participants_count;
             $neededCoaches = $totalParticipants > 0 ? (int) ceil($totalParticipants / $coachRatio) : 0;
             $assignedCoaches = $batch->assigned_coaches;
@@ -81,17 +97,35 @@ class CoachMatchingController extends Controller
 
                     return ($d === $startDateStr || $d === $endDateStr) && $avail->status === 'available';
                 });
-            })->map(function ($coach) {
+            })->map(function ($coach) use ($recentStudentCounts, $lastAssignedDates) {
+                $lastAssignedAt = $lastAssignedDates->get($coach->id);
+
                 return [
                     'id' => $coach->id,
                     'name' => $coach->name,
                     'email' => $coach->email,
                     'phone' => $coach->phone,
+                    'recent_student_count' => (int) $recentStudentCounts->get($coach->id, 0),
+                    'last_assigned_at' => $lastAssignedAt ? Carbon::parse($lastAssignedAt) : null,
                     'is_assigned_here' => false,
                     'is_available_on_calendar' => true,
                     'coach_model' => $coach,
                 ];
-            })->values();
+            })
+            ->sortBy([
+                ['recent_student_count', 'asc'],
+                fn (array $first, array $second) => ($first['last_assigned_at']?->timestamp ?? 0)
+                    <=> ($second['last_assigned_at']?->timestamp ?? 0),
+            ])
+            ->values()
+            ->map(function (array $coach, int $index) {
+                $coach['is_fairest_pick'] = $index === 0;
+                $coach['days_since_last_assignment'] = $coach['last_assigned_at']
+                    ? $coach['last_assigned_at']->startOfDay()->diffInDays(Carbon::today())
+                    : null;
+
+                return $coach;
+            });
 
             // Check if open broadcast exists
             $openBroadcast = CoachOpening::where('batch_id', $batch->id)

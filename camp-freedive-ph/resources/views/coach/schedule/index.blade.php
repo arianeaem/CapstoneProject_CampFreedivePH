@@ -9,7 +9,7 @@
     selectedBatch: null, 
     submittingRelease: false,
     openFilters: false,
-    openBatches: [],
+    openBatches: @json(collect($upcomingBatches)->filter(fn ($item) => $item['is_current_dive'] ?? false)->map(fn ($item) => $item['batch']->id)->values()),
     toggleBatch(batchId) {
         if (this.openBatches.includes(batchId)) {
             this.openBatches = this.openBatches.filter(id => id !== batchId);
@@ -101,6 +101,11 @@
                             <span class="text-sm text-[#6E6E73] font-medium leading-tight">
                                 {{ \App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($assessment?->recommended_action ?? 'Standard marine safety protocols in effect.') }}
                             </span>
+                            @if($item['is_current_dive'] ?? false)
+                                <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#780000] text-white inline-flex items-center shadow-2xs">
+                                    Current Dive
+                                </span>
+                            @endif
                         </div>
 
                         <div>
@@ -143,10 +148,6 @@
                                     class="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold transition-all cursor-pointer active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-600">
                                 Request Release
                             </button>
-                        @else
-                            <span class="min-h-[44px] px-3.5 py-2.5 rounded-xl text-sm font-bold bg-[#F2F2F7] text-[#6E6E73] inline-flex items-center" title="Release requests are locked within 48 hours of dive start">
-                                Locked (&lt;48h)
-                            </span>
                         @endif
 
                         <!-- Expand / Collapse Roster Toggle Button -->
@@ -178,8 +179,12 @@
                     
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
                         <div>
-                            <h3 class="text-base font-black text-[#1D1D1F]">Assigned Student Roster</h3>
-                            <p class="text-sm text-[#6E6E73]">Review student swimming abilities and health conditions prior to boat departure</p>
+                            <h3 class="text-base font-black text-[#1D1D1F]">
+                                {{ ($item['is_current_dive'] ?? false) ? 'Students Assigned to You Today' : 'Assigned Student Roster' }}
+                            </h3>
+                            <p class="text-sm text-[#6E6E73]">
+                                {{ ($item['is_current_dive'] ?? false) ? 'Your assigned students for today’s dive.' : 'Review student swimming abilities and health conditions prior to boat departure' }}
+                            </p>
                         </div>
                         <span class="text-sm font-extrabold text-[#1D1D1F] bg-white border border-[#E5E5EA] px-3 py-1 rounded-xl self-start sm:self-auto shadow-2xs">
                             {{ $item['students_count'] }} Diver(s) in Group

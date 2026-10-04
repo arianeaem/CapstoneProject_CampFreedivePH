@@ -1031,25 +1031,28 @@
                                         </div>
                                     </div>
 
-                                    <!-- Age & Swimming Ability -->
+                                    <!-- Birthdate, Gender, Swimming Ability & Health -->
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
-                                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Age (8-85 yrs) <span class="text-[#780000]">*</span></label>
-                                            <input type="number" 
-                                                   x-model="participant.age" 
-                                                   min="8" 
-                                                   max="85" 
-                                                   maxlength="2"
-                                                   inputmode="numeric"
-                                                   @input="if(participant.age && participant.age.toString().length > 2) participant.age = parseInt(participant.age.toString().slice(0, 2), 10)"
-                                                   placeholder="e.g. 24" 
-                                                   :aria-invalid="touchedStep3 && !validateAge(participant.age)"
-                                                   :aria-describedby="'err-participant-age-' + index"
+                                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Birthdate <span class="text-[#780000]">*</span></label>
+                                            <input type="date"
+                                                   x-model="participant.birthdate"
+                                                   @change="calculateAge(participant)"
+                                                   :max="new Date().toISOString().split('T')[0]"
                                                    class="w-full px-3.5 py-2.5 rounded-xl border text-sm text-[#1D1D1F] bg-white transition-colors"
-                                                   :class="touchedStep3 && !validateAge(participant.age) ? 'border-[#D70015] bg-red-50/20' : 'border-[#D1D1D6] focus:border-[#780000]'">
-                                            <span :id="'err-participant-age-' + index" x-show="touchedStep3 && !validateAge(participant.age)" class="text-xs text-[#D70015] font-semibold mt-1 block">
-                                                Age must be between 8 and 85 years old.
-                                            </span>
+                                                   :class="touchedStep3 && !validateAge(calculateAge(participant)) ? 'border-[#D70015] bg-red-50/20' : 'border-[#D1D1D6] focus:border-[#780000]'">
+                                            <span class="text-xs text-[#6E6E73]" x-show="participant.birthdate" x-text="calculateAge(participant) + ' years old'"></span>
+                                        </div>
+
+                                        <div>
+                                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Gender <span class="text-[#780000]">*</span></label>
+                                            <select x-model="participant.gender" required class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
+                                                <option value="">Select gender</option>
+                                                <option value="female">Female</option>
+                                                <option value="male">Male</option>
+                                                <option value="non_binary">Non-binary</option>
+                                                <option value="prefer_not_to_say">Prefer not to say</option>
+                                            </select>
                                         </div>
 
                                         <div x-show="form.class_type === 'discovery'">
@@ -1060,16 +1063,16 @@
                                                 <option value="confident_swimmer">Confident Swimmer</option>
                                             </select>
                                         </div>
-                                    </div>
 
-                                    <div>
-                                        <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">
-                                            Health Condition / Medical Notes
-                                        </label>
-                                        <input type="text" 
-                                               x-model="participant.health_condition" 
-                                               placeholder="e.g. Asthma, ear pressure issues, or None" 
-                                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                                        <div>
+                                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">
+                                                Health Condition / Medical Notes
+                                            </label>
+                                            <input type="text"
+                                                   x-model="participant.health_condition"
+                                                   placeholder="e.g. Asthma, ear pressure issues, or None"
+                                                   class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                                        </div>
                                     </div>
                                 </div>
                             </template>
@@ -1080,14 +1083,14 @@
                     <div class="space-y-4 pt-1">
                         <div class="flex items-center justify-between pb-1 flex-wrap gap-2">
                             <h4 class="text-base sm:text-lg font-bold text-[#1D1D1F]">2. Contact Information</h4>
-                            <span class="text-xs text-[#6E6E73]">Primary Booker / Coordinator</span>
+                            <span class="text-xs text-[#6E6E73]">Primary Contact</span>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <div class="flex items-center justify-between mb-1.5">
                                     <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm">
-                                        Lead First Name <span class="text-[#780000]">*</span>
+                                        Primary Contact First Name <span class="text-[#780000]">*</span>
                                     </label>
                                     <template x-if="form.selected_lead_participant === 'custom'">
                                         <button type="button" 
@@ -1130,7 +1133,7 @@
                             </div>
 
                             <div>
-                                <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Lead Middle Name <span class="text-xs font-normal text-[#6E6E73]">(Optional)</span></label>
+                                <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Primary Contact Middle Name <span class="text-xs font-normal text-[#6E6E73]">(Optional)</span></label>
                                 <input type="text" 
                                        x-model="form.contact_middle_name" 
                                        :disabled="form.contact_no_middle_name || form.selected_lead_participant !== 'custom'"
@@ -1153,7 +1156,7 @@
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div class="sm:col-span-2">
-                                <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Lead Last Name <span class="text-[#780000]">*</span></label>
+                                <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Primary Contact Last Name <span class="text-[#780000]">*</span></label>
                                 <input type="text" 
                                        x-model="form.contact_last_name" 
                                        :readonly="form.selected_lead_participant !== 'custom'"
@@ -1253,7 +1256,7 @@
                                        :aria-checked="form.pickup_option === 'carpool'"
                                        @keydown.enter.prevent="form.pickup_option = 'carpool'"
                                        @keydown.space.prevent="form.pickup_option = 'carpool'"
-                                       class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                                       class="p-3.5 rounded-xl border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-white hover:bg-[#FAFAFA] hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                        :class="form.pickup_option === 'carpool' ? 'ring-2 ring-[#780000]' : ''">
                                     <input type="radio" name="pickup_opt" value="carpool" x-model="form.pickup_option" class="hidden">
                                     <div class="space-y-1">
@@ -1271,7 +1274,7 @@
                                        :aria-checked="form.pickup_option === 'own'"
                                        @keydown.enter.prevent="form.pickup_option = 'own'"
                                        @keydown.space.prevent="form.pickup_option = 'own'"
-                                       class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                                       class="p-3.5 rounded-xl border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-white hover:bg-[#FAFAFA] hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                        :class="form.pickup_option === 'own' ? 'ring-2 ring-[#780000]' : ''">
                                     <input type="radio" name="pickup_opt" value="own" x-model="form.pickup_option" class="hidden">
                                     <div class="space-y-1">
@@ -1291,7 +1294,7 @@
                                 <select x-model="form.pickup_location" 
                                         :aria-invalid="touchedStep3 && form.pickup_option === 'carpool' && !form.pickup_location"
                                         aria-describedby="err-carpool-hub"
-                                        class="w-full px-3.5 py-2.5 rounded-xl border border-transparent text-sm text-[#1D1D1F] bg-transparent font-medium transition-all cursor-pointer hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus:ring-2 focus:ring-[#780000]"
+                                        class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium transition-all cursor-pointer hover:bg-[#FAFAFA] hover:ring-1 hover:ring-[#780000] focus:outline-none focus:ring-2 focus:ring-[#780000]"
                                         :class="touchedStep3 && form.pickup_option === 'carpool' && !form.pickup_location ? 'ring-2 ring-[#D70015] bg-red-50/20' : (form.pickup_location ? 'ring-2 ring-[#780000]' : '')">
                                     <option value="" disabled selected class="bg-white text-[#1D1D1F]">-- Select Carpool Pickup Hub & Schedule --</option>
                                     <template x-for="p in pickupPoints" :key="p.id">
@@ -1311,8 +1314,7 @@
                                    :aria-checked="form.boat_dive"
                                    @keydown.enter.prevent="form.boat_dive = !form.boat_dive"
                                    @keydown.space.prevent="form.boat_dive = !form.boat_dive"
-                                   @click="form.boat_dive = !form.boat_dive"
-                                   class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex items-start justify-between gap-3 select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                                   class="p-3.5 rounded-xl border border-[#D1D1D6] transition-all cursor-pointer flex items-start justify-between gap-3 select-none bg-white hover:bg-[#FAFAFA] hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                    :class="form.boat_dive ? 'ring-2 ring-[#780000]' : ''">
                                 <input type="checkbox" x-model="form.boat_dive" class="hidden">
                                 <div class="min-w-0">
@@ -1326,28 +1328,6 @@
                                     <span class="font-extrabold text-[#780000] text-xs sm:text-sm">+₱{{ number_format($feesData['boat_dive'] ?? 600) }}</span>
                                     <span class="text-[11px] sm:text-xs text-[#6E6E73] block">/ person</span>
                                 </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <!-- Accuracy & Prerequisite Verification -->
-                    <div class="pt-1">
-                        <div class="p-3.5 sm:p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5]">
-                            <label tabindex="0"
-                                   role="checkbox"
-                                   :aria-checked="form.confirmation_ack"
-                                   @keydown.enter.prevent="form.confirmation_ack = !form.confirmation_ack"
-                                   @keydown.space.prevent="form.confirmation_ack = !form.confirmation_ack"
-                                   class="flex items-start gap-2.5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 rounded-lg">
-                                <input type="checkbox" x-model="form.confirmation_ack" class="w-4 h-4 rounded text-[#780000] focus:ring-[#780000] mt-0.5 shrink-0 cursor-pointer">
-                                <span class="font-bold text-[#780000] text-xs sm:text-sm leading-relaxed">
-                                    <span x-show="form.class_type === 'fundive' || form.class_type === 'refinement'">
-                                        I confirm that I have completed Discovery Class and that all information provided is accurate. <span class="text-[#D70015]">*</span>
-                                    </span>
-                                    <span x-show="form.class_type === 'discovery'">
-                                        I confirm that all information provided is accurate. <span class="text-[#D70015]">*</span>
-                                    </span>
-                                </span>
                             </label>
                         </div>
                     </div>
@@ -1425,6 +1405,43 @@
                                 <span class="text-xs sm:text-sm">Total Amount</span>
                                 <span class="text-base sm:text-lg font-black text-[#1D1D1F] shrink-0 text-right" x-text="'₱' + formatNumber(calculateTotal())"></span>
                             </div>
+
+                            <div id="booking-confirmations"
+                                 class="mt-4 p-3.5 sm:p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5] space-y-3 scroll-mt-24"
+                                 :class="touchedStep3 && (!form.confirmation_ack || !form.hasAgreedToTerms) ? 'border-2 border-[#D70015] bg-red-50/40 ring-2 ring-[#D70015]/20' : ''">
+                                <label tabindex="0" role="checkbox"
+                                       :aria-checked="form.confirmation_ack"
+                                       @keydown.enter.prevent="form.confirmation_ack = !form.confirmation_ack"
+                                       @keydown.space.prevent="form.confirmation_ack = !form.confirmation_ack"
+                                       class="flex items-start gap-2.5 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 rounded-lg">
+                                    <input type="checkbox" x-model="form.confirmation_ack"
+                                           class="w-4 h-4 rounded text-[#780000] focus:ring-[#780000] mt-0.5 shrink-0 cursor-pointer">
+                                    <span class="font-bold text-[#780000] text-xs sm:text-sm leading-relaxed">
+                                        I confirm that all information provided is accurate. <span class="text-[#D70015]">*</span>
+                                    </span>
+                                </label>
+                                <label tabindex="0" role="checkbox"
+                                       :aria-checked="form.hasAgreedToTerms"
+                                       @keydown.enter.prevent="form.hasAgreedToTerms = !form.hasAgreedToTerms"
+                                       @keydown.space.prevent="form.hasAgreedToTerms = !form.hasAgreedToTerms"
+                                       class="flex items-start gap-2.5 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 rounded-lg">
+                                    <input id="terms-checkbox" type="checkbox" x-model="form.hasAgreedToTerms"
+                                           class="w-4 h-4 rounded text-[#780000] focus:ring-[#780000] mt-0.5 shrink-0 cursor-pointer">
+                                    <span class="font-bold text-[#780000] text-xs sm:text-sm leading-relaxed">
+                                        I have read and agree to the
+                                        <a href="{{ route('legal.terms') }}" target="_blank" rel="noopener noreferrer" @click.stop class="text-[#780000] underline">Terms &amp; Conditions</a>
+                                        and
+                                        <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener noreferrer" @click.stop class="text-[#780000] underline">Privacy Policy</a>. <span class="text-[#D70015]">*</span>
+                                    </span>
+                                </label>
+                                <span x-show="touchedStep3 && !form.confirmation_ack" class="text-xs text-[#D70015] font-semibold block">
+                                    Please confirm that all information provided is accurate.
+                                </span>
+                                <span x-show="touchedStep3 && !form.hasAgreedToTerms" class="text-xs text-[#D70015] font-semibold block">
+                                    Please read and agree to the Terms &amp; Conditions and Privacy Policy.
+                                </span>
+                            </div>
+
                         </div>
                     </div>
 
@@ -1521,6 +1538,7 @@
                                 </div>
                                 <strong class="text-2xl font-black text-[#065F46]" x-text="'₱' + formatNumber(calculateDownpayment())"></strong>
                             </div>
+
                         </div>
 
                     </div>
@@ -1532,7 +1550,7 @@
                                 Cancellation & Reschedule Policy
                             </h3>
                             <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">
-                                Transparent booking policies for date transfers and cancellations.
+                                These notice periods apply to customer requests. Camp FreedivePH may also cancel or reschedule a dive when safety, weather, site, boat, or other operational conditions require it. We will notify affected customers and provide the applicable next steps.
                             </p>
                         </div>
 
@@ -1540,7 +1558,7 @@
                             <!-- Tier 1: > 14 Days -->
                             <div class="p-3 rounded-xl space-y-1">
                                 <div class="flex items-center justify-between gap-2 flex-wrap">
-                                    <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Notice Given > 14 Days</strong>
+                                    <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Lead Time More Than 14 Days Before Dive</strong>
                                     <span class="text-[11px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">
                                         100% Refund or 1 Free Reschedule
                                     </span>
@@ -1553,7 +1571,7 @@
                             <!-- Tier 2: 7 to 14 Days -->
                             <div class="p-3 rounded-xl space-y-1">
                                 <div class="flex items-center justify-between gap-2 flex-wrap">
-                                    <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Notice Given 7 to 14 Days</strong>
+                                    <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Lead Time 7 to 14 Days Before Dive</strong>
                                     <span class="text-[11px] sm:text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md">
                                         1 Free Date Reschedule
                                     </span>
@@ -1566,7 +1584,7 @@
                             <!-- Tier 3: < 7 Days (Locked) -->
                             <div class="p-3 rounded-xl space-y-1">
                                 <div class="flex items-center justify-between gap-2 flex-wrap">
-                                    <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Notice Given < 7 Days</strong>
+                                    <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Lead Time Less Than 7 Days Before Dive</strong>
                                     <span class="text-[11px] sm:text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-md">
                                         Non-Refundable
                                     </span>
@@ -1580,41 +1598,8 @@
 
                 </div>
 
-                <!-- Explicit Consent & Hosted Checkout Action Button (Full Width Bottom) -->
+                <!-- Hosted Checkout Action Button (Full Width Bottom) -->
                 <div class="pt-4 space-y-4">
-                    <div id="terms-agreement-card"
-                         class="p-3.5 sm:p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5] transition-all scroll-mt-24"
-                         :class="touchedStep4 && !form.hasAgreedToTerms ? 'border-2 border-[#D70015] bg-red-50/40 ring-2 ring-[#D70015]/20' : ''">
-                        <label tabindex="0"
-                               role="checkbox"
-                               :aria-checked="form.hasAgreedToTerms"
-                               :aria-invalid="touchedStep4 && !form.hasAgreedToTerms"
-                               aria-describedby="err-terms-agreement"
-                               @keydown.enter.prevent="form.hasAgreedToTerms = !form.hasAgreedToTerms"
-                               @keydown.space.prevent="form.hasAgreedToTerms = !form.hasAgreedToTerms"
-                               class="flex items-start gap-2.5 cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 rounded-lg">
-                            <input id="terms-checkbox"
-                                   type="checkbox" 
-                                   x-model="form.hasAgreedToTerms" 
-                                   class="w-4 h-4 rounded text-[#780000] focus:ring-[#780000] mt-0.5 shrink-0 cursor-pointer">
-                            <span class="font-bold text-[#780000] text-xs sm:text-sm leading-relaxed">
-                                I have read and agree to the 
-                                <a href="{{ route('legal.terms') }}" target="_blank" rel="noopener noreferrer" @click.stop aria-label="Terms and Conditions (opens in a new tab)" class="text-[#780000] font-bold underline hover:text-[#500000] inline-flex items-center gap-1">
-                                    <span>Terms &amp; Conditions</span>
-                                    <img src="{{ asset('icons/icons8-linking-60.png') }}" class="w-4 h-4 object-contain shrink-0" alt="" aria-hidden="true">
-                                </a>, 
-                                <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener noreferrer" @click.stop aria-label="Privacy Policy (opens in a new tab)" class="text-[#780000] font-bold underline hover:text-[#500000] inline-flex items-center gap-1">
-                                    <span>Privacy Policy</span>
-                                    <img src="{{ asset('icons/icons8-linking-60.png') }}" class="w-4 h-4 object-contain shrink-0" alt="" aria-hidden="true">
-                                </a>, 
-                                and Cancellation &amp; Reschedule Policy. <span class="text-[#D70015]">*</span>
-                            </span>
-                        </label>
-                        <span id="err-terms-agreement" x-show="touchedStep4 && !form.hasAgreedToTerms" class="text-xs text-[#D70015] font-semibold mt-1.5 block">
-                            Please check the box above to accept the terms before proceeding to payment.
-                        </span>
-                    </div>
-
                     <!-- Step 4 Navigation Controls -->
                     <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
                         <button type="button" 
@@ -1637,9 +1622,6 @@
                                     <span>Redirecting to PayMongo...</span>
                                 </span>
                             </button>
-                            <span x-show="touchedStep4 && !form.hasAgreedToTerms" class="text-xs text-[#D70015] font-semibold text-center sm:text-right">
-                                Please agree to the terms above to proceed.
-                            </span>
                             <span class="text-[11px] sm:text-xs text-[#6E6E73] leading-relaxed text-center sm:text-right">
                                 Encrypted &amp; securely processed by PayMongo. We never store card or wallet details.
                             </span>
@@ -1876,7 +1858,7 @@ function bookingForm(config) {
             start_date: '',
             end_date: '',
             participants: [
-                { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', age: '', health_condition: '', swimmer_status: 'non_swimmer' }
+                { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', birthdate: '', gender: '', age: '', health_condition: '', swimmer_status: 'non_swimmer' }
             ],
             selected_lead_participant: 0,
             contact_first_name: '',
@@ -2157,7 +2139,7 @@ function bookingForm(config) {
 
                         if (!Array.isArray(this.form.participants) || this.form.participants.length === 0) {
                             this.form.participants = [
-                                { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', age: '', health_condition: '', swimmer_status: 'non_swimmer' }
+                                { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', birthdate: '', gender: '', age: '', health_condition: '', swimmer_status: 'non_swimmer' }
                             ];
                         } else {
                             this.form.participants.forEach(p => {
@@ -2228,7 +2210,7 @@ function bookingForm(config) {
                 start_date: '',
                 end_date: '',
                 participants: [
-                    { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', age: '', health_condition: '', swimmer_status: 'non_swimmer' }
+                    { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', birthdate: '', gender: '', age: '', health_condition: '', swimmer_status: 'non_swimmer' }
                 ],
                 selected_lead_participant: 0,
                 contact_first_name: '',
@@ -2371,6 +2353,8 @@ function bookingForm(config) {
                 suffix: '',
                 name: '',
                 age: '',
+                birthdate: '',
+                gender: '',
                 health_condition: '',
                 swimmer_status: 'non_swimmer'
             });
@@ -2577,6 +2561,16 @@ function bookingForm(config) {
             return !isNaN(a) && a >= 8 && a <= 85;
         },
 
+        calculateAge(participant) {
+            if (!participant.birthdate) return '';
+            const birthdate = new Date(participant.birthdate + 'T00:00:00');
+            const today = new Date();
+            let age = today.getFullYear() - birthdate.getFullYear();
+            if (today < new Date(today.getFullYear(), birthdate.getMonth(), birthdate.getDate())) age--;
+            participant.age = age;
+            return age;
+        },
+
         validateEmail(email) {
             if (!email) return false;
             return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toString().trim());
@@ -2645,13 +2639,19 @@ function bookingForm(config) {
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                         return;
                     }
-                    if (!p.age) {
-                        this.errorMessage = `Please enter the Age for Participant #${i + 1}.`;
+                    const calculatedAge = this.calculateAge(p);
+                    if (!p.birthdate) {
+                        this.errorMessage = `Please enter the Birthdate for Participant #${i + 1}.`;
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                         return;
                     }
-                    if (!this.validateAge(p.age)) {
-                        this.errorMessage = `Participant #${i + 1} age must be between 8 and 85 years old.`;
+                    if (!this.validateAge(calculatedAge)) {
+                        this.errorMessage = `Participant #${i + 1} must be between 8 and 85 years old.`;
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
+                    if (!p.gender) {
+                        this.errorMessage = `Please select the Gender for Participant #${i + 1}.`;
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                         return;
                     }
@@ -2708,9 +2708,12 @@ function bookingForm(config) {
                     return;
                 }
                 if (!this.form.confirmation_ack) {
-                    this.errorMessage = (this.form.class_type === 'fundive' || this.form.class_type === 'refinement')
-                        ? "Please check the confirmation box acknowledging that you have completed Discovery Class and that all provided information is accurate."
-                        : "Please check the confirmation box acknowledging that all provided details are accurate.";
+                    this.errorMessage = "Please confirm that all information provided is accurate.";
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+                if (!this.form.hasAgreedToTerms) {
+                    this.errorMessage = "Please read and agree to the Terms & Conditions and Privacy Policy.";
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     return;
                 }
@@ -2764,20 +2767,6 @@ function bookingForm(config) {
         },
 
         async processPayment(instantSimulation = false, hostedCheckout = true) {
-            if (!this.form.hasAgreedToTerms) {
-                this.touchedStep4 = true;
-                this.errorMessage = "Please read and agree to the Terms & Conditions and Privacy Policy to proceed.";
-                const termsCard = document.getElementById('terms-agreement-card');
-                if (termsCard) {
-                    termsCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    const checkbox = document.getElementById('terms-checkbox');
-                    if (checkbox) checkbox.focus();
-                } else {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-                return;
-            }
-
             this.submittingPayment = true;
             this.errorMessage = '';
 

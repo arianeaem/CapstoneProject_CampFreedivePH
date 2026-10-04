@@ -212,8 +212,18 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block font-bold text-[#1D1D1F] text-xs mb-1.5">Age <span class="text-[#780000]">*</span></label>
-                                    <input type="number" :name="'participants[' + index + '][age]'" x-model="p.age" required min="8" max="80" placeholder="Age" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                    <label class="block font-bold text-[#1D1D1F] text-xs mb-1.5">Birthdate <span class="text-[#780000]">*</span></label>
+                                    <input type="date" :name="'participants[' + index + '][birthdate]'" x-model="p.birthdate" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-[#1D1D1F] text-xs mb-1.5">Gender <span class="text-[#780000]">*</span></label>
+                                    <select :name="'participants[' + index + '][gender]'" x-model="p.gender" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
+                                        <option value="">Select gender</option>
+                                        <option value="female">Female</option>
+                                        <option value="male">Male</option>
+                                        <option value="non_binary">Non-binary</option>
+                                        <option value="prefer_not_to_say">Prefer not to say</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -577,7 +587,7 @@ function adminBookingCreate(config) {
         leadLastName: '',
         leadSuffix: '',
         participants: [
-            { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', age: '', swimmer_status: 'non_swimmer', health_condition: '' }
+            { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', birthdate: '', gender: '', age: '', swimmer_status: 'non_swimmer', health_condition: '' }
         ],
 
         initForm() {
@@ -711,6 +721,8 @@ function adminBookingCreate(config) {
                 suffix: '',
                 name: '',
                 age: '',
+                birthdate: '',
+                gender: '',
                 swimmer_status: 'non_swimmer',
                 health_condition: ''
             });

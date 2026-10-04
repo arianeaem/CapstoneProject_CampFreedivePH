@@ -397,21 +397,12 @@
                         <div x-text="'Hours until dive departure: ' + selectedAssignedDay.hours_until_dive + 'h'"></div>
                     </div>
 
-                    <!-- Staffing Policy Notice -->
-                    <template x-if="!selectedAssignedDay.can_request_release">
-                        <div class="p-4 rounded-xl bg-rose-50 border border-rose-200 text-sm text-rose-900 space-y-2">
-                            <div class="font-bold flex items-center gap-2">
-                                <svg class="w-5 h-5 text-rose-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                                <span>48-Hour Cutoff Enforced</span>
-                            </div>
-                            <p class="leading-relaxed">
-                                Self-service release requests cannot be submitted within 48 hours of dive departure to protect student safety and staffing continuity.
-                            </p>
-                            <p class="font-semibold text-rose-950">
-                                If you are experiencing a medical or personal emergency, please contact Camp Administration or Owner directly.
-                            </p>
-                        </div>
-                    </template>
+                    <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900 space-y-2">
+                        <div class="font-bold">Emergency release requests are available at any time.</div>
+                        <p class="leading-relaxed">
+                            Submit the request as soon as possible so Camp Administration can arrange replacement staffing.
+                        </p>
+                    </div>
 
                     <!-- Emergency Release Form -->
                     <template x-if="selectedAssignedDay.can_request_release">

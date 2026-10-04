@@ -257,6 +257,7 @@ def compute_metrics(y_true, y_pred) -> dict:
 # ------------------------------------------------------------------------------
 INTERVAL_Z_80 = 1.2816                 # 80% prediction interval
 DEFAULT_BATCH_CAPACITY = 45
+COACH_RATIO = 4                        # one coach per four participants
 REAL_HISTORY_MIN_BATCHES = 104         # about two years of weekly batches
 REAL_HISTORY_MAX_STALE_DAYS = 90       # newest actual batch must be this recent
 # NOTE: these two numbers are placeholders for Ari/stakeholders to confirm.
@@ -348,6 +349,10 @@ def build_batch_forecasts(batches, models, actual_df, avg_lead, median_lead, dem
     cols = ["participant_count", "booking_count", "class_revenue"]
     month_means = actual_df.groupby(pd.to_datetime(actual_df["batch_date"]).dt.month)[cols].mean()
     overall_means = actual_df[cols].mean()
+    _h = actual_df.assign(m=pd.to_datetime(actual_df["batch_date"]).dt.month)
+    _g = _h.groupby("m")[["class_revenue", "participant_count"]].sum()
+    rev_per_pax_by_month = _g["class_revenue"] / _g["participant_count"]
+    overall_rev_per_pax = actual_df["class_revenue"].sum() / actual_df["participant_count"].sum()
 
     for b in sorted(batches, key=lambda x: x["start_date"]):
         batch_date = pd.to_datetime(b["start_date"])
@@ -364,11 +369,12 @@ def build_batch_forecasts(batches, models, actual_df, avg_lead, median_lead, dem
         X = pd.DataFrame([make_feature_row(batch_date, history, avg_lead, median_lead)])[FEATURE_COLS]
         pax = max(0.0, float(models["participant_count"].predict(X)[0]))
         bkg = max(0.0, float(models["booking_count"].predict(X)[0]))
-        rev = max(0.0, float(models["class_revenue"].predict(X)[0]))
 
         # A forecast can never be lower than what is already booked (booked_so_far is real data).
         adjusted = booked > pax
         pax_final = max(pax, float(booked))
+        rpp = float(rev_per_pax_by_month.get(batch_date.month, overall_rev_per_pax))
+        rev = max(0.0, pax_final * rpp)
 
         rmse = float(rmse_by_target.get("participant_count", 0.0))
         lower = max(float(booked), pax_final - INTERVAL_Z_80 * rmse)

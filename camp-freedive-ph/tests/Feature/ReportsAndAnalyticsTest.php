@@ -48,7 +48,7 @@ class ReportsAndAnalyticsTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Reports & Analytics', false);
-        $response->assertSee('Financial & Revenue', false);
+        $response->assertSee('Revenue', false);
         $response->assertSee('Net Collections');
     }
 
@@ -128,11 +128,14 @@ class ReportsAndAnalyticsTest extends TestCase
 
     public function test_csv_export_streams_proper_csv_content(): void
     {
-        $response = $this->actingAs($this->owner)->get('/owner/reports/export?type=financials&preset=this_month');
+        $response = $this->actingAs($this->owner)->get('/owner/reports/export?type=revenue&preset=this_month');
 
         $response->assertStatus(200);
         $this->assertEquals('text/csv; charset=UTF-8', $response->headers->get('content-type'));
         $this->assertStringContainsString('attachment; filename=', $response->headers->get('content-disposition'));
+        $this->assertStringContainsString('revenue-', $response->headers->get('content-disposition'));
+        $this->assertStringContainsString('Monthly/Yearly Total Revenue and Growth (%)', $response->streamedContent());
+        $this->assertStringContainsString('Quota/Breakeven', $response->streamedContent());
     }
 
     public function test_print_summary_renders_properly(): void

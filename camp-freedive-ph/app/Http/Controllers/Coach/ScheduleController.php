@@ -65,10 +65,10 @@ class ScheduleController extends Controller
                 'class' => 'bg-emerald-50 text-emerald-700',
             ];
 
-            // 48-Hour Cutoff check (06:30 AM start)
+            // Emergency release requests are available regardless of lead time.
             $diveStart = $batch->start_date->copy()->setTime(6, 30);
             $hoursUntilDive = Carbon::now()->diffInHours($diveStart, false);
-            $canRequestRelease = $hoursUntilDive > 48;
+            $canRequestRelease = true;
 
             // Check if release request already submitted
             $releaseRequest = AssignmentReleaseRequest::where('coach_id', $coach->id)
@@ -80,6 +80,7 @@ class ScheduleController extends Controller
                 'dive_date' => $firstAssignment->dive_date,
                 'students' => $students,
                 'students_count' => $students->count(),
+                'is_current_dive' => $firstAssignment->dive_date?->isSameDay($today) ?? false,
                 'class_counts' => $classCounts,
                 'weather_class' => $weatherClass,
                 'weather_badge' => $weatherBadge,

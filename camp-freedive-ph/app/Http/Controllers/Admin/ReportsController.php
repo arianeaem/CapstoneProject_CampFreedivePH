@@ -53,7 +53,7 @@ class ReportsController extends Controller
         $user = Auth::user();
         $isOwner = ($user->role === 'owner');
 
-        $type = $request->input('type', 'financials');
+        $type = $request->input('type', 'revenue');
         $preset = $request->input('preset', 'this_month');
         $customStart = $request->input('start_date');
         $customEnd = $request->input('end_date');
