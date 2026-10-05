@@ -5,12 +5,9 @@ namespace App\Services;
 use App\Models\Batch;
 use App\Models\BatchDemandForecast;
 use App\Models\DemandForecast;
-use App\Models\Payment;
 use App\Support\DemandRules;
 use Carbon\Carbon;
-use Exception;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 
 class DemandForecastService
 {

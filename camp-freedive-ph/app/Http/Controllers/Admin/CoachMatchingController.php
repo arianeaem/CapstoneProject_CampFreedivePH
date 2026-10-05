@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Requests\Admin\Coaches\AssignCoachesRequest;
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
-use App\Models\BookingParticipant;
 use App\Models\CoachOpening;
 use App\Models\CoachRequest;
 use App\Models\ParticipantAssignment;

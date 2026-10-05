@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Batch;
 use App\Models\Booking;
 use App\Services\WeatherSafetyService;
 use Carbon\Carbon;

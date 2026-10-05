@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Coach;
 
 use App\Http\Controllers\Controller;
 use App\Models\AssignmentReleaseRequest;
-use App\Models\Batch;
 use App\Models\ParticipantAssignment;
 use App\Services\WeatherForecastService;
 use Carbon\Carbon;

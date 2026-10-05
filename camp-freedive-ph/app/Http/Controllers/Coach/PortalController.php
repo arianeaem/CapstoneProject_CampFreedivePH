@@ -10,7 +10,6 @@ use App\Models\CoachRequest;
 use App\Models\ParticipantAssignment;
 use App\Services\WeatherForecastService;
 use Carbon\Carbon;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 

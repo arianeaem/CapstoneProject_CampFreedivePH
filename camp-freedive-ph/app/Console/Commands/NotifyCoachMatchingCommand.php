@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\Batch;
-use App\Models\ParticipantAssignment;
 use App\Services\AdminNotificationService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;

@@ -2,14 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\AssignmentReleaseRequest;
 use App\Models\Batch;
-use App\Models\Booking;
-use App\Models\BookingParticipant;
 use App\Models\CoachAvailability;
 use App\Models\CoachOpening;
 use App\Models\CoachRequest;
-use App\Models\ParticipantAssignment;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;

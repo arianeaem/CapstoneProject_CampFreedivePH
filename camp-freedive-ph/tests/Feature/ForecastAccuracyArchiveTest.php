@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\AuditLog;
 use App\Models\ForecastAccuracyLog;
 use App\Models\ForecastSnapshot;
 use App\Services\WeatherForecastService;

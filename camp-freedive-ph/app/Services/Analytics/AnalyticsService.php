@@ -8,14 +8,10 @@ use App\Models\BookingParticipant;
 use App\Models\BookingPriceAdjustment;
 use App\Models\CancellationRequest;
 use App\Models\Coach;
-use App\Models\CoachAssignment;
 use App\Models\Payment;
-use App\Models\PricingRule;
-use App\Models\RefundRequest;
 use App\Models\RescheduleRequest;
 use App\Models\User;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 

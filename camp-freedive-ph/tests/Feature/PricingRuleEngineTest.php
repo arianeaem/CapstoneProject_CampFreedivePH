@@ -3,12 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Booking;
-use App\Models\BookingParticipant;
 use App\Models\DemandForecast;
 use App\Models\PricingRule;
 use App\Models\User;
 use App\Services\PricingRuleEngine;
-use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

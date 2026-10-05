@@ -7,7 +7,6 @@ use App\Http\Controllers\Admin\BookingRequestController;
 use App\Http\Controllers\Admin\CoachMatchingController;
 use App\Http\Controllers\Admin\CoachRosterController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
-use App\Http\Controllers\Admin\DeactivationController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\RefundController as AdminRefundController;
 use App\Http\Controllers\Admin\ReportsController;

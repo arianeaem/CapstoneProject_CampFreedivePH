@@ -42,7 +42,7 @@ class RetrainDemandForecastCommand extends Command
         $startTime = microtime(true);
 
         $pythonBinary = $this->option('python') 
-            ?: config('services.ml_demand.python_path', env('DEMAND_FORECAST_PYTHON', config('services.ml_safety.python_path', 'python')));
+            ?: config('services.ml_demand.python_path', 'python');
 
         $scriptPath = $this->option('script') 
             ?: config('services.ml_demand.retrain_script', base_path('../demand-forecast/retrain_pipeline.py'));

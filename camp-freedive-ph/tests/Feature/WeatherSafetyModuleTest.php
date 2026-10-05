@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Batch;
-use App\Models\BatchRiskAssessment;
 use App\Models\Booking;
 use App\Models\HourlyAssessment;
 use App\Models\ManualOverride;

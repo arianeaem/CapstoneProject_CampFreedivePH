@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Booking;
-use App\Models\Payment;
 use App\Models\RefundRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;

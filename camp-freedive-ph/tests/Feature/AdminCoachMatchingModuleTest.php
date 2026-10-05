@@ -9,7 +9,6 @@ use App\Models\CoachOpening;
 use App\Models\CoachRequest;
 use App\Models\ParticipantAssignment;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

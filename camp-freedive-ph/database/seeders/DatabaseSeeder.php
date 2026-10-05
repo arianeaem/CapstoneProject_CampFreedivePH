@@ -2,25 +2,17 @@
 
 namespace Database\Seeders;
 
-use App\Models\AssignmentLog;
-use App\Models\AuditLog;
 use App\Models\Batch;
-use App\Models\BatchRiskAssessment;
 use App\Models\BatchStatusLog;
 use App\Models\Booking;
 use App\Models\BookingParticipant;
-use App\Models\BookingPriceAdjustment;
 use App\Models\BookingStatusLog;
 use App\Models\CancellationRequest;
 use App\Models\CoachAvailability;
 use App\Models\CoachOpening;
 use App\Models\CoachRequest;
-use App\Models\HourlyAssessment;
-use App\Models\ManualOverride;
-use App\Models\NotificationLog;
 use App\Models\ParticipantAssignment;
 use App\Models\Payment;
-use App\Models\PaymentStatusLog;
 use App\Models\PricingRule;
 use App\Models\RefundRequest;
 use App\Models\RescheduleRequest;

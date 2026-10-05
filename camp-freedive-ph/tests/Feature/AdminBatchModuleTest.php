@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Batch;
 use App\Models\Booking;
-use App\Models\RefundRequest;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;

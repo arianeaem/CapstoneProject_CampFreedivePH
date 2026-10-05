@@ -11,7 +11,6 @@ use App\Models\BookingStatusLog;
 use App\Models\NotificationLog;
 use App\Models\RefundRequest;
 use App\Models\User;
-use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Collection;

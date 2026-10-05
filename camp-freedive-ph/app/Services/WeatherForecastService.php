@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Mail\BatchWeatherCancellationMail;
-use App\Models\AuditLog;
 use App\Models\Batch;
 use App\Models\BatchRiskAssessment;
 use App\Models\BatchStatusLog;
@@ -18,7 +17,6 @@ use App\Models\ManualOverride;
 use App\Models\NotificationLog;
 use App\Models\RefundRequest;
 use App\Models\User;
-use App\Services\AuditLogger;
 use App\Services\ExternalApi\ExternalApiClient;
 use Carbon\Carbon;
 use Exception;
@@ -1492,46 +1490,6 @@ class WeatherForecastService
         ];
     }
 
-    protected function formatEngineWindowResponse(array $data, string $windowType, bool $overrideTriggered): array
-    {
-        $hourlyList = [];
-        $worstHour = $data['worst_hour'] ?? null;
-        $assessment = $data['assessment'] ?? [];
-
-        foreach ($data['hourly_assessments'] ?? [] as $h) {
-            $forecasts = $h['forecasts'] ?? [];
-            $hourlyList[] = [
-                'forecast_time' => Carbon::parse($h['timestamp']),
-                'wave_height' => $forecasts['wave_height'] ?? 0.70,
-                'wave_period' => $forecasts['wave_period'] ?? 6.10,
-                'swell_height' => $forecasts['swell_height'] ?? 0.60,
-                'wind_wave_height' => $forecasts['wind_wave_height'] ?? 0.35,
-                'ocean_current' => $forecasts['ocean_current'] ?? 0.70,
-                'rain' => $forecasts['rain'] ?? 0.0,
-                'sea_level_pressure' => $forecasts['sea_level_pressure'] ?? 1010.5,
-                'wind_speed' => $forecasts['wind_speed'] ?? 12.0,
-                'wind_direction' => $forecasts['wind_direction'] ?? 245.0,
-                'tide_height' => $forecasts['tide_height'] ?? 0.0,
-                'tide_score' => 0,
-                'weighted_score_pct' => $overrideTriggered ? null : ($h['weighted_score_pct'] ?? 18.0),
-                'classification' => $overrideTriggered ? 'Critical Risk' : ($h['classification'] ?? 'Safe'),
-                'recommended_action' => self::MEANING_MAP[$overrideTriggered ? 'Critical Risk' : ($h['classification'] ?? 'Safe')],
-                'is_worst_hour_in_window' => $h['timestamp'] === $worstHour,
-            ];
-        }
-
-        return [
-            'planned_date' => $data['planned_date'] ?? '',
-            'window_type' => $windowType,
-            'dive_start' => $data['dive_start'] ?? '',
-            'dive_end' => $data['dive_end'] ?? '',
-            'classification' => $overrideTriggered ? 'Critical Risk' : ($assessment['classification'] ?? 'Safe'),
-            'weighted_score_pct' => $overrideTriggered ? null : ($assessment['weighted_score_pct'] ?? 18.0),
-            'worst_hour' => $worstHour,
-            'hourly' => $hourlyList,
-        ];
-    }
-
     /**
      * Master cache updater: pulls 16-day continuous 24-hour marine and weather forecasts from Open-Meteo
      * and saves structured continuous data in cache for sub-millisecond lookups.
@@ -1862,7 +1820,7 @@ class WeatherForecastService
     public function getCachedDayForecast(Carbon|string $date): ?array
     {
         $dateStr = is_string($date) ? $date : $date->format('Y-m-d');
-        $source = config('forecast.forecast_source', env('FORECAST_SOURCE', 'prd'));
+        $source = config('forecast.forecast_source', 'prd');
 
         if ($source === 'legacy') {
             return Cache::get("forecast:date:{$dateStr}");

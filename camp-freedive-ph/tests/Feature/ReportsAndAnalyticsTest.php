@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Batch;
 use App\Models\Booking;
-use App\Models\BookingParticipant;
 use App\Models\Payment;
 use App\Models\User;
 use Carbon\Carbon;

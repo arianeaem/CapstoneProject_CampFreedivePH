@@ -7,7 +7,6 @@ use App\Services\WeatherForecastService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use App\Http\Requests\Api\WeatherPreviewRequest;
 
 class WeatherPreviewController extends Controller

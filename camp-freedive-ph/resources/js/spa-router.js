@@ -20,8 +20,6 @@ class SPARouter {
         this.createProgressBar();
         this.bindEvents();
         this.updateSidebarActiveLinks(window.location.href);
-
-        console.log('[SPARouter] Dynamic content routing initialized.');
     }
 
     createProgressBar() {

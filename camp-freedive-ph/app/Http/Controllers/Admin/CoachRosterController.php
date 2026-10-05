@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BookingParticipant;
-use App\Models\CoachAvailability;
-use App\Models\ParticipantAssignment;
 use App\Models\User;
 use App\Services\CoachMatchingService;
 use Carbon\Carbon;
