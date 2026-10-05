@@ -46,7 +46,7 @@
     <template x-if="{{ $f }}.day1 && {{ $f }}.day2">
         <section class="space-y-1.5" aria-label="Your dive days">
             <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#6E6E73]">Your dive days</h4>
-            <div class="rounded-xl border border-[#E5E5EA] divide-y divide-[#E5E5EA]">
+            <div class="rounded-xl">
                 <template x-for="(day, idx) in [{{ $f }}.day1, {{ $f }}.day2]" :key="'dive-day-' + idx">
                     <div class="relative flex items-center gap-3 pl-4 pr-3 py-2.5 min-w-0">
                         <div class="absolute left-1.5 top-2 bottom-2 w-1 rounded-full" :class="$safety.dot(day.classification, {{ $seasonal }})" aria-hidden="true"></div>
