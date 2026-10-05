@@ -203,9 +203,10 @@ class ExportService
         ]);
 
         $batches = Batch::whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
-            ->with(['bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants.assignment.coach'), 'riskAssessment'])
+            ->with(['bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants.assignment.coach'), 'activeParticipantAssignments.coach', 'riskAssessment'])
             ->orderBy('start_date', 'asc')
             ->get();
+        Batch::preloadAssignedCoaches($batches);
 
         $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
 

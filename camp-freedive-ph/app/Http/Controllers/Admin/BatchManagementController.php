@@ -80,6 +80,7 @@ class BatchManagementController extends Controller
         };
 
         $batches = $query->get();
+        Batch::preloadAssignedCoaches($batches);
 
         // Staffing Status Filter (in-memory computed)
         if ($request->filled('staffing')) {

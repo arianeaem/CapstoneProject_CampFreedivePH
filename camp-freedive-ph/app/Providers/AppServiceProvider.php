@@ -11,6 +11,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // One settings load per request/job instead of one cache lookup per setting
+        $this->app->scoped(\App\Services\SystemSettingService::class);
+
         if (file_exists(app_path('Helpers/portal_helpers.php'))) {
             require_once app_path('Helpers/portal_helpers.php');
         }

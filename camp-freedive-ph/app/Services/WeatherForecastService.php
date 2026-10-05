@@ -1679,6 +1679,7 @@ class WeatherForecastService
         }
 
         // 4. Cache each day individually and summarize metrics
+        $snapshotRows = [];
         foreach ($dayBuckets as $dateKey => $bucket) {
             Cache::put("forecast:marine_cache:{$dateKey}", $bucket['marine'], now()->addMinutes(60));
             Cache::put("forecast:weather_cache:{$dateKey}", $bucket['weather'], now()->addMinutes(60));
@@ -1796,12 +1797,21 @@ class WeatherForecastService
             Cache::put("forecast:date:{$dateKey}", $summary, now()->addMinutes(60));
             $dailySummaries[$dateKey] = $summary;
 
-            // Automatically persist multi-horizon historical forecast snapshot
+            // Multi-horizon historical forecast snapshot (saved in one upsert below)
+            $daysOut = max(0, (int) Carbon::now(self::TIMEZONE)->startOfDay()->diffInDays(Carbon::parse($dateKey)->startOfDay(), false));
+            $snapshotRows[] = $this->forecastSnapshotRow($dateKey, $daysOut, $summary);
+        }
+
+        // ... and persist them in a single query instead of two per day
+        if (!empty($snapshotRows)) {
             try {
-                $daysOut = max(0, (int) Carbon::now(self::TIMEZONE)->startOfDay()->diffInDays(Carbon::parse($dateKey)->startOfDay(), false));
-                $this->recordForecastSnapshot($dateKey, $daysOut, $summary);
+                ForecastSnapshot::upsert(
+                    $snapshotRows,
+                    ['target_date', 'lead_time_days'],
+                    array_values(array_diff(array_keys($snapshotRows[0]), ['target_date', 'lead_time_days', 'created_at']))
+                );
             } catch (\Throwable $e) {
-                Log::debug("Could not record snapshot for {$dateKey}: " . $e->getMessage());
+                Log::debug('Could not record forecast snapshots: ' . $e->getMessage());
             }
         }
 
@@ -2229,20 +2239,39 @@ class WeatherForecastService
                 'target_date' => $date,
                 'lead_time_days' => $leadTimeDays,
             ],
-            [
-                'lead_time_label' => ForecastSnapshot::formatLeadTimeLabel($leadTimeDays),
-                'predicted_classification' => $summary['overall_classification'] ?? $summary['daytime_classification'] ?? 'Safe',
-                'predicted_score_pct' => $summary['overall_score_pct'] ?? $summary['daytime_score_pct'] ?? 25.0,
-                'predicted_wave_height' => (float) ($summary['avg_wave_height'] ?? 0.70),
-                'predicted_wind_speed' => (float) ($summary['avg_wind_speed'] ?? 12.0),
-                'predicted_ocean_current' => (float) ($summary['avg_ocean_current'] ?? 0.30),
-                'predicted_rain' => (float) ($summary['total_rain'] ?? 0.0),
-                'predicted_pressure' => (float) ($summary['avg_pressure'] ?? 1010.5),
-                'ml_predicted_classification' => $mlClassification,
-                'hourly_data' => $summary['hourly'] ?? [],
-                'captured_at' => now(),
-            ]
+            $this->forecastSnapshotValues($leadTimeDays, $summary, $mlClassification)
         );
+    }
+
+    /**
+     * Snapshot row in database format (model casts applied) for bulk upserts.
+     */
+    protected function forecastSnapshotRow(string $date, int $leadTimeDays, array $summary, ?string $mlClassification = null): array
+    {
+        $model = new ForecastSnapshot(array_merge(
+            ['target_date' => $date, 'lead_time_days' => $leadTimeDays],
+            $this->forecastSnapshotValues($leadTimeDays, $summary, $mlClassification)
+        ));
+        $now = $model->freshTimestampString();
+
+        return array_merge($model->getAttributes(), ['created_at' => $now, 'updated_at' => $now]);
+    }
+
+    protected function forecastSnapshotValues(int $leadTimeDays, array $summary, ?string $mlClassification = null): array
+    {
+        return [
+            'lead_time_label' => ForecastSnapshot::formatLeadTimeLabel($leadTimeDays),
+            'predicted_classification' => $summary['overall_classification'] ?? $summary['daytime_classification'] ?? 'Safe',
+            'predicted_score_pct' => $summary['overall_score_pct'] ?? $summary['daytime_score_pct'] ?? 25.0,
+            'predicted_wave_height' => (float) ($summary['avg_wave_height'] ?? 0.70),
+            'predicted_wind_speed' => (float) ($summary['avg_wind_speed'] ?? 12.0),
+            'predicted_ocean_current' => (float) ($summary['avg_ocean_current'] ?? 0.30),
+            'predicted_rain' => (float) ($summary['total_rain'] ?? 0.0),
+            'predicted_pressure' => (float) ($summary['avg_pressure'] ?? 1010.5),
+            'ml_predicted_classification' => $mlClassification,
+            'hourly_data' => $summary['hourly'] ?? [],
+            'captured_at' => now(),
+        ];
     }
 
     /**

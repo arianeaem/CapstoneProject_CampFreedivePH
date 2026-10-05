@@ -31,7 +31,7 @@ class BookingController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = Booking::with('participants', 'payments');
+        $query = Booking::with('participants', 'payments', 'batch');
 
         // By default, exclude unpaid downpayment draft bookings unless explicitly requested
         if ($request->filled('status')) {

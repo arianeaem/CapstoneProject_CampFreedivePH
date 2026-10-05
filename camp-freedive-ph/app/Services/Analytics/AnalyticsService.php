@@ -173,25 +173,21 @@ class AnalyticsService
      */
     protected function getFinancialMetrics(Carbon $start, Carbon $end, Carbon $priorStart, Carbon $priorEnd): array
     {
-        // Current Period Payments
-        $paymentsQuery = Payment::whereIn('status', ['completed', 'paid'])
-            ->whereBetween('created_at', [$start, $end]);
+        // Current & prior period payment totals in a single query
+        $paid = "status IN ('completed', 'paid')";
+        $paymentTotals = Payment::query()->selectRaw("
+                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? THEN amount END), 0) AS gross,
+                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? AND payment_type = 'downpayment' THEN amount END), 0) AS downpayment,
+                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? AND payment_type IN ('balance_settlement', 'full') THEN amount END), 0) AS balance,
+                COALESCE(SUM(CASE WHEN status = 'refunded' AND updated_at BETWEEN ? AND ? THEN amount_refunded END), 0) AS refunded,
+                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? THEN amount END), 0) AS prior_gross,
+                COALESCE(SUM(CASE WHEN status = 'refunded' AND updated_at BETWEEN ? AND ? THEN amount_refunded END), 0) AS prior_refunded
+            ", [$start, $end, $start, $end, $start, $end, $start, $end, $priorStart, $priorEnd, $priorStart, $priorEnd])->first();
 
-        $grossRevenue = (float) $paymentsQuery->sum('amount');
-        
-        $downpaymentRevenue = (float) Payment::whereIn('status', ['completed', 'paid'])
-            ->whereBetween('created_at', [$start, $end])
-            ->where('payment_type', 'downpayment')
-            ->sum('amount');
-
-        $balanceRevenue = (float) Payment::whereIn('status', ['completed', 'paid'])
-            ->whereBetween('created_at', [$start, $end])
-            ->whereIn('payment_type', ['balance_settlement', 'full'])
-            ->sum('amount');
-
-        $refundsProcessed = (float) Payment::where('status', 'refunded')
-            ->whereBetween('updated_at', [$start, $end])
-            ->sum('amount_refunded');
+        $grossRevenue = (float) $paymentTotals->gross;
+        $downpaymentRevenue = (float) $paymentTotals->downpayment;
+        $balanceRevenue = (float) $paymentTotals->balance;
+        $refundsProcessed = (float) $paymentTotals->refunded;
 
         if ($refundsProcessed === 0.0) {
             $refundsProcessed = (float) CancellationRequest::where('status', 'approved')
@@ -207,10 +203,8 @@ class AnalyticsService
             ->sum('balance_amount');
 
         // Prior Period for Delta calculation
-        $priorGross = (float) Payment::whereIn('status', ['completed', 'paid'])
-            ->whereBetween('created_at', [$priorStart, $priorEnd])
-            ->sum('amount');
-        $priorNet = max(0, $priorGross - (float) Payment::where('status', 'refunded')->whereBetween('updated_at', [$priorStart, $priorEnd])->sum('amount_refunded'));
+        $priorGross = (float) $paymentTotals->prior_gross;
+        $priorNet = max(0, $priorGross - (float) $paymentTotals->prior_refunded);
 
         $revenueDelta = $priorNet > 0 ? round((($netRevenue - $priorNet) / $priorNet) * 100, 1) : 0;
 
@@ -239,23 +233,37 @@ class AnalyticsService
             ],
         ];
 
+        // Revenue per class type (payments in period, joined to their booking)
+        $revenueByClass = Payment::join('bookings', 'bookings.id', '=', 'payments.booking_id')
+            ->whereIn('payments.status', ['completed', 'paid'])
+            ->whereBetween('payments.created_at', [$start, $end])
+            ->selectRaw('bookings.class_type, SUM(payments.amount) AS s')
+            ->groupBy('bookings.class_type')
+            ->pluck('s', 'class_type');
+
+        // Bookings and divers per class type, incl. carpool / boat-dive add-on counts
+        $addonColumns = "COUNT(*) AS c,
+                SUM(CASE WHEN bookings.pickup_option = 'carpool' THEN 1 ELSE 0 END) AS carpool,
+                SUM(CASE WHEN bookings.boat_dive THEN 1 ELSE 0 END) AS boat";
+        $bookingStats = Booking::where('status', '!=', 'pending_downpayment')
+            ->whereBetween('created_at', [$start, $end])
+            ->selectRaw("class_type, {$addonColumns}")
+            ->groupBy('class_type')
+            ->get()
+            ->keyBy('class_type');
+        $paxStats = BookingParticipant::join('bookings', 'bookings.id', '=', 'booking_participants.booking_id')
+            ->where('bookings.status', '!=', 'pending_downpayment')
+            ->whereBetween('bookings.created_at', [$start, $end])
+            ->selectRaw("bookings.class_type, {$addonColumns}")
+            ->groupBy('bookings.class_type')
+            ->get()
+            ->keyBy('class_type');
+
         $packageRevenue = [];
         foreach ($packages as $type => $meta) {
-            $rev = (float) Payment::whereIn('status', ['completed', 'paid'])
-                ->whereBetween('created_at', [$start, $end])
-                ->whereHas('booking', fn($q) => $q->where('class_type', $type))
-                ->sum('amount');
-
-            $bookingsCount = Booking::where('status', '!=', 'pending_downpayment')
-                ->whereBetween('created_at', [$start, $end])
-                ->where('class_type', $type)
-                ->count();
-
-            $paxCount = BookingParticipant::whereHas('booking', function ($q) use ($start, $end, $type) {
-                $q->where('status', '!=', 'pending_downpayment')
-                  ->whereBetween('created_at', [$start, $end])
-                  ->where('class_type', $type);
-            })->count();
+            $rev = (float) ($revenueByClass[$type] ?? 0);
+            $bookingsCount = (int) ($bookingStats[$type]->c ?? 0);
+            $paxCount = (int) ($paxStats[$type]->c ?? 0);
 
             $share = $grossRevenue > 0 ? round(($rev / $grossRevenue) * 100, 1) : 0;
 
@@ -277,45 +285,27 @@ class AnalyticsService
         $carpoolFee = (float) (app(\App\Services\SystemSettingService::class)->get('addons.carpool_fee_per_head', app(\App\Services\SystemSettingService::class)->get('addons.carpool_roundtrip_fee', 1200)) ?? 1200);
         $boatFee = (float) (app(\App\Services\SystemSettingService::class)->get('addons.boat_dive_fee_per_head', app(\App\Services\SystemSettingService::class)->get('addons.boat_dive_fee', 600)) ?? 600);
 
-        $carpoolBookings = Booking::where('status', '!=', 'pending_downpayment')
-            ->whereBetween('created_at', [$start, $end])
-            ->where('pickup_option', 'carpool')
-            ->count();
-        $carpoolPax = BookingParticipant::whereHas('booking', function ($q) use ($start, $end) {
-            $q->where('status', '!=', 'pending_downpayment')
-              ->whereBetween('created_at', [$start, $end])
-              ->where('pickup_option', 'carpool');
-        })->count();
+        $carpoolBookings = (int) $bookingStats->sum('carpool');
+        $carpoolPax = (int) $paxStats->sum('carpool');
         $carpoolRevenue = $carpoolPax * $carpoolFee;
 
-        $boatDiveBookings = Booking::where('status', '!=', 'pending_downpayment')
-            ->whereBetween('created_at', [$start, $end])
-            ->where('boat_dive', true)
-            ->count();
-        $boatDivePax = BookingParticipant::whereHas('booking', function ($q) use ($start, $end) {
-            $q->where('status', '!=', 'pending_downpayment')
-              ->whereBetween('created_at', [$start, $end])
-              ->where('boat_dive', true);
-        })->count();
+        $boatDiveBookings = (int) $bookingStats->sum('boat');
+        $boatDivePax = (int) $paxStats->sum('boat');
         $boatDiveRevenue = $boatDivePax * $boatFee;
 
-        // Dynamic Pricing Lift
-        $positiveYield = (float) BookingPriceAdjustment::whereBetween('created_at', [$start, $end])
-            ->where('adjustment_amount', '>', 0)
-            ->sum('adjustment_amount');
-        $discountsGiven = (float) abs(BookingPriceAdjustment::whereBetween('created_at', [$start, $end])
-            ->where('adjustment_amount', '<', 0)
-            ->sum('adjustment_amount'));
+        // Dynamic Pricing Lift (one aggregate query)
+        $adjustmentTotals = BookingPriceAdjustment::whereBetween('created_at', [$start, $end])->selectRaw('
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN adjustment_amount > 0 THEN adjustment_amount END), 0) AS positive,
+                COALESCE(SUM(CASE WHEN adjustment_amount < 0 THEN adjustment_amount END), 0) AS negative
+            ')->first();
+        $positiveYield = (float) $adjustmentTotals->positive;
+        $discountsGiven = (float) abs($adjustmentTotals->negative);
         $netDynamicLift = $positiveYield - $discountsGiven;
 
         // Average Revenue Per Diver (ARPD) & Booking (ARPB)
-        $totalPax = BookingParticipant::whereHas('booking', function ($q) use ($start, $end) {
-            $q->where('status', '!=', 'pending_downpayment')
-              ->whereBetween('created_at', [$start, $end]);
-        })->count();
-        $totalBookings = Booking::where('status', '!=', 'pending_downpayment')
-            ->whereBetween('created_at', [$start, $end])
-            ->count();
+        $totalPax = (int) $paxStats->sum('c');
+        $totalBookings = (int) $bookingStats->sum('c');
 
         $arpd = $totalPax > 0 ? round($netRevenue / $totalPax, 2) : 0;
         $arpb = $totalBookings > 0 ? round($netRevenue / $totalBookings, 2) : 0;
@@ -343,7 +333,7 @@ class AnalyticsService
                 'positive_yield' => $positiveYield,
                 'discounts_given' => $discountsGiven,
                 'net_lift' => $netDynamicLift,
-                'adjustments_count' => BookingPriceAdjustment::whereBetween('created_at', [$start, $end])->count(),
+                'adjustments_count' => (int) $adjustmentTotals->total,
             ],
             'arpd' => $arpd,
             'arpb' => $arpb,
@@ -463,8 +453,9 @@ class AnalyticsService
     protected function getOperationsMetrics(Carbon $start, Carbon $end, Carbon $priorStart, Carbon $priorEnd): array
     {
         $batches = Batch::whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
-            ->with(['bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants'), 'participantAssignments.coach', 'riskAssessment'])
+            ->with(['bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants'), 'participantAssignments.coach', 'activeParticipantAssignments.coach', 'riskAssessment'])
             ->get();
+        Batch::preloadAssignedCoaches($batches);
 
         $totalBatches = $batches->count();
         $completedBatches = $batches->where('status', 'completed')->count();
@@ -527,9 +518,17 @@ class AnalyticsService
         $batches = Batch::whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
             ->with(['activeParticipantAssignments.coach'])
             ->get();
+        Batch::preloadAssignedCoaches($batches);
 
         $coachData = [];
         $totalAssignments = 0;
+        $releasesByCoach = Schema::hasTable('assignment_release_requests')
+            ? DB::table('assignment_release_requests')
+                ->whereBetween('created_at', [$start, $end])
+                ->selectRaw('coach_id, COUNT(*) AS c')
+                ->groupBy('coach_id')
+                ->pluck('c', 'coach_id')
+            : collect();
 
         foreach ($coaches as $coach) {
             // Count distinct batches in range where this coach is assigned
@@ -539,13 +538,7 @@ class AnalyticsService
 
             $totalAssignments += $assignedBatchesCount;
 
-            $releases = 0;
-            if (Schema::hasTable('assignment_release_requests')) {
-                $releases = DB::table('assignment_release_requests')
-                    ->where('coach_id', $coach->id)
-                    ->whereBetween('created_at', [$start, $end])
-                    ->count();
-            }
+            $releases = (int) ($releasesByCoach[$coach->id] ?? 0);
 
             $coachData[] = [
                 'id' => $coach->id,

@@ -47,6 +47,7 @@ class CoachMatchingController extends Controller
                 return !$isDone && ($batch->total_participants_count > 0);
             })
             ->values();
+        Batch::preloadAssignedCoaches($batches);
 
         // 2. Fetch all active coaches with availability
         $activeCoaches = User::where('role', 'coach')
@@ -71,8 +72,16 @@ class CoachMatchingController extends Controller
         $settingService = app(\App\Services\SystemSettingService::class);
         $coachRatio = (int) ($settingService->get('camp_operations.coach_student_ratio', 4) ?? 4);
 
+        // Open coach broadcasts for all listed batches in one query (first per batch)
+        $openBroadcasts = CoachOpening::whereIn('batch_id', $batches->pluck('id'))
+            ->where('status', 'open')
+            ->orderBy('id')
+            ->get()
+            ->unique('batch_id')
+            ->keyBy('batch_id');
+
         // 3. Build simplified batch staffing data
-        $batchData = $batches->map(function ($batch) use ($activeCoaches, $coachRatio, $recentStudentCounts, $lastAssignedDates) {
+        $batchData = $batches->map(function ($batch) use ($activeCoaches, $coachRatio, $recentStudentCounts, $lastAssignedDates, $openBroadcasts) {
             $totalParticipants = (int) $batch->total_participants_count;
             $neededCoaches = $totalParticipants > 0 ? (int) ceil($totalParticipants / $coachRatio) : 0;
             $assignedCoaches = $batch->assigned_coaches;
@@ -128,9 +137,7 @@ class CoachMatchingController extends Controller
             });
 
             // Check if open broadcast exists
-            $openBroadcast = CoachOpening::where('batch_id', $batch->id)
-                ->where('status', 'open')
-                ->first();
+            $openBroadcast = $openBroadcasts[$batch->id] ?? null;
 
             return [
                 'batch' => $batch,
