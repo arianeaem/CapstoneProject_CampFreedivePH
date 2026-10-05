@@ -484,6 +484,16 @@ class WeatherSafetyController extends Controller
             ];
         }
 
+        // Side-by-side model comparison (same engines as the booking page's Dive Safety Evaluation)
+        $modelComparison = null;
+        if (!$isConcluded) {
+            try {
+                $modelComparison = $this->forecastService->previewDateAssessment($batch->start_date->copy())['engines'] ?? null;
+            } catch (\Throwable $e) {
+                $modelComparison = null;
+            }
+        }
+
         $mlSafetyUrl = config('services.ml_safety.url', 'http://127.0.0.1:8001');
         $circuitStatus = $this->mlService->getCircuitStatus();
         $isMLReachable = false;
@@ -507,7 +517,8 @@ class WeatherSafetyController extends Controller
             'day2MLAssessment',
             'batchMLAssessment',
             'circuitStatus',
-            'isMLReachable'
+            'isMLReachable',
+            'modelComparison'
         ));
     }
 

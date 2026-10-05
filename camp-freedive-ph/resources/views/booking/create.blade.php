@@ -740,7 +740,7 @@
                         
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-1.5 sm:gap-2">
-                                <h3 class="font-black text-sm sm:text-base text-[#1D1D1F]">Dive Safety Evaluation</h3>
+                                <h3 class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#6E6E73]">Dive conditions</h3>
                                 
                                 <!-- About Forecast Icon with Popover -->
                                 <div class="relative inline-flex items-center" x-data="{ showTip: false }">
@@ -827,111 +827,150 @@
                         <!-- Weather Assessment Results -->
                         <template x-if="forecast && !weatherLoading">
                             <div class="space-y-4">
-                                <!-- Overall Assessment (5 Lines Indicator & Climatology/Model Badge) -->
-                                <div class="space-y-2 pb-1">
-                                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                                        <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-                                            <span class="text-base sm:text-xl font-black uppercase tracking-wide"
-                                                  :class="getSafetyTextClass(forecast.overall_classification)"
-                                                  x-text="forecast.overall_classification"></span>
 
-                                            <!-- 5 Lines Indicator -->
-                                            <div class="flex items-center gap-1 sm:gap-1.5" :title="'Safety Score: ' + getSafetyScore(forecast.overall_classification) + '/5'">
-                                                <template x-for="i in 5" :key="i">
-                                                    <div class="h-1.5 w-4 sm:w-7 rounded-full transition-all duration-300"
-                                                         :class="i <= getSafetyScore(forecast.overall_classification) ? getSafetyBarClass(forecast.overall_classification) : 'bg-[#E5E5EA]'"></div>
+                                <!-- 1. Primary safety result -->
+                                <div class="rounded-xl border px-4 py-3 space-y-1.5"
+                                     :class="safetyToneSurface(forecast.overall_classification)"
+                                     role="status" aria-live="polite">
+                                    <div class="flex items-center justify-between gap-x-3 gap-y-1.5 flex-wrap">
+                                        <p class="text-lg sm:text-xl font-black tracking-tight leading-tight"
+                                           :class="safetyToneText(forecast.overall_classification)"
+                                           x-text="safetyHeadline(forecast.overall_classification)"></p>
+                                        <!-- 5-line safety indicator: each line has its own color (1 red → 5 green) -->
+                                        <template x-if="safetyTone(forecast.overall_classification) !== 'neutral'">
+                                            <div class="flex items-center gap-1 shrink-0" role="img"
+                                                 :aria-label="'Safety score ' + getSafetyScore(forecast.overall_classification) + ' out of 5'">
+                                                <template x-for="i in 5" :key="'bar-' + i">
+                                                    <div class="h-1.5 w-5 sm:w-6 rounded-full transition-colors duration-300"
+                                                         :class="i <= getSafetyScore(forecast.overall_classification) ? safetyBarSegmentClass(i) : 'bg-[#E5E5EA]'"></div>
                                                 </template>
                                             </div>
-                                        </div>
-
-                                        <template x-if="forecast.is_benchmark || forecast.is_seasonal_estimate">
-                                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#F2F2F7] text-[#6E6E73] border border-[#E5E5EA]">
-                                                <svg class="w-3 h-3 text-[#00C3D0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                                Seasonal Outlook
-                                            </span>
-                                        </template>
-                                        <template x-if="!forecast.is_benchmark && !forecast.is_seasonal_estimate && forecast.reliability">
-                                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF7F8] text-[#00C3D0] border border-[#BCE8EC]">
-                                                <span class="w-1.5 h-1.5 rounded-full bg-[#00C3D0] animate-pulse"></span>
-                                                <span x-text="'Reliability: ' + forecast.reliability"></span>
-                                            </span>
                                         </template>
                                     </div>
-
-                                    <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed pt-1" x-text="forecast.description"></p>
+                                    <p class="text-xs sm:text-sm text-[#48484A] leading-snug" x-show="forecast.description" x-text="forecast.description"></p>
+                                    <template x-if="forecast.confidence_advisory">
+                                        <p class="text-xs text-[#6E6E73]" x-text="forecast.confidence_advisory"></p>
+                                    </template>
                                 </div>
 
-                                <!-- Day 1 & Day 2 Breakdown -->
+                                <!-- 2. Your dive days -->
                                 <template x-if="forecast.day1 && forecast.day2">
-                                    <div class="space-y-3.5 pt-1">
-                                        <!-- Day 1 -->
-                                        <div class="relative pl-3.5 sm:pl-4 py-1 space-y-1.5 text-xs sm:text-sm bg-[#FAFAFA] rounded-xl p-3 border border-[#E5E5EA]">
-                                            <div class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
-                                                 :class="forecast.is_seasonal_estimate ? 'bg-[#D1D1D6]' : getSafetyBarClass(forecast.day1.classification)"></div>
-                                            <div class="flex items-center justify-between">
-                                                <span class="font-extrabold text-[#1D1D1F] text-xs sm:text-sm uppercase tracking-wider">Day 1</span>
-                                                <span class="text-xs font-bold px-2 py-0.5 rounded-md"
-                                                      :class="getSafetyTextClass(forecast.day1.classification)"
-                                                      x-text="forecast.day1.classification"></span>
-                                            </div>
-                                            <div class="text-[#6E6E73] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-1">
-                                                <span class="font-bold text-[#1D1D1F]" x-text="forecast.day1.date"></span>
-                                                <span class="shrink-0 text-xs">Peak Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day1.worst_hour"></strong></span>
-                                            </div>
-                                            <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.day1.recommended_action"></p>
-                                        </div>
-
-                                        <!-- Day 2 -->
-                                        <div class="relative pl-3.5 sm:pl-4 py-1 space-y-1.5 text-xs sm:text-sm bg-[#FAFAFA] rounded-xl p-3 border border-[#E5E5EA]">
-                                            <div class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
-                                                 :class="forecast.is_seasonal_estimate ? 'bg-[#D1D1D6]' : getSafetyBarClass(forecast.day2.classification)"></div>
-                                            <div class="flex items-center justify-between">
-                                                <span class="font-extrabold text-[#1D1D1F] text-xs sm:text-sm uppercase tracking-wider">Day 2</span>
-                                                <span class="text-xs font-bold px-2 py-0.5 rounded-md"
-                                                      :class="getSafetyTextClass(forecast.day2.classification)"
-                                                      x-text="forecast.day2.classification"></span>
-                                            </div>
-                                            <div class="text-[#6E6E73] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-1">
-                                                <span class="font-bold text-[#1D1D1F]" x-text="forecast.day2.date"></span>
-                                                <span class="shrink-0 text-xs">Peak Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day2.worst_hour"></strong></span>
-                                            </div>
-                                            <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.day2.recommended_action"></p>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Model Comparison: Historical Model vs Legacy (Open-Meteo + ONNX) -->
-                                <template x-if="forecast.engines">
-                                    <div class="space-y-2 pt-1">
-                                        <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#1D1D1F]">Model Comparison</h4>
-                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                            <template x-for="engine in [forecast.engines.historical, forecast.engines.legacy]" :key="engine.label">
-                                                <div class="rounded-xl border border-[#E5E5EA] bg-[#FAFAFA] p-3 space-y-2 text-xs">
-                                                    <div class="flex items-start justify-between gap-2">
-                                                        <span class="font-bold text-[#1D1D1F] leading-snug" x-text="engine.label"></span>
-                                                        <span class="font-black uppercase tracking-wide shrink-0 text-right"
-                                                              :class="engine.available && !engine.is_seasonal_estimate ? getSafetyTextClass(engine.overall_classification) : 'text-[#6E6E73]'"
-                                                              x-text="!engine.available ? 'Unavailable' : (engine.is_seasonal_estimate ? 'Seasonal' : engine.overall_classification)"></span>
-                                                    </div>
-                                                    <template x-if="engine.available">
-                                                        <div class="space-y-1.5">
-                                                            <template x-for="(day, idx) in [engine.day1, engine.day2]" :key="idx">
-                                                                <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
-                                                                    <span><span class="font-semibold text-[#1D1D1F]" x-text="'Day ' + (idx + 1)"></span> · <span x-text="day.worst_hour"></span></span>
-                                                                    <span class="font-bold" :class="getSafetyTextClass(day.classification)" x-text="day.classification"></span>
-                                                                </div>
-                                                            </template>
-                                                            <p class="text-[11px] text-[#8E8E93] leading-snug pt-0.5" x-text="engine.data_source"></p>
+                                    <section class="space-y-1.5" aria-label="Your dive days">
+                                        <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#6E6E73]">Your dive days</h4>
+                                        <div class="rounded-xl border border-[#E5E5EA] divide-y divide-[#E5E5EA]">
+                                            <template x-for="(day, idx) in [forecast.day1, forecast.day2]" :key="'dive-day-' + idx">
+                                                <div class="relative flex items-center gap-3 pl-4 pr-3 py-2.5 min-w-0">
+                                                    <div class="absolute left-1.5 top-2 bottom-2 w-1 rounded-full" :class="safetyToneDot(day.classification)" aria-hidden="true"></div>
+                                                    <div class="min-w-0 flex-1">
+                                                        <div class="text-xs text-[#6E6E73]">
+                                                            <span class="font-bold text-[#1D1D1F]" x-text="forecastDayParts(day.date).month + ' ' + forecastDayParts(day.date).day"></span>
+                                                            <span x-text="' · Day ' + (idx + 1) + (forecastDayParts(day.date).weekday ? ' · ' + forecastDayParts(day.date).weekday : '')"></span>
                                                         </div>
-                                                    </template>
-                                                    <template x-if="!engine.available">
-                                                        <p class="text-[11px] text-[#8E8E93] leading-snug">Not available for these dates.</p>
-                                                    </template>
+                                                        <div class="text-sm font-extrabold truncate" :class="safetyToneText(day.classification)"
+                                                             x-text="forecast.is_seasonal_estimate ? 'Seasonal outlook' : day.classification"></div>
+                                                    </div>
+                                                    <!-- Roughest hour (backend "worst_hour": when wind & waves peak) -->
+                                                    <div class="text-right shrink-0" x-show="/\d/.test(day.worst_hour || '')" title="When wind and waves peak that day">
+                                                        <div class="text-[11px] font-bold uppercase tracking-wider text-[#8E8E93]">Roughest<span class="sr-only"> (when wind and waves peak)</span></div>
+                                                        <div class="text-sm font-black text-[#1D1D1F] whitespace-nowrap" x-text="day.worst_hour"></div>
+                                                    </div>
                                                 </div>
                                             </template>
                                         </div>
-                                    </div>
+                                    </section>
                                 </template>
+
+                                <!-- 3. Why? (compact chips) -->
+                                <template x-if="forecastHighlights().length">
+                                    <ul class="flex flex-wrap gap-1.5" aria-label="Why this rating">
+                                        <template x-for="(item, idx) in forecastHighlights()" :key="'why-' + idx">
+                                            <li class="inline-flex items-center gap-1 rounded-full bg-[#F5F5F7] px-2.5 py-1 text-xs text-[#1D1D1F]">
+                                                <span class="font-black" :class="item.ok ? 'text-[#10B981]' : 'text-[#F59E0B]'" aria-hidden="true" x-text="item.ok ? '✓' : '!'"></span>
+                                                <span x-text="item.text"></span>
+                                            </li>
+                                        </template>
+                                    </ul>
+                                </template>
+
+                                <!-- 4. Forecast details (collapsible, technical) -->
+                                <div class="border-t border-[#E5E5EA] pt-1">
+                                    <button type="button"
+                                            @click="forecastDetailsOpen = !forecastDetailsOpen"
+                                            :aria-expanded="forecastDetailsOpen"
+                                            aria-controls="forecast-details-panel"
+                                            class="w-full min-h-11 flex items-center justify-between gap-2 rounded-lg text-sm font-semibold text-[#6E6E73] hover:text-[#1D1D1F] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
+                                        <span>Forecast details</span>
+                                        <svg class="w-4 h-4 transition-transform duration-200" :class="forecastDetailsOpen ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                    </button>
+
+                                    <div id="forecast-details-panel" x-show="forecastDetailsOpen" x-cloak x-transition.opacity class="space-y-3 pt-1 pb-1 text-xs">
+
+                                        <!-- Metadata -->
+                                        <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[#6E6E73]">
+                                            <template x-if="forecast.reliability">
+                                                <div class="contents">
+                                                    <dt>Reliability</dt>
+                                                    <dd class="text-[#1D1D1F] font-semibold" x-text="forecast.reliability"></dd>
+                                                </div>
+                                            </template>
+                                            <template x-if="forecast.data_source">
+                                                <div class="contents">
+                                                    <dt>Source</dt>
+                                                    <dd class="text-[#1D1D1F] break-words" x-text="forecast.data_source"></dd>
+                                                </div>
+                                            </template>
+                                            <template x-if="forecast.historical_replay_label">
+                                                <div class="contents">
+                                                    <dt>Mode</dt>
+                                                    <dd class="text-[#1D1D1F]" x-text="forecast.historical_replay_label"></dd>
+                                                </div>
+                                            </template>
+                                        </dl>
+
+                                        <!-- Day notes -->
+                                        <template x-if="forecast.day1 && forecast.day2">
+                                            <div class="space-y-1.5">
+                                                <template x-for="(day, idx) in [forecast.day1, forecast.day2]" :key="'note-' + idx">
+                                                    <p class="text-[#48484A] leading-relaxed" x-show="day.recommended_action">
+                                                        <span class="font-semibold text-[#1D1D1F]" x-text="'Day ' + (idx + 1) + ': '"></span><span x-text="day.recommended_action"></span>
+                                                    </p>
+                                                </template>
+                                            </div>
+                                        </template>
+
+                                        <!-- Model comparison -->
+                                        <template x-if="forecast.engines">
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
+                                                <template x-for="engine in [
+                                                        Object.assign({ title: 'Historical Model', subtitle: 'Seasonal baseline' }, forecast.engines.historical || {}),
+                                                        Object.assign({ title: 'Legacy Forecast', subtitle: 'Open-Meteo + ONNX' }, forecast.engines.legacy || {})
+                                                    ]" :key="engine.title">
+                                                    <div class="rounded-lg border border-[#E5E5EA] p-2.5 space-y-1.5 min-w-0">
+                                                        <div>
+                                                            <div class="font-bold text-[#1D1D1F]" x-text="engine.title"></div>
+                                                            <div class="text-[#8E8E93]" x-text="engine.subtitle"></div>
+                                                        </div>
+                                                        <template x-if="engine.available">
+                                                            <div class="space-y-1">
+                                                                <template x-for="(day, idx) in [engine.day1, engine.day2]" :key="engine.title + '-' + idx">
+                                                                    <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
+                                                                        <span x-text="'Day ' + (idx + 1)"></span>
+                                                                        <span class="font-semibold" :class="safetyToneText(day.classification, engine.is_seasonal_estimate)"
+                                                                              x-text="engine.is_seasonal_estimate ? 'Seasonal (' + day.classification + ')' : day.classification"></span>
+                                                                    </div>
+                                                                </template>
+                                                                <p class="text-[#8E8E93] leading-snug break-words pt-0.5" x-show="engine.data_source" x-text="engine.data_source"></p>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="!engine.available">
+                                                            <p class="text-[#8E8E93]">Not available for these dates.</p>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
 
                             </div>
                         </template>
@@ -2577,6 +2616,113 @@ function bookingForm(config) {
                 default:
                     return 'border-[#10B981]';
             }
+        },
+
+        // ---- Dive Safety Evaluation: presentation-only helpers (no safety logic) ----
+        forecastDetailsOpen: false,
+
+        // 'safe' | 'caution' | 'unsafe' | 'neutral' (seasonal estimate / no live classification)
+        // seasonal defaults to the top-level forecast flag; pass it explicitly for per-model rows
+        safetyTone(classification, seasonal) {
+            if (seasonal === undefined) seasonal = !!(this.forecast && this.forecast.is_seasonal_estimate);
+            if (!classification || seasonal) return 'neutral';
+            switch (classification) {
+                case 'Very Safe':
+                case 'Safe': return 'safe';
+                case 'Moderate': return 'caution';
+                case 'High Risk':
+                case 'Critical Risk': return 'unsafe';
+                default: return 'neutral';
+            }
+        },
+
+        safetyHeadline(classification) {
+            if (this.safetyTone(classification) === 'neutral') return 'Typical season conditions';
+            switch (classification) {
+                case 'Very Safe':
+                case 'Safe': return 'Safe to dive';
+                case 'Moderate': return 'Some caution recommended';
+                case 'High Risk': return 'Rough conditions expected';
+                case 'Critical Risk': return 'Conditions are not recommended';
+                default: return 'Safe to dive';
+            }
+        },
+
+        // Fixed color per indicator line: 1 red, 2 orange, 3 amber, 4 lime, 5 green
+        safetyBarSegmentClass(i) {
+            return ['bg-[#EF4444]', 'bg-[#F97316]', 'bg-[#F59E0B]', 'bg-[#84CC16]', 'bg-[#10B981]'][i - 1] || 'bg-[#E5E5EA]';
+        },
+
+        safetyToneSurface(classification, seasonal) {
+            return {
+                safe: 'bg-[#F0FDF4] border-[#BBF7D0]',
+                caution: 'bg-[#FFFBEB] border-[#FDE68A]',
+                unsafe: 'bg-[#FEF2F2] border-[#FECACA]',
+                neutral: 'bg-[#F5F5F7] border-[#E5E5EA]',
+            }[this.safetyTone(classification, seasonal)];
+        },
+
+        // Darker tone shades keep text contrast readable on white
+        safetyToneText(classification, seasonal) {
+            return {
+                safe: 'text-[#047857]',
+                caution: 'text-[#B45309]',
+                unsafe: 'text-[#B91C1C]',
+                neutral: 'text-[#3A3A3C]',
+            }[this.safetyTone(classification, seasonal)];
+        },
+
+        safetyToneDot(classification, seasonal) {
+            return {
+                safe: 'bg-[#10B981]',
+                caution: 'bg-[#F59E0B]',
+                unsafe: 'bg-[#EF4444]',
+                neutral: 'bg-[#AEAEB2]',
+            }[this.safetyTone(classification, seasonal)];
+        },
+
+        // "Oct 08, 2026" -> { month: 'OCT', day: '08', weekday: 'Thu' }
+        forecastDayParts(dateLabel) {
+            const d = dateLabel ? new Date(dateLabel) : null;
+            if (!d || isNaN(d)) return { month: '', day: dateLabel || '', weekday: '' };
+            return {
+                month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+                day: String(d.getDate()).padStart(2, '0'),
+                weekday: d.toLocaleDateString('en-US', { weekday: 'short' }),
+            };
+        },
+
+        // Short plain-language reasons built from the forecast readings already returned for Day 1 / Day 2
+        forecastHighlights() {
+            const f = this.forecast;
+            if (!f || !f.day1 || !f.day2) return [];
+            const peak = (key) => {
+                const vals = [f.day1[key], f.day2[key]].map(Number).filter(v => !isNaN(v));
+                return vals.length ? Math.max(...vals) : null;
+            };
+            const items = [];
+            const waves = peak('wave_height_m');
+            if (waves !== null) {
+                items.push({
+                    text: (waves < 0.5 ? 'Calm water' : waves < 1.0 ? 'Light chop' : 'Rough water') + ' · waves up to ' + waves.toFixed(1) + ' m',
+                    ok: waves < 1.0,
+                });
+            }
+            const wind = peak('wind_speed_kmh');
+            if (wind !== null) {
+                items.push({
+                    text: (wind < 20 ? 'Light breeze' : wind < 30 ? 'Moderate breeze' : 'Strong wind') + ' · around ' + Math.round(wind) + ' km/h',
+                    ok: wind < 30,
+                });
+            }
+            const rain = peak('rain_daily_mm');
+            if (rain !== null) {
+                items.push({
+                    text: rain < 2.5 ? 'Little to no rain expected' : rain < 10 ? 'Some rain possible' : 'Heavy rain likely',
+                    ok: rain < 10,
+                });
+            }
+            return items.slice(0, 4);
         },
 
         getSafetyTextClass(classification) {
