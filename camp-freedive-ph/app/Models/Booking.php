@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  *
  * @property int $id
  * @property string $booking_number e.g. BK-2026-XXXX
- * @property string $pin 4-digit security PIN for guest portal access
+ * @property string $pin 4-digit PIN for guest portal access
  * @property string $class_type discovery, fundive, refinement
  * @property bool $is_certified_diver
  * @property Carbon $start_date

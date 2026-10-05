@@ -36,18 +36,12 @@
 
                         <div class="space-y-1">
                             <label class="block text-sm font-bold text-[#6E6E73]">Start Date</label>
-                            <input type="date" 
-                                   name="start_date" 
-                                   value="{{ $range['start']->format('Y-m-d') }}" 
-                                   class="w-full text-sm rounded-lg border border-[#D1D1D6] p-2 focus:border-[#780000]">
+                            <x-date-picker name="start_date" :value="$range['start']->format('Y-m-d')" />
                         </div>
 
                         <div class="space-y-1">
                             <label class="block text-sm font-bold text-[#6E6E73]">End Date</label>
-                            <input type="date" 
-                                   name="end_date" 
-                                   value="{{ $range['end']->format('Y-m-d') }}" 
-                                   class="w-full text-sm rounded-lg border border-[#D1D1D6] p-2 focus:border-[#780000]">
+                            <x-date-picker name="end_date" :value="$range['end']->format('Y-m-d')" />
                         </div>
 
                         <button type="submit" class="btn-primary w-full py-2 text-sm font-bold">

@@ -452,6 +452,7 @@
 
     </div>
 
-    @stack('scripts')
+    {{-- Page scripts live in their own container so the SPA router can swap and run them on navigation --}}
+    <div id="spa-page-scripts">@stack('scripts')</div>
 </body>
 </html>

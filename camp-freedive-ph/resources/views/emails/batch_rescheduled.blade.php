@@ -68,7 +68,7 @@
                     <td style="padding: 10px 0; font-weight: 700; color: #780000; font-family: monospace; font-size: 14px; border: none !important; border-bottom: none !important;">{{ $booking->booking_number }}</td>
                 </tr>
                 <tr style="border: none !important; border-bottom: none !important;">
-                    <td style="padding: 10px 0; color: #6E6E73; border: none !important; border-bottom: none !important;">Guest Security PIN:</td>
+                    <td style="padding: 10px 0; color: #6E6E73; border: none !important; border-bottom: none !important;">Guest PIN:</td>
                     <td style="padding: 10px 0; border: none !important; border-bottom: none !important;"><span class="pin-badge">{{ $booking->pin }}</span></td>
                 </tr>
                 <tr style="border: none !important; border-bottom: none !important;">
@@ -82,7 +82,7 @@
             </table>
 
             <p style="font-size: 13px; color: #6E6E73; line-height: 1.5; margin: 16px 0 24px 0;">
-                Click below to open your Manage Booking portal using your Security PIN (<strong>{{ $booking->pin }}</strong>) to review upcoming weekend dates and select your new schedule.
+                Click below to open your Manage Booking portal using your PIN (<strong>{{ $booking->pin }}</strong>) to review upcoming weekend dates and select your new schedule.
             </p>
 
             <div style="text-align: center; margin: 24px 0;">

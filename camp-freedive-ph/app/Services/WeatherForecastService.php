@@ -596,6 +596,24 @@ class WeatherForecastService
     }
 
     /**
+     * Historical Model vs Legacy Forecast comparison for an upcoming batch's dates
+     * (same engines as the booking page). Null for past batches or when unavailable.
+     */
+    public function modelComparisonForBatch(Batch $batch): ?array
+    {
+        if (!$batch->start_date || $batch->start_date->copy()->startOfDay()->lt(Carbon::today(self::TIMEZONE))) {
+            return null;
+        }
+
+        try {
+            return $this->previewDateAssessment($batch->start_date->copy())['engines'] ?? null;
+        } catch (\Throwable $e) {
+            Log::info("[WeatherForecastService] Model comparison unavailable for batch {$batch->id}: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Compact per-engine view of a preview result for the side-by-side comparison on the booking form.
      */
     protected function summarizePreviewEngine(string $label, ?array $preview): array

@@ -133,19 +133,11 @@
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
                                         <label for="filter-date-from" class="block font-bold text-[#6E6E73] text-sm mb-1">Date From</label>
-                                        <input type="date" 
-                                               id="filter-date-from"
-                                               name="date_from" 
-                                               value="{{ request('date_from') }}" 
-                                               class="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
+                                        <x-date-picker id="filter-date-from" name="date_from" :value="request('date_from')" placeholder="Any date" />
                                     </div>
                                     <div>
                                         <label for="filter-date-to" class="block font-bold text-[#6E6E73] text-sm mb-1">Date To</label>
-                                        <input type="date" 
-                                               id="filter-date-to"
-                                               name="date_to" 
-                                               value="{{ request('date_to') }}" 
-                                               class="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
+                                        <x-date-picker id="filter-date-to" name="date_to" :value="request('date_to')" placeholder="Any date" />
                                     </div>
                                 </div>
 

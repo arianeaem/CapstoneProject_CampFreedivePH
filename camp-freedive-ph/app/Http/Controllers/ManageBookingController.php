@@ -114,8 +114,8 @@ class ManageBookingController extends Controller
 
         if (!$isAuthenticated) {
             $msg = $request->has('pin')
-                ? 'Invalid PIN. Please enter your 4-digit Security PIN.'
-                : 'Please enter your 4-digit Security PIN to access your booking.';
+                ? 'Invalid PIN. Please enter your 4-digit PIN.'
+                : 'Please enter your 4-digit PIN to access your booking.';
 
             return redirect()->route('manage.index', ['number' => $booking->booking_number])
                 ->with('info', $msg);

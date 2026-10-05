@@ -68,7 +68,7 @@
                     <td style="padding: 10px 0; font-weight: 700; color: #780000; font-family: monospace; font-size: 14px; border: none !important; border-bottom: none !important;">{{ $booking->booking_number }}</td>
                 </tr>
                 <tr style="border: none !important; border-bottom: none !important;">
-                    <td style="padding: 10px 0; color: #6E6E73; border: none !important; border-bottom: none !important;">Guest Security PIN:</td>
+                    <td style="padding: 10px 0; color: #6E6E73; border: none !important; border-bottom: none !important;">Guest PIN:</td>
                     <td style="padding: 10px 0; border: none !important; border-bottom: none !important;"><span class="pin-badge">{{ $booking->pin }}</span></td>
                 </tr>
                 <tr style="border: none !important; border-bottom: none !important;">

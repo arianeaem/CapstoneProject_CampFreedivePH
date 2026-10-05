@@ -32,13 +32,7 @@
                         <label for="start_date" class="block font-bold text-[#1D1D1F] text-sm mb-2">
                             Start Date (Day 1) <span class="text-[#780000]">*</span>
                         </label>
-                        <input type="date" 
-                               name="start_date" 
-                               id="start_date" 
-                               x-model="startDate" 
-                               @change="fetchUnbatchedBookings()" 
-                               required 
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                        <x-date-picker id="start_date" name="start_date" model="startDate" x-on:change="fetchUnbatchedBookings()" required />
                         @error('start_date')
                             <span class="text-sm text-[#D70015] font-semibold mt-1.5 flex items-center gap-1.5">
                                 <svg class="w-4 h-4 shrink-0 text-[#D70015]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -53,12 +47,7 @@
                         <label for="end_date" class="block font-bold text-[#1D1D1F] text-sm mb-2">
                             End Date (Day 2) <span class="text-[#780000]">*</span>
                         </label>
-                        <input type="date" 
-                               name="end_date" 
-                               id="end_date" 
-                               x-model="endDate" 
-                               required 
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                        <x-date-picker id="end_date" name="end_date" model="endDate" required />
                         @error('end_date')
                             <span class="text-sm text-[#D70015] font-semibold mt-1.5 flex items-center gap-1.5">
                                 <svg class="w-4 h-4 shrink-0 text-[#D70015]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

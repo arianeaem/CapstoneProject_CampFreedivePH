@@ -60,26 +60,16 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div>
                         <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Trip Start Date <span class="text-[#780000]">*</span></label>
-                        <input type="date" 
-                               name="start_date" 
-                               x-model="startDate" 
-                               @change="onStartDateChange()"
-                               required 
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                        <x-date-picker name="start_date" model="startDate" x-on:change="onStartDateChange()" required />
                     </div>
 
                     <div>
                         <label class="block font-bold text-[#6E6E73] text-xs sm:text-sm mb-1.5">Trip End Date</label>
-                        <input type="date" 
-                               name="end_date" 
-                               x-model="endDate" 
-                               readonly 
-                               required 
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5EA] bg-[#F2F2F7] text-sm text-[#6E6E73]">
+                        <x-date-picker name="end_date" model="endDate" readonly required />
                     </div>
                 </div>
 
-                <!-- Weather Forecast (Exact Design Matching Reference Picture) -->
+                <!-- Weather Forecast -->
                 <div class="pt-2">
                     <!-- Loading State -->
                     <div x-show="weatherLoading" x-cloak class="p-4 rounded-xl bg-[#F2F2F7] border border-[#E5E5EA] space-y-2">
@@ -92,57 +82,9 @@
                         </div>
                     </div>
 
-                    <!-- Weather Assessment Results (Image Style: Overall Top, Day 1 Left, Day 2 Right) -->
-                    <template x-if="forecast && !weatherLoading && !forecast.is_benchmark">
-                        <div class="space-y-3 pt-2">
-                            <!-- Overall Assessment Title & 5 Lines Indicator -->
-                            <div class="space-y-1.5">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-base sm:text-lg font-black uppercase tracking-wide"
-                                          :class="getSafetyTextClass(forecast.overall_classification)"
-                                          x-text="forecast.overall_classification"></span>
-
-                                    <!-- 5 Lines Indicator -->
-                                    <div class="flex items-center gap-1.5">
-                                        <template x-for="i in 5" :key="i">
-                                            <div class="h-1.5 w-5 sm:w-6 rounded-full transition-all duration-300"
-                                                 :class="i <= getSafetyScore(forecast.overall_classification) ? getSafetyBarClass(forecast.overall_classification) : 'bg-[#E5E5EA]'"></div>
-                                        </template>
-                                    </div>
-                                </div>
-
-                                <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.description"></p>
-                            </div>
-
-                            <!-- Day 1 (Left) & Day 2 (Right) Side-by-Side Grid -->
-                            <template x-if="forecast.day1 && forecast.day2">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
-                                    <!-- Day 1 (Left) -->
-                                    <div class="relative pl-3.5 space-y-1 text-sm">
-                                        <div class="absolute left-0 top-0 bottom-0 w-1 rounded-full transition-colors duration-200"
-                                             :class="getSafetyBarClass(forecast.day1.classification)"></div>
-                                        <div class="font-extrabold text-xs uppercase tracking-wider text-[#1D1D1F]">DAY 1</div>
-                                        <div class="flex items-center justify-between text-xs sm:text-sm">
-                                            <span class="font-bold text-[#1D1D1F]" x-text="forecast.day1.date"></span>
-                                            <span class="text-[#6E6E73] text-xs">Worst Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day1.worst_hour"></strong></span>
-                                        </div>
-                                        <p class="text-xs text-[#6E6E73] leading-relaxed pt-0.5" x-text="forecast.day1.recommended_action"></p>
-                                    </div>
-
-                                    <!-- Day 2 (Right) -->
-                                    <div class="relative pl-3.5 space-y-1 text-sm">
-                                        <div class="absolute left-0 top-0 bottom-0 w-1 rounded-full transition-colors duration-200"
-                                             :class="getSafetyBarClass(forecast.day2.classification)"></div>
-                                        <div class="font-extrabold text-xs uppercase tracking-wider text-[#1D1D1F]">DAY 2</div>
-                                        <div class="flex items-center justify-between text-xs sm:text-sm">
-                                            <span class="font-bold text-[#1D1D1F]" x-text="forecast.day2.date"></span>
-                                            <span class="text-[#6E6E73] text-xs">Worst Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day2.worst_hour"></strong></span>
-                                        </div>
-                                        <p class="text-xs text-[#6E6E73] leading-relaxed pt-0.5" x-text="forecast.day2.recommended_action"></p>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
+                    <!-- Weather Assessment Results (shared design: components/dive-safety/live-evaluation) -->
+                    <template x-if="forecast && forecast.day1 && !weatherLoading && !forecast.is_benchmark">
+                        <x-dive-safety.live-evaluation forecast="forecast" class="pt-2" />
                     </template>
 
                     <!-- Empty / Beyond 16 days state -->
@@ -213,7 +155,7 @@
                                 </div>
                                 <div>
                                     <label class="block font-bold text-[#1D1D1F] text-xs mb-1.5">Birthdate <span class="text-[#780000]">*</span></label>
-                                    <input type="date" :name="'participants[' + index + '][birthdate]'" x-model="p.birthdate" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                    <x-date-picker name-expr="'participants[' + index + '][birthdate]'" model="p.birthdate" :max="now()->toDateString()" year-select placeholder="Select birthdate" required />
                                 </div>
                                 <div>
                                     <label class="block font-bold text-[#1D1D1F] text-xs mb-1.5">Gender <span class="text-[#780000]">*</span></label>

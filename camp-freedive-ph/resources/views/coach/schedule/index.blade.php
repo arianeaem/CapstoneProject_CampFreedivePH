@@ -69,21 +69,6 @@
                 $weatherBadge = $item['weather_badge'];
                 $assessment = $item['assessment'];
                 $releaseReq = $item['release_request'];
-
-                $wClass = strtolower(trim($item['weather_class'] ?? 'Safe'));
-                if (str_contains($wClass, 'safe')) {
-                    $wBg = 'bg-emerald-100 text-emerald-900';
-                    $wDot = 'bg-emerald-600';
-                } elseif (str_contains($wClass, 'mod') || str_contains($wClass, 'adv') || str_contains($wClass, 'warn') || str_contains($wClass, 'caut')) {
-                    $wBg = 'bg-amber-100 text-amber-900';
-                    $wDot = 'bg-amber-600';
-                } elseif (str_contains($wClass, 'risk') || str_contains($wClass, 'crit') || str_contains($wClass, 'high') || str_contains($wClass, 'dan')) {
-                    $wBg = 'bg-rose-100 text-rose-900';
-                    $wDot = 'bg-rose-600';
-                } else {
-                    $wBg = 'bg-emerald-100 text-emerald-900';
-                    $wDot = 'bg-emerald-600';
-                }
             @endphp
 
             <div class="bg-white rounded-2xl border border-[#E5E5EA] overflow-hidden">
@@ -93,20 +78,15 @@
                     
                     <!-- Left Column: Weather + Batch Title + Dive Dates & Students -->
                     <div class="space-y-2.5 flex-1 min-w-0">
-                        <!-- Weather Safety Badge & Description -->
-                        <div class="flex items-center gap-2.5 flex-wrap">
-                            <span class="px-2.5 py-1 rounded-lg text-sm font-black {{ $wBg }} inline-flex items-center shadow-2xs shrink-0">
-                                <span>{{ $item['weather_class'] }}</span>
+                        <!-- Weather Safety Status (shared design: components/dive-safety/status) -->
+                        <x-dive-safety.status :classification="$item['weather_class']"
+                                              :description="\App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($assessment?->recommended_action ?? null)"
+                                              :engines="$item['model_comparison'] ?? null" />
+                        @if($item['is_current_dive'] ?? false)
+                            <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#780000] text-white inline-flex items-center shadow-2xs">
+                                Current Dive
                             </span>
-                            <span class="text-sm text-[#6E6E73] font-medium leading-tight">
-                                {{ \App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($assessment?->recommended_action ?? 'Standard marine safety protocols in effect.') }}
-                            </span>
-                            @if($item['is_current_dive'] ?? false)
-                                <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#780000] text-white inline-flex items-center shadow-2xs">
-                                    Current Dive
-                                </span>
-                            @endif
-                        </div>
+                        @endif
 
                         <div>
                             <h2 class="text-xl sm:text-2xl font-black text-[#1D1D1F] tracking-tight">
@@ -368,18 +348,12 @@
 
                             <div>
                                 <label class="block font-bold text-[#6E6E73] text-sm mb-1">From Date</label>
-                                <input type="date" 
-                                       name="date_from" 
-                                       value="{{ request('date_from') }}" 
-                                       class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
+                                <x-date-picker name="date_from" :value="request('date_from')" placeholder="Any date" />
                             </div>
 
                             <div>
                                 <label class="block font-bold text-[#6E6E73] text-sm mb-1">To Date</label>
-                                <input type="date" 
-                                       name="date_to" 
-                                       value="{{ request('date_to') }}" 
-                                       class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
+                                <x-date-picker name="date_to" :value="request('date_to')" placeholder="Any date" />
                             </div>
 
                             <div>

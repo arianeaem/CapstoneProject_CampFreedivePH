@@ -288,7 +288,7 @@ class BookingController extends Controller
      * 1. Validates participant medical disclosures and minimum emergency contact details.
      * 2. Enforces the 45-pax total weekend batch capacity limit.
      * 3. Re-evaluates final pricing and assigns municipal LGU & environmental fees.
-     * 4. Allocates a unique booking code (e.g. CFP-2026-XXXXX) and 4-digit guest security PIN.
+     * 4. Allocates a unique booking code (e.g. CFP-2026-XXXXX) and 4-digit guest PIN.
      * 5. Initializes booking and downpayment records in `pending_downpayment` status.
      *
      * @param Request $request Complete booking payload.

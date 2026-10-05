@@ -85,31 +85,9 @@
                 <!-- Upcoming Dive Batch Card -->
                 <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 flex flex-col justify-between space-y-5">
                     <div class="space-y-3.5">
-                        <!-- Weather Safety Badge & Description -->
-                        <div class="flex items-center gap-2.5 flex-wrap">
-                            @php
-                                $wClass = strtolower(trim($nextSessionData['weather_class'] ?? 'Safe'));
-                                if (str_contains($wClass, 'safe')) {
-                                    $wBg = 'bg-emerald-100 text-emerald-900';
-                                    $wDot = 'bg-emerald-600';
-                                } elseif (str_contains($wClass, 'mod') || str_contains($wClass, 'adv') || str_contains($wClass, 'warn') || str_contains($wClass, 'caut')) {
-                                    $wBg = 'bg-amber-100 text-amber-900';
-                                    $wDot = 'bg-amber-600';
-                                } elseif (str_contains($wClass, 'risk') || str_contains($wClass, 'crit') || str_contains($wClass, 'high') || str_contains($wClass, 'dan')) {
-                                    $wBg = 'bg-rose-100 text-rose-900';
-                                    $wDot = 'bg-rose-600';
-                                } else {
-                                    $wBg = 'bg-emerald-100 text-emerald-900';
-                                    $wDot = 'bg-emerald-600';
-                                }
-                            @endphp
-                            <span class="px-2.5 py-1 rounded-lg text-sm font-black {{ $wBg }} inline-flex items-center shadow-2xs shrink-0">
-                                <span>{{ $nextSessionData['weather_class'] }}</span>
-                            </span>
-                            <span class="text-sm text-[#6E6E73] font-medium leading-tight">
-                                {{ \App\Services\WeatherForecastService::MEANING_MAP[$nextSessionData['weather_class']] ?? 'Standard marine safety protocols in effect.' }}
-                            </span>
-                        </div>
+                        <!-- Weather Safety Status (shared design: components/dive-safety/status) -->
+                        <x-dive-safety.status :classification="$nextSessionData['weather_class']"
+                                              :engines="$nextSessionData['model_comparison'] ?? null" />
 
                         <!-- Batch Title -->
                         <div>

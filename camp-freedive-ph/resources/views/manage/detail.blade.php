@@ -59,21 +59,6 @@
                 </div>
             </div>
 
-            <!-- Security PIN -->
-            <div class="bg-[#1D1D1F] border border-[#2C2C2E] rounded-xl p-3.5 sm:p-4 flex sm:flex-col items-center sm:items-end justify-between gap-2.5 shrink-0 shadow-sm">
-                <div class="text-left sm:text-right">
-                    <span class="text-xs font-bold text-[#00C3D0] uppercase tracking-wider block">Security PIN</span>
-                    <span class="text-lg sm:text-xl font-mono font-black text-white tracking-widest mt-0.5 block">{{ $booking->pin }}</span>
-                </div>
-                <button type="button" 
-                        @click="navigator.clipboard.writeText('{{ $booking->pin }}'); copiedPin = true; setTimeout(() => copiedPin = false, 2000)"
-                        aria-label="Copy Security PIN"
-                        class="min-h-[44px] px-3.5 py-2 rounded-xl bg-white hover:bg-[#F2F2F7] active:bg-[#E5E5EA] text-xs font-bold text-[#1D1D1F] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#1D1D1F]">
-                    <img src="{{ asset('icons/icons8-copy-60.png') }}" class="w-4 h-4 object-contain shrink-0" alt="" aria-hidden="true" x-show="!copiedPin">
-                    <svg x-show="copiedPin" x-cloak class="w-4 h-4 text-[#065F46] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span x-text="copiedPin ? 'Copied' : 'Copy PIN'"></span>
-                </button>
-            </div>
         </div>
 
         <!-- Booking Key Information -->
@@ -474,24 +459,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label for="reschedule-start-date" class="block font-bold text-[#1D1D1F] mb-2">New Start Date <span class="text-[#D70015]">*</span></label>
-                        <input type="date" 
-                               id="reschedule-start-date"
-                               name="requested_start_date" 
-                               x-model="rescheduleStartDate" 
-                               @change="onRescheduleDateChange()"
-                               min="{{ date('Y-m-d', strtotime('+3 days')) }}"
-                               required
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:outline-none text-sm font-medium text-[#1D1D1F] bg-white transition-colors">
+                        <x-date-picker id="reschedule-start-date" name="requested_start_date" model="rescheduleStartDate" x-on:change="onRescheduleDateChange()" :min="date('Y-m-d', strtotime('+3 days'))" required />
                     </div>
                     <div>
                         <label for="reschedule-end-date" class="block font-bold text-[#6E6E73] mb-1">New End Date (Auto)</label>
-                        <input type="date" 
-                               id="reschedule-end-date"
-                               name="requested_end_date" 
-                               x-model="rescheduleEndDate" 
-                               readonly
-                               required
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5EA] bg-[#F2F2F7] text-sm font-medium text-[#6E6E73]">
+                        <x-date-picker id="reschedule-end-date" name="requested_end_date" model="rescheduleEndDate" readonly required />
                     </div>
                 </div>
 
@@ -501,15 +473,10 @@
                     <span class="font-medium text-[#1D1D1F]">Checking sea safety &amp; weather conditions for selected dates...</span>
                 </div>
 
-                <!-- Weather Forecast Check -->
-                <div x-show="rescheduleForecast && !weatherLoading" x-cloak role="status" aria-live="polite" class="p-3.5 rounded-xl text-sm space-y-1.5"
-                     :style="'background-color: ' + (rescheduleForecast?.bg_color || '#F2F2F7') + '; color: ' + (rescheduleForecast?.text_color || '#1D1D1F')">
-                    <div class="font-bold flex items-center justify-between">
-                        <span x-text="'Safety: ' + (rescheduleForecast?.title || '')"></span>
-                        <span x-text="rescheduleForecast?.is_bookable ? 'Safe' : 'Storm Warning'"></span>
-                    </div>
-                    <p class="text-sm pt-0.5" x-text="rescheduleForecast?.description"></p>
-                </div>
+                <!-- Weather Forecast Check (shared design: components/dive-safety/live-evaluation) -->
+                <template x-if="rescheduleForecast && rescheduleForecast.day1 && !weatherLoading">
+                    <x-dive-safety.live-evaluation forecast="rescheduleForecast" />
+                </template>
 
                 <div>
                     <label for="reschedule-reason" class="block font-bold text-[#1D1D1F] mb-2">Reason for Rescheduling (Optional)</label>

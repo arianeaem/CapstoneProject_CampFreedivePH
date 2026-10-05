@@ -112,10 +112,7 @@
 
                             <div>
                                 <label class="block font-bold text-[#6E6E73] text-sm mb-1">Available on Specific Date</label>
-                                <input type="date" 
-                                       name="available_on" 
-                                       value="{{ request('available_on') }}" 
-                                       class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
+                                <x-date-picker name="available_on" :value="request('available_on')" placeholder="Any date" />
                             </div>
 
                             <div class="pt-2 border-t border-[#E5E5EA] flex justify-end">
