@@ -1064,7 +1064,7 @@ class WeatherForecastService
             'evaluating_engine' => $usedModel ? 'api_forecast_then_model' : 'api_forecast_rules',
             'data_source' => $usedModel
                 ? 'Open-Meteo API forecast → Camp FreedivePH safety model'
-                : 'Open-Meteo API forecast (rule-based; safety model unavailable)',
+                : 'Open-Meteo API forecast (rule-based)',
             'days_out' => $daysOut,
             'reliability' => self::getReliabilityCategory($daysOut),
             'day1' => $days[1],
