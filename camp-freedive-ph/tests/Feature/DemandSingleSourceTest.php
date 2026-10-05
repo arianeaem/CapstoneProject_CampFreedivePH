@@ -142,6 +142,6 @@ class DemandSingleSourceTest extends TestCase
         $response = $this->actingAs($owner)->get(route('admin.demand.index'));
         $response->assertOk();
         $response->assertSee('Demand Forecast');
-        $response->assertSee('No ML forecast has been generated yet');
+        $response->assertSee('No forecast yet.');
     }
 }

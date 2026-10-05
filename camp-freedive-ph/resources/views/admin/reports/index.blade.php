@@ -121,13 +121,6 @@
                 :class="activeTab === 'operations' ? 'border-[#780000] text-[#780000] font-bold' : 'border-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:border-[#D1D1D6] font-semibold'">
             Batches & Coaches
         </button>
-
-        <button type="button" 
-                @click="activeTab = 'forecast'"
-                class="pb-3 text-sm sm:text-sm transition-all border-b-2 whitespace-nowrap"
-                :class="activeTab === 'forecast' ? 'border-[#780000] text-[#780000] font-bold' : 'border-transparent text-[#6E6E73] hover:text-[#1D1D1F] hover:border-[#D1D1D6] font-semibold'">
-            Demand Forecast
-        </button>
     </div>
 
     <!-- Tab Content Panes (Consistent Container Structure) -->
@@ -147,11 +140,6 @@
         <!-- Tab 3: Batch Capacity & Coaches -->
         <div x-show="activeTab === 'operations'" x-cloak class="w-full transition-all">
             @include('admin.reports.partials.operations_tab')
-        </div>
-
-        <!-- Tab 4: Demand Forecast & Horizon Projections -->
-        <div x-show="activeTab === 'forecast'" x-cloak class="w-full transition-all">
-            @include('admin.reports.partials.forecast_section')
         </div>
     </div>
 

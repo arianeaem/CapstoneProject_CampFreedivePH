@@ -38,8 +38,8 @@ class ReportsController extends Controller
 
         // Active tab: default to financial for owner, bookings for admin
         $activeTab = $request->input('tab', $isOwner ? 'financial' : 'bookings');
-        if ($activeTab === 'weather' || (!$isOwner && $activeTab === 'financial')) {
-            $activeTab = 'bookings';
+        if (!in_array($activeTab, ['financial', 'bookings', 'operations'], true) || (!$isOwner && $activeTab === 'financial')) {
+            $activeTab = $isOwner ? 'financial' : 'bookings';
         }
 
         return view('admin.reports.index', compact('user', 'isOwner', 'range', 'data', 'activeTab'));

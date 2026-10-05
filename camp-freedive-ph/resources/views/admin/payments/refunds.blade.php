@@ -290,8 +290,8 @@
     <!-- Rejection Reason Modal -->
     <div x-show="rejectModalOpen" 
          x-cloak 
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-        <div class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" 
+         class="fixed inset-0 z-50 flex justify-end bg-black/40">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" 
              @click.outside="rejectModalOpen = false">
             <div class="flex items-center justify-between">
                 <h3 class="font-bold text-base text-[#1D1D1F]">

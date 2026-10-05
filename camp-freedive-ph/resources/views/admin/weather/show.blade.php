@@ -714,18 +714,18 @@
     </div>
 
     <!-- Manual Safety Override Modal -->
-    <div x-show="openOverrideModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openOverrideModal = false">
+    <div x-show="openOverrideModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openOverrideModal = false">
             <div class="flex items-center justify-between">
-                <h3 class="text-base font-extrabold text-[#1D1D1F]">Apply Manual PAGASA Override</h3>
+                <h3 class="text-base font-extrabold text-[#1D1D1F]">Apply Manual Override</h3>
                 <button type="button" @click="openOverrideModal = false" aria-label="Close override modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
             </div>
 
             <p class="text-xs text-[#6E6E73]">
-                Forces both <strong>Day 1</strong> and <strong>Day 2</strong> to <strong>Critical Risk</strong> due to official PAGASA gale warnings, tropical cyclones, or severe marine advisories.
+                Forces both <strong>Day 1</strong> and <strong>Day 2</strong> to <strong>Critical Risk</strong> because of a PAGASA weather advisory or another hazard, such as an oil spill or a no-sail order.
             </p>
 
-            <form action="{{ route('admin.weather.override', $batch) }}" method="POST" class="space-y-4 text-xs">
+            <form action="{{ route('admin.weather.override', $batch) }}" method="POST" class="space-y-4 text-xs" x-data="{ otherHazard: '' }">
                 @csrf
 
                 <div>
@@ -766,11 +766,28 @@
                     </label>
                 </div>
 
+                <!-- Other (non-weather) hazard -->
+                <div class="space-y-2 bg-[#F2F2F7] p-3.5 rounded-xl border border-[#E5E5EA]">
+                    <label for="other-hazard" class="block font-bold text-[#1D1D1F] uppercase tracking-wider text-xs">Other Hazard (Not Weather)</label>
+                    <select id="other-hazard" name="other_hazard" x-model="otherHazard" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white font-medium">
+                        <option value="">None</option>
+                        @foreach(\App\Http\Controllers\Admin\WeatherSafetyController::OTHER_HAZARDS as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <div x-show="otherHazard === 'other'" x-cloak>
+                        <input type="text" name="other_hazard_detail" maxlength="150" :required="otherHazard === 'other'"
+                               placeholder="Describe the hazard, e.g. Fish kill reported near Mainit Point"
+                               class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white">
+                    </div>
+                    <p class="text-[#6E6E73]">Choosing a hazard also forces <strong>Critical Risk</strong> for both days.</p>
+                </div>
+
                 <div>
                     <label class="block font-bold text-[#1D1D1F] mb-1">
-                        Advisory Details / Source <span class="text-[#780000]">*</span>
+                        Details / Source <span class="text-[#780000]">*</span>
                     </label>
-                    <textarea name="reason" required rows="2" placeholder="e.g. PAGASA Severe Weather Bulletin #4 - Gale Warning in Southern Luzon coasts" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white"></textarea>
+                    <textarea name="reason" required rows="2" placeholder="e.g. PAGASA Severe Weather Bulletin #4, or Coast Guard advisory on oil spill near Anilao" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white"></textarea>
                 </div>
 
                 <div class="p-3 bg-[#FEF2F2] rounded-xl border border-[#FECACA]">
@@ -793,8 +810,8 @@
     </div>
 
     <!-- Batch Cancellation Modal -->
-    <div x-show="openCancelModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openCancelModal = false">
+    <div x-show="openCancelModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCancelModal = false">
             <div class="flex items-center justify-between">
                 <h3 class="text-base font-extrabold text-[#DC2626]">Cancel Batch &amp; Dispatch Customer Notifications</h3>
                 <button type="button" @click="openCancelModal = false" aria-label="Close cancellation modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>

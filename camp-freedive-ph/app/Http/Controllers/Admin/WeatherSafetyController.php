@@ -28,6 +28,17 @@ use Illuminate\View\View;
  */
 class WeatherSafetyController extends Controller
 {
+    /** Non-weather reasons an operator can choose for a manual safety override. */
+    public const OTHER_HAZARDS = [
+        'oil_spill' => 'Oil spill',
+        'red_tide' => 'Red tide / harmful algal bloom',
+        'jellyfish' => 'Jellyfish bloom',
+        'no_sail_order' => 'Coast Guard / local government no-sail order',
+        'pollution' => 'Water pollution / contamination',
+        'marine_accident' => 'Marine accident nearby',
+        'other' => 'Other (describe below)',
+    ];
+
     public function __construct(
         protected WeatherForecastService $forecastService,
         protected WeatherSafetyMLService $mlService
@@ -546,9 +557,20 @@ class WeatherSafetyController extends Controller
             'thunderstorm_advisory' => 'nullable|boolean',
             'typhoon_within_distance' => 'nullable|boolean',
             'tsunami_warning' => 'nullable|boolean',
+            'other_hazard' => 'nullable|string|in:' . implode(',', array_keys(self::OTHER_HAZARDS)),
+            'other_hazard_detail' => 'nullable|required_if:other_hazard,other|string|max:150',
             'reason' => 'required|string|max:1000',
             'cancel_batch' => 'nullable|boolean',
         ]);
+
+        // Store the readable hazard name (or the operator's own description for "Other")
+        $hazard = $validated['other_hazard'] ?? null;
+        $validated['other_hazard'] = match (true) {
+            !$hazard => null,
+            $hazard === 'other' => trim($validated['other_hazard_detail']),
+            default => self::OTHER_HAZARDS[$hazard],
+        };
+        unset($validated['other_hazard_detail']);
 
         try {
             $cancelBatch = $request->boolean('cancel_batch');

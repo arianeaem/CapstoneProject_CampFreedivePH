@@ -101,6 +101,12 @@ class User extends Authenticatable
         return $this->status === 'active';
     }
 
+    /** Removed accounts are archived (never deleted) so their history is kept. */
+    public function isArchived(): bool
+    {
+        return $this->status === 'archived';
+    }
+
     public function getRoleBadgeAttribute(): array
     {
         return match ($this->role) {

@@ -1163,6 +1163,7 @@ class WeatherForecastService
                 'thunderstorm_advisory' => (bool) ($overrideData['thunderstorm_advisory'] ?? false),
                 'typhoon_within_distance' => (bool) ($overrideData['typhoon_within_distance'] ?? false),
                 'tsunami_warning' => (bool) ($overrideData['tsunami_warning'] ?? false),
+                'other_hazard' => ($overrideData['other_hazard'] ?? null) ?: null,
                 'reason' => $overrideData['reason'] ?? 'PAGASA Marine Weather Advisory',
                 'cancelled_batch' => $cancelBatch,
                 'applied_by' => $operator->id,
@@ -1295,8 +1296,10 @@ class WeatherForecastService
         $thunderstorm = (bool) ($overrides['thunderstorm_advisory'] ?? false);
         $typhoon = (bool) ($overrides['typhoon_within_distance'] ?? false);
         $tsunami = (bool) ($overrides['tsunami_warning'] ?? false);
+        // Non-weather hazards (oil spill, red tide, no-sail order, ...) also force Critical Risk
+        $otherHazard = !empty($overrides['other_hazard']);
 
-        return ($tcwsSignal >= 3 || $galeWarning || $thunderstorm || $typhoon || $tsunami);
+        return ($tcwsSignal >= 3 || $galeWarning || $thunderstorm || $typhoon || $tsunami || $otherHazard);
     }
 
     /**

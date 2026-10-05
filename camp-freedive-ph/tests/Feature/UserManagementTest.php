@@ -2,8 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Mail\AccountRemovedMail;
+use App\Models\Batch;
+use App\Models\Booking;
+use App\Models\BookingParticipant;
 use App\Models\Coach;
+use App\Models\CoachAvailability;
+use App\Models\ParticipantAssignment;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -84,8 +91,10 @@ class UserManagementTest extends TestCase
         $response->assertSessionHasErrors(['role']);
     }
 
-    public function test_admin_can_delete_coach_account()
+    public function test_removing_coach_archives_account_keeps_data_and_emails_them()
     {
+        Mail::fake();
+
         $coachToDelete = User::factory()->create([
             'role' => 'coach',
             'status' => 'active',
@@ -101,11 +110,79 @@ class UserManagementTest extends TestCase
             'status' => 'active',
         ]);
 
+        $futureOpenDay = CoachAvailability::create(['coach_id' => $coachToDelete->id, 'date' => now()->addDays(20)->toDateString(), 'status' => 'available']);
+
         $response = $this->actingAs($this->admin)->delete(route('admin.users.destroy', $coachToDelete));
 
         $response->assertRedirect(route('admin.users.index'));
-        $this->assertDatabaseMissing('users', ['id' => $coachToDelete->id]);
-        $this->assertDatabaseMissing('coaches', ['user_id' => $coachToDelete->id]);
+        $this->assertDatabaseHas('users', ['id' => $coachToDelete->id, 'status' => 'archived']);
+        $this->assertDatabaseHas('coaches', ['user_id' => $coachToDelete->id, 'status' => 'inactive']);
+        $this->assertEquals('unavailable', $futureOpenDay->fresh()->status);
+        Mail::assertSent(AccountRemovedMail::class, fn ($mail) => $mail->hasTo($coachToDelete->email));
+
+        // A removed account can no longer use the portal
+        $this->actingAs($coachToDelete->fresh())->get('/coach')->assertRedirect(route('login'));
+    }
+
+    protected function coachWithUpcomingStudent(): User
+    {
+        $coach = User::factory()->create(['role' => 'coach', 'status' => 'active']);
+        $batch = Batch::create([
+            'name' => 'Upcoming Batch', 'batch_code' => 'BATCH-UP-01',
+            'start_date' => now()->addDays(10)->toDateString(), 'end_date' => now()->addDays(11)->toDateString(),
+            'status' => 'confirmed',
+        ]);
+        $booking = Booking::create([
+            'batch_id' => $batch->id, 'user_id' => $this->owner->id, 'booking_number' => 'BK-' . uniqid(), 'pin' => '1234',
+            'class_type' => 'discovery', 'status' => 'confirmed', 'total_amount' => 4250,
+            'contact_name' => 'Lead', 'contact_email' => 'lead@example.com', 'contact_phone' => '09123456789',
+            'start_date' => $batch->start_date, 'end_date' => $batch->end_date,
+        ]);
+        $participant = BookingParticipant::create(['booking_id' => $booking->id, 'name' => 'Student One', 'age' => 20, 'price_per_person' => 4250]);
+        ParticipantAssignment::create([
+            'participant_id' => $participant->id, 'booking_id' => $booking->id, 'coach_id' => $coach->id, 'batch_id' => $batch->id,
+            'dive_date' => $batch->start_date, 'assigned_by' => $this->owner->id, 'assigned_at' => now(), 'status' => 'assigned',
+        ]);
+
+        return $coach;
+    }
+
+    public function test_coach_with_upcoming_students_cannot_be_removed_until_reassigned()
+    {
+        Mail::fake();
+        $coach = $this->coachWithUpcomingStudent();
+
+        $this->actingAs($this->owner)->delete(route('admin.users.destroy', $coach))
+            ->assertSessionHas('blocked_coach', fn ($b) => $b['batches'][0]['students'] === 1);
+
+        $this->assertDatabaseHas('users', ['id' => $coach->id, 'status' => 'active']);
+        Mail::assertNothingSent();
+
+        // After the student is reassigned, removal goes through
+        ParticipantAssignment::where('coach_id', $coach->id)->update(['status' => 'reassigned']);
+        $this->actingAs($this->owner)->delete(route('admin.users.destroy', $coach))->assertRedirect(route('admin.users.index'));
+        $this->assertDatabaseHas('users', ['id' => $coach->id, 'status' => 'archived']);
+    }
+
+    public function test_coach_with_upcoming_students_cannot_be_deactivated()
+    {
+        $coach = $this->coachWithUpcomingStudent();
+
+        $this->actingAs($this->owner)->patch(route('admin.users.toggle_status', $coach))
+            ->assertSessionHas('blocked_coach');
+
+        $this->assertDatabaseHas('users', ['id' => $coach->id, 'status' => 'active']);
+    }
+
+    public function test_removed_account_can_be_restored()
+    {
+        Mail::fake();
+        $coach = User::factory()->create(['role' => 'coach', 'status' => 'active']);
+        $this->actingAs($this->owner)->delete(route('admin.users.destroy', $coach));
+        $this->assertDatabaseHas('users', ['id' => $coach->id, 'status' => 'archived']);
+
+        $this->actingAs($this->owner)->patch(route('admin.users.toggle_status', $coach))->assertSessionHas('success');
+        $this->assertDatabaseHas('users', ['id' => $coach->id, 'status' => 'active']);
     }
 
     public function test_admin_cannot_delete_owner_or_admin()

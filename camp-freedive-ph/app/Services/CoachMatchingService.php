@@ -31,6 +31,7 @@ class CoachMatchingService
     {
         return DB::transaction(function () use ($batch, $coachIds, $assignedBy) {
             $coaches = User::where('role', 'coach')
+                ->where('status', '!=', 'archived') // removed coaches can never be assigned
                 ->whereIn('id', $coachIds)
                 ->get();
 

@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', ($isOwner && $activeView === 'executive' ? 'Executive Analytics' : 'Operations Dashboard') . ' | Camp FreedivePH')
+@section('title', 'Dashboard | Camp FreedivePH')
 
 @section('content')
 <div class="space-y-6">
@@ -17,23 +17,6 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
-            @if($isOwner)
-                <!-- Owner View Switcher -->
-                <div role="tablist" aria-label="Dashboard view" class="inline-flex p-1 rounded-xl bg-white border border-[#E5E5EA] text-sm font-bold shadow-2xs">
-                    <a href="{{ auth()->user()->isOwner() ? route('owner.dashboard') : route('admin.dashboard') }}" 
-                       role="tab"
-                       aria-selected="{{ $activeView === 'executive' ? 'true' : 'false' }}"
-                       class="min-h-[44px] px-3.5 py-2 inline-flex items-center justify-center rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#780000] {{ $activeView === 'executive' ? 'bg-[#780000] text-white shadow-2xs' : 'text-[#6E6E73] hover:text-[#1D1D1F]' }}">
-                        Executive Analytics
-                    </a>
-                    <a href="{{ auth()->user()->isOwner() ? route('owner.dashboard', ['view' => 'operations']) : route('admin.dashboard', ['view' => 'operations']) }}" 
-                       role="tab"
-                       aria-selected="{{ $activeView === 'operations' ? 'true' : 'false' }}"
-                       class="min-h-[44px] px-3.5 py-2 inline-flex items-center justify-center rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-[#780000] {{ $activeView === 'operations' ? 'bg-[#780000] text-white shadow-2xs' : 'text-[#6E6E73] hover:text-[#1D1D1F]' }}">
-                        Operations View
-                    </a>
-                </div>
-            @endif
 
             <a href="{{ auth()->user()->isOwner() ? route('owner.bookings.create') : route('admin.bookings.create') }}" class="min-h-[44px] px-4 py-2 rounded-xl text-sm font-extrabold bg-[#00c3d0] hover:bg-[#00abb7] active:bg-[#009da7] active:scale-[0.98] text-[#1D1D1F] transition-all hover:-translate-y-px active:translate-y-0 shadow-2xs hover:shadow-xs inline-flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-[#00c3d0] focus:ring-offset-2">
                 <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -42,9 +25,8 @@
         </div>
     </div>
 
-    @if($activeView === 'operations')
         <!-- ========================================================================= -->
-        <!-- VIEW 1: OPERATIONS COMMAND CENTER (ADMIN & OWNER OPS) -->
+        <!-- OPERATIONS (everyone) -->
         <!-- ========================================================================= -->
 
         <!-- Operational KPI Metrics -->
@@ -386,10 +368,14 @@
             </div>
         </div>
 
-    @else
+    @if($isOwner)
         <!-- ========================================================================= -->
-        <!-- VIEW 2: OWNER EXECUTIVE & FINANCIAL ANALYTICS -->
+        <!-- REVENUE & BUSINESS (owner only, same page - no view switching) -->
         <!-- ========================================================================= -->
+        <div class="pt-2">
+            <h2 class="text-lg font-extrabold text-[#1D1D1F]">Revenue &amp; business</h2>
+            <p class="text-sm text-[#6E6E73]">Money collected, package sales, pricing and recent activity.</p>
+        </div>
 
         <!-- Executive Financial Metrics -->
         <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-5 shadow-2xs">

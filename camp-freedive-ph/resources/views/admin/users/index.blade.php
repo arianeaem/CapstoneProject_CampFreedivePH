@@ -51,6 +51,29 @@
          }
      }">
     
+    @if(session('blocked_coach'))
+        @php $blocked = session('blocked_coach'); @endphp
+        <div class="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4 sm:p-5 space-y-3" role="alert">
+            <div>
+                <p class="font-extrabold text-[#92400E]">{{ $blocked['name'] }} can't be {{ $blocked['action'] }} yet</p>
+                <p class="text-[#92400E] mt-0.5">They still have the upcoming batches below. Reassign their students to other coaches (or remove them from the coach team) first, then try again.</p>
+            </div>
+            <ul class="divide-y divide-[#FDE68A] rounded-lg border border-[#FDE68A] bg-white">
+                @foreach($blocked['batches'] as $b)
+                    <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                        <span><strong class="text-[#1D1D1F]">{{ $b['batch_number'] }}</strong> <span class="text-[#6E6E73]">&middot; {{ $b['date'] }}</span></span>
+                        <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-[#FFFBEB] text-[#92400E]">
+                            {{ $b['team_only'] ? 'On the coach team' : $b['students'] . ' ' . Str::plural('student', $b['students']) . ' to reassign' }}
+                        </span>
+                    </li>
+                @endforeach
+            </ul>
+            <a href="{{ route('admin.coaches.matching') }}" class="btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm font-bold shadow-2xs">
+                Go to Coach Matching to reassign
+            </a>
+        </div>
+    @endif
+
     <!-- Top Header & Add User Action -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -193,6 +216,7 @@
                                         <option value="">All Statuses</option>
                                         <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
                                         <option value="inactive" {{ request('status') === 'inactive' ? 'selected' : '' }}>Inactive</option>
+                                        <option value="archived" {{ request('status') === 'archived' ? 'selected' : '' }}>Removed</option>
                                     </select>
                                 </div>
 
@@ -253,6 +277,10 @@
                                 <span class="px-2 py-0.5 rounded-md text-sm font-bold bg-emerald-50 text-emerald-700 inline-block">
                                     Active
                                 </span>
+                            @elseif($user->isArchived())
+                                <span class="px-2 py-0.5 rounded-md text-sm font-bold bg-[#E5E5EA] text-[#3A3A3C] inline-block">
+                                    Removed
+                                </span>
                             @else
                                 <span class="px-2 py-0.5 rounded-md text-sm font-bold bg-rose-50 text-rose-700 inline-block">
                                     Inactive
@@ -305,16 +333,17 @@
                                                 @csrf
                                                 @method('PATCH')
                                                 <button type="submit" 
-                                                        onclick="return confirm('Are you sure you want to {{ $user->isActive() ? 'deactivate' : 'activate' }} this account?')"
+                                                        onclick="return confirm('Are you sure you want to {{ $user->isActive() ? 'deactivate' : ($user->isArchived() ? 'restore' : 'activate') }} this account?')"
                                                         class="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold {{ $user->isActive() ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} rounded-lg transition-colors text-left cursor-pointer">
                                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
-                                                    <span>{{ $user->isActive() ? 'Deactivate' : 'Activate' }}</span>
+                                                    <span>{{ $user->isActive() ? 'Deactivate' : ($user->isArchived() ? 'Restore Account' : 'Activate') }}</span>
                                                 </button>
                                             </form>
                                             
+                                            @unless($user->isArchived())
                                             <div class="border-t border-[#E5E5EA] my-1"></div>
 
-                                            <!-- Delete User Option -->
+                                            <!-- Remove (archive) User Option -->
                                             <button type="button" 
                                                     @click="confirmDelete({
                                                         id: {{ $user->id }},
@@ -325,8 +354,9 @@
                                                     }); openMenu = false;"
                                                     class="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-[#780000] hover:bg-[#FEF2F2] rounded-lg transition-colors text-left cursor-pointer">
                                                 <svg class="w-3.5 h-3.5 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                                <span>Delete User</span>
+                                                <span>Remove Account</span>
                                             </button>
+                                            @endunless
                                         @endif
                                     </div>
                                 </div>
@@ -350,8 +380,8 @@
     </div>
 
     <!-- Create Staff Account Modal -->
-    <div x-show="openAddModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border border-[#E5E5EA]" @click.outside="openAddModal = false">
+    <div x-show="openAddModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openAddModal = false">
             <div>
                 <h3 class="text-lg font-bold text-[#1D1D1F]">Create Staff Account</h3>
                 <p class="text-sm text-[#6E6E73] mt-0.5">Add a new coach or staff member and set up their login credentials.</p>
@@ -444,8 +474,8 @@
             . "Temporary Password: " . ($creds['temp_password'] ?? '') . "\n\n"
             . "(Note: You will be required to change your temporary password upon your first login.)";
     @endphp
-    <div x-show="showCredentialsModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border border-[#E5E5EA] relative" @click.outside="showCredentialsModal = false">
+    <div x-show="showCredentialsModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border-l border-[#E5E5EA] relative" @click.outside="showCredentialsModal = false">
             
             <!-- Modal Header -->
             <div class="flex items-start justify-between">
@@ -562,14 +592,14 @@
     <!-- ==================================================================== -->
     <!-- DELETE USER CONFIRMATION MODAL -->
     <!-- ==================================================================== -->
-    <div x-show="openDeleteModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openDeleteModal = false">
+    <div x-show="openDeleteModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 sm:p-7 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openDeleteModal = false">
             
             <div class="flex items-start justify-between">
                 <div class="flex items-center gap-3">
                     <div>
-                        <h3 class="text-base sm:text-lg font-extrabold text-[#780000]">Delete Staff Account</h3>
-                        <p class="text-sm text-[#6E6E73]">Permanently remove internal user account.</p>
+                        <h3 class="text-base sm:text-lg font-extrabold text-[#780000]">Remove Staff Account</h3>
+                        <p class="text-sm text-[#6E6E73]">The account is closed, but nothing is deleted.</p>
                     </div>
                 </div>
                 <button type="button" @click="openDeleteModal = false" aria-label="Close delete modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
@@ -577,13 +607,16 @@
 
             <div class="space-y-3 text-sm">
                 <p class="text-[#1D1D1F]">
-                    Are you sure you want to permanently delete the account for <strong x-text="deleteUser.name" class="text-[#780000]"></strong> (<span x-text="deleteUser.email" class="font-mono"></span>)?
+                    Remove the account for <strong x-text="deleteUser.name" class="text-[#780000]"></strong> (<span x-text="deleteUser.email" class="font-mono"></span>)?
                 </p>
 
-                <div class="p-3 bg-[#FEF2F2] rounded-xl text-[#991B1B] text-sm space-y-1">
-                    <strong class="font-bold block">Warning: Irreversible Action</strong>
-                    <span>This will permanently delete the user's login access, profile, and associated coach records.</span>
-                </div>
+                <ul class="p-3 bg-[#F2F2F7] rounded-xl text-[#3A3A3C] text-sm space-y-1 list-disc pl-8">
+                    <li>They can no longer sign in.</li>
+                    <li>Their records (bookings, dives coached, history) are <strong>kept</strong>.</li>
+                    <li>They will get an email saying their account was removed.</li>
+                    <li>Coaches with upcoming batches must have their students reassigned first.</li>
+                    <li>You can restore the account later from the <strong>Removed</strong> filter.</li>
+                </ul>
             </div>
 
             <form :action="deleteUser.url" method="POST" class="pt-2 flex items-center justify-end border-t border-[#F2F2F7] gap-2">
@@ -591,7 +624,7 @@
                 @method('DELETE')
                 <button type="button" @click="openDeleteModal = false" class="btn-secondary px-3.5 py-2 text-sm font-semibold cursor-pointer">Cancel</button>
                 <button type="submit" class="btn-danger px-4 py-2 text-sm font-bold shadow-2xs cursor-pointer">
-                    Permanently Delete
+                    Remove Account
                 </button>
             </form>
 

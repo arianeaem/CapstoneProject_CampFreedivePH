@@ -29,13 +29,7 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $isOwner = ($user->role === 'owner');
-        
-        // Active view: 'operations' or 'executive' (Owners default to executive, admins always operations)
-        $defaultView = $isOwner ? 'executive' : 'operations';
-        $activeView = $request->input('view', $defaultView);
-        if (!$isOwner) {
-            $activeView = 'operations';
-        }
+
 
         $now = Carbon::now('Asia/Manila');
         $today = $now->copy()->startOfDay();
@@ -259,7 +253,6 @@ class DashboardController extends Controller
         return view('admin.dashboard', compact(
             'user',
             'isOwner',
-            'activeView',
             'actionInbox',
             'upcomingBatches',
             'operationalStats',

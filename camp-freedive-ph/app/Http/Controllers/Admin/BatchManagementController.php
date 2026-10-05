@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
 use App\Models\Booking;
+use App\Models\User;
 use App\Services\BatchManagementService;
 use App\Services\DemandForecastService;
 use Carbon\Carbon;
@@ -57,15 +58,6 @@ class BatchManagementController extends Controller
             $query->whereDate('start_date', '<=', $request->input('date_to'));
         }
 
-        // Filter: Search Batch Number or Notes
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('batch_code', 'like', "%{$search}%")
-                  ->orWhere('name', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%");
-            });
-        }
 
         // Sort options
         $sort = $request->input('sort', 'date_asc');
@@ -81,6 +73,29 @@ class BatchManagementController extends Controller
 
         $batches = $query->get();
         Batch::preloadAssignedCoaches($batches);
+
+        // Search: batch number / code / name / notes, or an assigned coach's name (case-insensitive)
+        if ($request->filled('search')) {
+            $needle = mb_strtolower(trim($request->input('search')));
+            $batches = $batches->filter(function ($b) use ($needle) {
+                $haystacks = array_merge(
+                    [$b->batch_number, $b->batch_code, $b->name, $b->notes],
+                    $b->assigned_coaches->pluck('name')->all()
+                );
+                foreach ($haystacks as $h) {
+                    if ($h !== null && str_contains(mb_strtolower((string) $h), $needle)) {
+                        return true;
+                    }
+                }
+                return false;
+            })->values();
+        }
+
+        // Filter: batches a specific coach is assigned to
+        if ($request->filled('coach')) {
+            $coachId = (int) $request->input('coach');
+            $batches = $batches->filter(fn ($b) => $b->assigned_coaches->pluck('id')->contains($coachId))->values();
+        }
 
         // Staffing Status Filter (in-memory computed)
         if ($request->filled('staffing')) {
@@ -122,7 +137,13 @@ class BatchManagementController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
+        $coachOptions = User::where('role', 'coach')
+            ->where('status', '!=', 'archived')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         return view('admin.batches.index', compact(
+            'coachOptions',
             'batches', 
             'attentionCount', 
             'unbatchedBookings', 

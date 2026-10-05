@@ -77,13 +77,16 @@
                     @if(request('sort'))
                         <input type="hidden" name="sort" value="{{ request('sort') }}">
                     @endif
+                    @if(request('coach'))
+                        <input type="hidden" name="coach" value="{{ request('coach') }}">
+                    @endif
 
                     <div class="relative w-full sm:w-64">
                         <input type="text" 
                                name="search" 
                                value="{{ request('search') }}" 
-                               placeholder="Search batch (e.g. Batch 4)..." 
-                               aria-label="Search batches by name, number, or keyword"
+                               placeholder="Search batch or coach..." 
+                               aria-label="Search batches by number, name, keyword, or coach name"
                                class="w-full min-h-[44px] pl-9 pr-3 py-2 text-sm rounded-xl border border-[#D1D1D6] bg-white focus:bg-white focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
                         <svg class="w-4 h-4 text-[#6E6E73] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <circle cx="11" cy="11" r="8"></circle>
@@ -101,7 +104,7 @@
                             class="btn-secondary min-h-[44px] flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold whitespace-nowrap shrink-0 cursor-pointer active:scale-[0.98] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
                         <img src="{{ asset('icons/icons8-filter-60.png') }}" alt="Filter" class="w-4.5 h-4.5 object-contain inline-block shrink-0">
                         <span class="whitespace-nowrap">Filter & Sort</span>
-                        @if(request()->anyFilled(['staffing', 'sort', 'date_from', 'date_to']))
+                        @if(request()->anyFilled(['staffing', 'sort', 'date_from', 'date_to', 'coach']))
                             <span class="w-2 h-2 rounded-full bg-[#780000] shrink-0" aria-hidden="true"></span>
                             <span class="sr-only">(Filters applied)</span>
                         @endif
@@ -141,6 +144,16 @@
                                     <option value="capacity_desc" {{ request('sort') === 'capacity_desc' ? 'selected' : '' }}>Highest Occupancy / Pax</option>
                                     <option value="capacity_asc" {{ request('sort') === 'capacity_asc' ? 'selected' : '' }}>Lowest Occupancy / Pax</option>
                                     <option value="created_desc" {{ request('sort') === 'created_desc' ? 'selected' : '' }}>Recently Created</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="filter-coach" class="block font-bold text-[#6E6E73] text-sm mb-1">Coach</label>
+                                <select id="filter-coach" name="coach" class="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
+                                    <option value="">All Coaches</option>
+                                    @foreach($coachOptions as $coachOption)
+                                        <option value="{{ $coachOption->id }}" {{ (string) request('coach') === (string) $coachOption->id ? 'selected' : '' }}>{{ $coachOption->name }}</option>
+                                    @endforeach
                                 </select>
                             </div>
 

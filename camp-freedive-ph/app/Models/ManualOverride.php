@@ -19,6 +19,7 @@ class ManualOverride extends Model
         'thunderstorm_advisory',
         'typhoon_within_distance',
         'tsunami_warning',
+        'other_hazard',
         'reason',
         'cancelled_batch',
         'applied_by',
@@ -62,6 +63,9 @@ class ManualOverride extends Model
         }
         if ($this->tsunami_warning) {
             $advisories[] = "Tsunami / Marine Hazard Warning";
+        }
+        if (!empty($this->other_hazard)) {
+            $advisories[] = $this->other_hazard;
         }
 
         return $advisories;

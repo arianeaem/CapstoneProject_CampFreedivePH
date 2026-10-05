@@ -294,9 +294,9 @@
     <!-- Soft Delete Confirmation Modal -->
     <div x-show="deleteModal" 
          x-cloak 
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+         class="fixed inset-0 z-50 flex justify-end bg-black/40"
          @keydown.escape.window="deleteModal = false">
-        <div class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl border border-[#E5E5EA]"
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-xl border-l border-[#E5E5EA]"
              @click.away="deleteModal = false">
             <div class="space-y-1.5">
                 <h3 class="text-lg font-bold text-[#1D1D1F]">Delete Pricing Rule?</h3>

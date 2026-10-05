@@ -222,8 +222,8 @@
         </div>
 
         <!-- Delete Modal inside Edit Page -->
-        <div x-show="openDeleteConfirm" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-            <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openDeleteConfirm = false">
+        <div x-show="openDeleteConfirm" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+            <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openDeleteConfirm = false">
                 <div class="flex items-start justify-between">
                     <div class="flex items-center gap-3">
                         <div>

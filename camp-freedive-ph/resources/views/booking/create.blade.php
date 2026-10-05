@@ -1706,7 +1706,7 @@
          aria-modal="true"
          aria-labelledby="session-expired-title"
          aria-describedby="session-expired-desc"
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+         class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
@@ -1714,13 +1714,13 @@
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
         
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-2xl text-center space-y-4 relative border border-[#E5E5EA]"
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 sm:p-7 shadow-2xl text-center space-y-4 relative border-l border-[#E5E5EA]"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             
             <!-- Warning Icon -->
             <div class="w-14 h-14 mx-auto rounded-full bg-amber-50 flex items-center justify-center text-amber-600">

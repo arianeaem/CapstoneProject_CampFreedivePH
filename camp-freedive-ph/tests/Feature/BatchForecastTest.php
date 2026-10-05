@@ -210,10 +210,10 @@ class BatchForecastTest extends TestCase
 
         $response = $this->actingAs($owner)->get(route('admin.demand.index'));
         $response->assertOk();
-        $response->assertSee('Forecast per scheduled batch');
+        $response->assertSee('Coming months');
         $response->assertSee('B-SHOWN');
-        $response->assertSee('Limited history');
-        $response->assertSee('Not better than simple baselines');
+        $response->assertSee('Use these numbers as a rough guide');
+        $response->assertSee('not yet more accurate than looking at past months');
         // Phase 1: one forecast view only. The weekly outlook stays in Reports & Analytics.
         $response->assertDontSee('90-day outlook');
     }

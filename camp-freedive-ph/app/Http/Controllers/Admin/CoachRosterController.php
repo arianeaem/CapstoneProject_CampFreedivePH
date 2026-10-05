@@ -28,9 +28,11 @@ class CoachRosterController extends Controller
         $query = User::where('role', 'coach')
             ->with(['coachAvailabilities', 'activeAssignedParticipants.batch']);
 
-        // Filter: Status (Active/Inactive)
+        // Filter: Status (Active/Inactive); removed (archived) coaches only when explicitly filtered
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
+        } else {
+            $query->where('status', '!=', 'archived');
         }
 
         // Filter: Search Name/Email/Phone

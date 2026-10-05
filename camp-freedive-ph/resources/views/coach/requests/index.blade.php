@@ -238,21 +238,21 @@
          aria-modal="true"
          aria-labelledby="request-slot-modal-title"
          @keydown.escape.window="applyModalOpen = false"
-         class="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-[#E5E5EA] space-y-6 relative" 
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-6 shadow-2xl border-l border-[#E5E5EA] space-y-6 relative" 
              @click.outside="applyModalOpen = false"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             
             <div class="flex items-start justify-between border-b border-[#E5E5EA] pb-4">
                 <div>
@@ -326,21 +326,21 @@
          aria-modal="true"
          aria-labelledby="withdraw-slot-modal-title"
          @keydown.escape.window="withdrawModalOpen = false"
-         class="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-[#E5E5EA] space-y-6 relative" 
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-5 sm:p-6 shadow-2xl border-l border-[#E5E5EA] space-y-6 relative" 
              @click.outside="withdrawModalOpen = false"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             
             <div class="flex items-start justify-between border-b border-[#E5E5EA] pb-4">
                 <div>

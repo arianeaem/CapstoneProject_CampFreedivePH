@@ -14,7 +14,6 @@ use App\Models\PricingRule;
 use App\Models\RefundRequest;
 use App\Models\RescheduleRequest;
 use App\Models\User;
-use App\Services\DemandForecastService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -22,9 +21,6 @@ use Illuminate\Support\Facades\Schema;
 
 class AnalyticsService
 {
-    public function __construct(
-        protected DemandForecastService $forecastService
-    ) {}
     /**
      * Resolve start and end Carbon dates from request preset or custom range.
      */
@@ -152,8 +148,6 @@ class AnalyticsService
         $operations = $this->getOperationsMetrics($start, $end, $priorStart, $priorEnd);
         $coaches = $this->getCoachMetrics($start, $end);
         $weather = $this->getWeatherMetrics($start, $end);
-        $forecast = $this->forecastService->getForecastData();
-        $forecastTrend = $this->forecastService->getHistoricalVsForecastTrend();
 
         return [
             'range' => $range,
@@ -163,8 +157,6 @@ class AnalyticsService
             'operations' => $operations,
             'coaches' => $coaches,
             'weather' => $weather,
-            'forecast' => $forecast,
-            'forecast_trend' => $forecastTrend,
         ];
     }
 

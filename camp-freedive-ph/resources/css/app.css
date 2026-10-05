@@ -751,3 +751,14 @@
 [x-cloak] {
     display: none !important;
 }
+/* Side panels (all former modals): slide in from the right each time they open */
+@keyframes dive-side-panel-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+.dive-side-panel {
+    animation: dive-side-panel-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+    .dive-side-panel { animation: none; }
+}

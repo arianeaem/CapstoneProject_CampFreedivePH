@@ -262,8 +262,8 @@
     </div>
 
     <!-- Status Change Modal -->
-    <div x-show="openStatusModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-3 sm:p-4">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-7 space-y-4 sm:space-y-5 shadow-2xl border border-[#E5E5EA]" @click.outside="openStatusModal = false">
+    <div x-show="openStatusModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-7 space-y-4 sm:space-y-5 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openStatusModal = false">
             <div class="flex items-center justify-between pb-3">
                 <h3 class="text-lg font-bold text-[#1D1D1F]">Update Booking Status</h3>
                 <button type="button" @click="openStatusModal = false" aria-label="Close status modal" class="text-[#8E8E93] hover:text-[#1D1D1F] font-bold text-lg p-1">✕</button>

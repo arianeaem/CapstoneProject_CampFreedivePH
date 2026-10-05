@@ -104,6 +104,57 @@ class WeatherSafetyModuleTest extends TestCase
         $this->assertEquals('critical_risk', $batch->fresh()->risk_classification);
     }
 
+    public function test_manual_override_with_non_weather_hazard_forces_critical_risk(): void
+    {
+        $batch = Batch::create([
+            'name' => 'Oil Spill Batch',
+            'batch_code' => 'BATCH-OIL-004',
+            'start_date' => Carbon::now('Asia/Manila')->addDays(2)->format('Y-m-d'),
+            'end_date' => Carbon::now('Asia/Manila')->addDays(3)->format('Y-m-d'),
+            'status' => 'confirmed',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.weather.override', $batch), [
+                'tcws_signal' => 0,
+                'other_hazard' => 'oil_spill',
+                'reason' => 'Coast Guard advisory: oil spill near Anilao',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $override = ManualOverride::where('batch_id', $batch->id)->latest('id')->first();
+        $this->assertEquals('Oil spill', $override->other_hazard);
+        $this->assertContains('Oil spill', $override->active_advisories);
+        $this->assertEquals('Critical Risk', $batch->latestDay1Assessment->overall_classification);
+        $this->assertEquals('Critical Risk', $batch->latestDay2Assessment->overall_classification);
+    }
+
+    public function test_manual_override_other_hazard_requires_description(): void
+    {
+        $batch = Batch::create([
+            'name' => 'Other Hazard Batch',
+            'batch_code' => 'BATCH-OTHER-005',
+            'start_date' => Carbon::now('Asia/Manila')->addDays(2)->format('Y-m-d'),
+            'end_date' => Carbon::now('Asia/Manila')->addDays(3)->format('Y-m-d'),
+            'status' => 'confirmed',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.weather.override', $batch), ['other_hazard' => 'other', 'reason' => 'Fish kill'])
+            ->assertSessionHasErrors('other_hazard_detail');
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.weather.override', $batch), [
+                'other_hazard' => 'other',
+                'other_hazard_detail' => 'Fish kill reported near Mainit Point',
+                'reason' => 'BFAR advisory',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertEquals('Fish kill reported near Mainit Point', ManualOverride::where('batch_id', $batch->id)->latest('id')->first()->other_hazard);
+        $this->assertEquals('Critical Risk', $batch->latestDay1Assessment->overall_classification);
+    }
+
     public function test_batch_cancellation_cascades_status_creates_100_percent_refund_requests_and_logs_notifications(): void
     {
         $batch = Batch::create([
