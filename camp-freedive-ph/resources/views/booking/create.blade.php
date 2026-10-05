@@ -825,22 +825,37 @@
                         </div>
 
                         <!-- Weather Assessment Results -->
-                        <template x-if="forecast && !weatherLoading && !forecast.is_benchmark">
+                        <template x-if="forecast && !weatherLoading">
                             <div class="space-y-4">
-                                <!-- Overall Assessment (5 Lines Indicator) -->
+                                <!-- Overall Assessment (5 Lines Indicator & Climatology/Model Badge) -->
                                 <div class="space-y-2 pb-1">
-                                    <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-                                        <span class="text-base sm:text-xl font-black uppercase tracking-wide"
-                                              :class="getSafetyTextClass(forecast.overall_classification)"
-                                              x-text="forecast.overall_classification"></span>
+                                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                                        <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+                                            <span class="text-base sm:text-xl font-black uppercase tracking-wide"
+                                                  :class="getSafetyTextClass(forecast.overall_classification)"
+                                                  x-text="forecast.overall_classification"></span>
 
-                                        <!-- 5 Lines Indicator -->
-                                        <div class="flex items-center gap-1 sm:gap-1.5">
-                                            <template x-for="i in 5" :key="i">
-                                                <div class="h-1.5 w-4 sm:w-7 rounded-full transition-all duration-300"
-                                                     :class="i <= getSafetyScore(forecast.overall_classification) ? getSafetyBarClass(forecast.overall_classification) : 'bg-[#E5E5EA]'"></div>
-                                            </template>
+                                            <!-- 5 Lines Indicator -->
+                                            <div class="flex items-center gap-1 sm:gap-1.5" :title="'Safety Score: ' + getSafetyScore(forecast.overall_classification) + '/5'">
+                                                <template x-for="i in 5" :key="i">
+                                                    <div class="h-1.5 w-4 sm:w-7 rounded-full transition-all duration-300"
+                                                         :class="i <= getSafetyScore(forecast.overall_classification) ? getSafetyBarClass(forecast.overall_classification) : 'bg-[#E5E5EA]'"></div>
+                                                </template>
+                                            </div>
                                         </div>
+
+                                        <template x-if="forecast.is_benchmark || forecast.is_seasonal_estimate">
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#F2F2F7] text-[#6E6E73] border border-[#E5E5EA]">
+                                                <svg class="w-3 h-3 text-[#00C3D0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                Seasonal Outlook
+                                            </span>
+                                        </template>
+                                        <template x-if="!forecast.is_benchmark && !forecast.is_seasonal_estimate && forecast.reliability">
+                                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF7F8] text-[#00C3D0] border border-[#BCE8EC]">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-[#00C3D0] animate-pulse"></span>
+                                                <span x-text="'Reliability: ' + forecast.reliability"></span>
+                                            </span>
+                                        </template>
                                     </div>
 
                                     <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed pt-1" x-text="forecast.description"></p>
@@ -848,33 +863,72 @@
 
                                 <!-- Day 1 & Day 2 Breakdown -->
                                 <template x-if="forecast.day1 && forecast.day2">
-                                    <div class="space-y-3 pt-2">
+                                    <div class="space-y-3.5 pt-1">
                                         <!-- Day 1 -->
-                                        <div class="relative pl-3.5 sm:pl-4 py-0.5 space-y-1 text-xs sm:text-sm">
-                                            <div class="absolute left-0 top-0.5 bottom-0.5 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
-                                                 :class="getSafetyBarClass(forecast.day1.classification)"></div>
+                                        <div class="relative pl-3.5 sm:pl-4 py-1 space-y-1.5 text-xs sm:text-sm bg-[#FAFAFA] rounded-xl p-3 border border-[#E5E5EA]">
+                                            <div class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
+                                                 :class="forecast.is_seasonal_estimate ? 'bg-[#D1D1D6]' : getSafetyBarClass(forecast.day1.classification)"></div>
                                             <div class="flex items-center justify-between">
                                                 <span class="font-extrabold text-[#1D1D1F] text-xs sm:text-sm uppercase tracking-wider">Day 1</span>
+                                                <span class="text-xs font-bold px-2 py-0.5 rounded-md"
+                                                      :class="getSafetyTextClass(forecast.day1.classification)"
+                                                      x-text="forecast.day1.classification"></span>
                                             </div>
                                             <div class="text-[#6E6E73] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-1">
                                                 <span class="font-bold text-[#1D1D1F]" x-text="forecast.day1.date"></span>
-                                                <span class="shrink-0">Worst Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day1.worst_hour"></strong></span>
+                                                <span class="shrink-0 text-xs">Peak Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day1.worst_hour"></strong></span>
                                             </div>
-                                            <p class="text-xs sm:text-sm text-[#6E6E73] pt-0.5 leading-relaxed" x-text="forecast.day1.recommended_action"></p>
+                                            <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.day1.recommended_action"></p>
                                         </div>
 
                                         <!-- Day 2 -->
-                                        <div class="relative pl-3.5 sm:pl-4 py-0.5 space-y-1 text-xs sm:text-sm">
-                                            <div class="absolute left-0 top-0.5 bottom-0.5 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
-                                                 :class="getSafetyBarClass(forecast.day2.classification)"></div>
+                                        <div class="relative pl-3.5 sm:pl-4 py-1 space-y-1.5 text-xs sm:text-sm bg-[#FAFAFA] rounded-xl p-3 border border-[#E5E5EA]">
+                                            <div class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
+                                                 :class="forecast.is_seasonal_estimate ? 'bg-[#D1D1D6]' : getSafetyBarClass(forecast.day2.classification)"></div>
                                             <div class="flex items-center justify-between">
                                                 <span class="font-extrabold text-[#1D1D1F] text-xs sm:text-sm uppercase tracking-wider">Day 2</span>
+                                                <span class="text-xs font-bold px-2 py-0.5 rounded-md"
+                                                      :class="getSafetyTextClass(forecast.day2.classification)"
+                                                      x-text="forecast.day2.classification"></span>
                                             </div>
                                             <div class="text-[#6E6E73] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-1">
                                                 <span class="font-bold text-[#1D1D1F]" x-text="forecast.day2.date"></span>
-                                                <span class="shrink-0">Worst Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day2.worst_hour"></strong></span>
+                                                <span class="shrink-0 text-xs">Peak Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day2.worst_hour"></strong></span>
                                             </div>
-                                            <p class="text-xs sm:text-sm text-[#6E6E73] pt-0.5 leading-relaxed" x-text="forecast.day2.recommended_action"></p>
+                                            <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.day2.recommended_action"></p>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                <!-- Model Comparison: Historical Model vs Legacy (Open-Meteo + ONNX) -->
+                                <template x-if="forecast.engines">
+                                    <div class="space-y-2 pt-1">
+                                        <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#1D1D1F]">Model Comparison</h4>
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                            <template x-for="engine in [forecast.engines.historical, forecast.engines.legacy]" :key="engine.label">
+                                                <div class="rounded-xl border border-[#E5E5EA] bg-[#FAFAFA] p-3 space-y-2 text-xs">
+                                                    <div class="flex items-start justify-between gap-2">
+                                                        <span class="font-bold text-[#1D1D1F] leading-snug" x-text="engine.label"></span>
+                                                        <span class="font-black uppercase tracking-wide shrink-0 text-right"
+                                                              :class="engine.available && !engine.is_seasonal_estimate ? getSafetyTextClass(engine.overall_classification) : 'text-[#6E6E73]'"
+                                                              x-text="!engine.available ? 'Unavailable' : (engine.is_seasonal_estimate ? 'Seasonal' : engine.overall_classification)"></span>
+                                                    </div>
+                                                    <template x-if="engine.available">
+                                                        <div class="space-y-1.5">
+                                                            <template x-for="(day, idx) in [engine.day1, engine.day2]" :key="idx">
+                                                                <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
+                                                                    <span><span class="font-semibold text-[#1D1D1F]" x-text="'Day ' + (idx + 1)"></span> · <span x-text="day.worst_hour"></span></span>
+                                                                    <span class="font-bold" :class="getSafetyTextClass(day.classification)" x-text="day.classification"></span>
+                                                                </div>
+                                                            </template>
+                                                            <p class="text-[11px] text-[#8E8E93] leading-snug pt-0.5" x-text="engine.data_source"></p>
+                                                        </div>
+                                                    </template>
+                                                    <template x-if="!engine.available">
+                                                        <p class="text-[11px] text-[#8E8E93] leading-snug">Not available for these dates.</p>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </div>
                                     </div>
                                 </template>
@@ -882,11 +936,11 @@
                             </div>
                         </template>
 
-                        <!-- Empty State: Dates Selected but Evaluation Not Available -->
-                        <template x-if="form.start_date && !weatherLoading && (!forecast || forecast.is_benchmark)">
+                        <!-- Empty State: Dates Selected but Forecast Failed to Load -->
+                        <template x-if="form.start_date && !weatherLoading && !forecast">
                             <div class="py-1 text-left">
                                 <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed">
-                                    Marine condition evaluations are unavailable for dates beyond 16 days. You may still proceed with your reservation; our team will verify conditions prior to your camp.
+                                    Marine condition evaluations are currently updating. You may still proceed with your reservation; our safety team verifies water conditions continuously.
                                 </p>
                             </div>
                         </template>
@@ -1407,7 +1461,7 @@
                             </div>
 
                             <div id="booking-confirmations"
-                                 class="mt-4 p-3.5 sm:p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5] space-y-3 scroll-mt-24"
+                                 class="mt-4 p-3.5 sm:p-4 space-y-3 scroll-mt-24"
                                  :class="touchedStep3 && (!form.confirmation_ack || !form.hasAgreedToTerms) ? 'border-2 border-[#D70015] bg-red-50/40 ring-2 ring-[#D70015]/20' : ''">
                                 <label tabindex="0" role="checkbox"
                                        :aria-checked="form.confirmation_ack"

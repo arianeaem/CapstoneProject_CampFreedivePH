@@ -1,0 +1,86 @@
+{
+  "hs": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 84.06,
+    "below_p10_pct": 8.7,
+    "above_p90_pct": 7.24,
+    "mae_p50": 0.187
+  },
+  "tp": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 80.46,
+    "below_p10_pct": 9.86,
+    "above_p90_pct": 9.68,
+    "mae_p50": 1.2397
+  },
+  "swell_height": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 76.71,
+    "below_p10_pct": 14.0,
+    "above_p90_pct": 9.29,
+    "mae_p50": 0.1351
+  },
+  "wind_wave_height": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 89.55,
+    "below_p10_pct": 4.33,
+    "above_p90_pct": 6.12,
+    "mae_p50": 0.1693
+  },
+  "current_speed": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 83.13,
+    "below_p10_pct": 8.42,
+    "above_p90_pct": 8.45,
+    "mae_p50": 0.1518
+  },
+  "eulerian_speed": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 83.15,
+    "below_p10_pct": 6.97,
+    "above_p90_pct": 9.88,
+    "mae_p50": 0.1235
+  },
+  "tide_speed": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 80.17,
+    "below_p10_pct": 10.41,
+    "above_p90_pct": 9.43,
+    "mae_p50": 0.0541
+  },
+  "stokes_speed": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 90.51,
+    "below_p10_pct": 2.25,
+    "above_p90_pct": 7.24,
+    "mae_p50": 0.0237
+  },
+  "wind_speed": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 84.56,
+    "below_p10_pct": 8.58,
+    "above_p90_pct": 6.85,
+    "mae_p50": 1.4486
+  },
+  "wind_gust": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 86.13,
+    "below_p10_pct": 6.72,
+    "above_p90_pct": 7.15,
+    "mae_p50": 2.122
+  },
+  "slp": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 88.21,
+    "below_p10_pct": 6.74,
+    "above_p90_pct": 5.05,
+    "mae_p50": 1.4393
+  },
+  "rain_daily_mm": {
+    "n_holdout": 4392,
+    "holdout_coverage_pct": 83.06,
+    "below_p10_pct": 3.83,
+    "above_p90_pct": 13.11,
+    "mae_p50": 8.9183
+  }
+}

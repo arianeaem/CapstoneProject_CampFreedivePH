@@ -1,0 +1,82 @@
+{
+  "manifest_version": "1.1",
+  "snapshot_id": "2026-10-04_rev4",
+  "horizon_column": "horizon_h",
+  "horizons_h": [1, 3, 6, 12, 24, 48, 72, 120, 168, 192, 240],
+  "targets": [
+    "hs",
+    "tp",
+    "swell_height",
+    "wind_wave_height",
+    "current_speed"
+  ],
+  "sources": {
+    "waves": {
+      "lag_hours": 12,
+      "native_step_h": 3
+    },
+    "currents": {
+      "lag_hours": 24,
+      "native_step_h": 1
+    },
+    "era5": {
+      "lag_hours": 120,
+      "native_step_h": 1,
+      "spatial_representation": "Bilinear 4-corner area ~31 km with corner max gust"
+    }
+  },
+  "features": [
+    {"name": "hs_lag_12h", "source": "waves", "transform": "lag", "hours": 12},
+    {"name": "hs_lag_24h", "source": "waves", "transform": "lag", "hours": 24},
+    {"name": "hs_lag_48h", "source": "waves", "transform": "lag", "hours": 48},
+    {"name": "hs_lag_72h", "source": "waves", "transform": "lag", "hours": 72},
+    {"name": "hs_roll_mean_24h", "source": "waves", "transform": "rolling_mean", "hours": 24},
+    {"name": "hs_roll_std_24h", "source": "waves", "transform": "rolling_std", "hours": 24},
+    {"name": "hs_roll_mean_7d", "source": "waves", "transform": "rolling_mean", "hours": 168},
+    {"name": "hs_roll_max_7d", "source": "waves", "transform": "rolling_max", "hours": 168},
+    {"name": "tp_lag_12h", "source": "waves", "transform": "lag", "hours": 12},
+    {"name": "tp_lag_24h", "source": "waves", "transform": "lag", "hours": 24},
+    {"name": "tp_roll_mean_24h", "source": "waves", "transform": "rolling_mean", "hours": 24},
+    {"name": "swell_height_lag_12h", "source": "waves", "transform": "lag", "hours": 12},
+    {"name": "swell_height_lag_24h", "source": "waves", "transform": "lag", "hours": 24},
+    {"name": "swell_height_roll_mean_7d", "source": "waves", "transform": "rolling_mean", "hours": 168},
+    {"name": "wind_wave_height_lag_12h", "source": "waves", "transform": "lag", "hours": 12},
+    {"name": "wind_wave_height_lag_24h", "source": "waves", "transform": "lag", "hours": 24},
+    {"name": "wave_steepness_lag_12h", "source": "waves", "transform": "derived_steepness", "hours": 12},
+    {"name": "swell_ratio_lag_12h", "source": "waves", "transform": "derived_swell_ratio", "hours": 12},
+    {"name": "current_speed_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "current_speed_lag_48h", "source": "currents", "transform": "lag", "hours": 48},
+    {"name": "current_speed_lag_72h", "source": "currents", "transform": "lag", "hours": 72},
+    {"name": "current_speed_roll_mean_24h", "source": "currents", "transform": "rolling_mean", "hours": 24},
+    {"name": "current_speed_roll_std_24h", "source": "currents", "transform": "rolling_std", "hours": 24},
+    {"name": "current_speed_roll_mean_7d", "source": "currents", "transform": "rolling_mean", "hours": 168},
+    {"name": "current_u_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "current_v_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "eulerian_u_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "eulerian_v_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "tide_u_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "tide_v_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "tide_speed_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "stokes_u_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "stokes_v_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "stokes_speed_lag_24h", "source": "currents", "transform": "lag", "hours": 24},
+    {"name": "wind_speed_lag_120h", "source": "era5", "transform": "lag", "hours": 120},
+    {"name": "wind_speed_lag_144h", "source": "era5", "transform": "lag", "hours": 144},
+    {"name": "wind_speed_roll_mean_24h", "source": "era5", "transform": "rolling_mean", "hours": 24, "lag_hours": 120},
+    {"name": "wind_speed_roll_max_7d", "source": "era5", "transform": "rolling_max", "hours": 168, "lag_hours": 120},
+    {"name": "wind_gust_lag_120h", "source": "era5", "transform": "lag", "hours": 120},
+    {"name": "wind_gust_roll_max_24h", "source": "era5", "transform": "rolling_max", "hours": 24, "lag_hours": 120},
+    {"name": "gust_excess_lag_120h", "source": "era5", "transform": "derived_gust_excess", "hours": 120},
+    {"name": "wind_dir_sin_lag_120h", "source": "era5", "transform": "sin_wind_dir", "hours": 120},
+    {"name": "wind_dir_cos_lag_120h", "source": "era5", "transform": "cos_wind_dir", "hours": 120},
+    {"name": "wind_stress_u_lag_120h", "source": "era5", "transform": "derived_tau_x", "hours": 120},
+    {"name": "wind_stress_v_lag_120h", "source": "era5", "transform": "derived_tau_y", "hours": 120},
+    {"name": "slp_lag_120h", "source": "era5", "transform": "lag", "hours": 120},
+    {"name": "slp_tendency_3h_lag_120h", "source": "era5", "transform": "difference", "hours": 3, "lag_hours": 120},
+    {"name": "slp_tendency_24h_lag_120h", "source": "era5", "transform": "difference", "hours": 24, "lag_hours": 120},
+    {"name": "doy_sin", "source": "calendar", "transform": "sin_doy"},
+    {"name": "doy_cos", "source": "calendar", "transform": "cos_doy"},
+    {"name": "hod_sin", "source": "calendar", "transform": "sin_hod"},
+    {"name": "hod_cos", "source": "calendar", "transform": "cos_hod"}
+  ]
+}

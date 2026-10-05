@@ -1,0 +1,195 @@
+{
+  "metadata": {
+    "generated_at_utc": "2026-10-03T23:18:07.810818+00:00",
+    "train_split_end": "2025-09-30 23:00:00",
+    "holdout_split_start": "2025-10-01 00:00:00",
+    "holdout_split_end": "2026-10-03 00:00:00",
+    "site": "Camp FreedivePH (13.6874N, 120.8931E)"
+  },
+  "waves": {
+    "train_rows": 8517,
+    "holdout_rows": 2935,
+    "horizons": {
+      "1h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "3h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "6h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "12h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "24h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "48h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "72h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "120h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      },
+      "168h": {
+        "hs_mae_m": 0.1989,
+        "tp_mae_s": 1.4778
+      }
+    }
+  },
+  "currents": {
+    "train_rows": 43072,
+    "holdout_rows": 8793,
+    "harmonic_tide_validation": {
+      "constituents": [
+        "M2",
+        "S2",
+        "N2",
+        "K1",
+        "O1",
+        "P1",
+        "M4"
+      ],
+      "tide_u_mae_mps": 0.0194,
+      "tide_v_mae_mps": 0.0095,
+      "tide_speed_mae_mps": 0.0189,
+      "tide_speed_mae_kt": 0.0368,
+      "tide_dir_mae_deg": 10.5
+    },
+    "horizons": {
+      "1h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "3h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "6h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "12h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "24h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "48h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "72h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "120h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      },
+      "168h": {
+        "current_speed_mae_mps": 0.1553,
+        "current_speed_mae_kt": 0.3018,
+        "eulerian_speed_mae_mps": 0.1213,
+        "current_dir_mae_deg": 55.56
+      }
+    }
+  },
+  "persistence": {
+    "waves_hs_mae_m": {
+      "1h": 0.0141,
+      "3h": 0.0387,
+      "6h": 0.0679,
+      "12h": 0.0992,
+      "24h": 0.1181,
+      "48h": 0.1581,
+      "72h": 0.1722,
+      "120h": 0.1836,
+      "168h": 0.2014
+    },
+    "waves_tp_mae_s": {
+      "1h": 0.1256,
+      "3h": 0.3355,
+      "6h": 0.567,
+      "12h": 0.8099,
+      "24h": 0.985,
+      "48h": 1.2341,
+      "72h": 1.3915,
+      "120h": 1.5425,
+      "168h": 1.6169
+    },
+    "current_speed_mae_mps": {
+      "1h": 0.0452,
+      "3h": 0.1186,
+      "6h": 0.1669,
+      "12h": 0.1013,
+      "24h": 0.079,
+      "48h": 0.1193,
+      "72h": 0.1495,
+      "120h": 0.1842,
+      "168h": 0.1992
+    },
+    "current_speed_mae_kt": {
+      "1h": 0.0879,
+      "3h": 0.2305,
+      "6h": 0.3244,
+      "12h": 0.1969,
+      "24h": 0.1536,
+      "48h": 0.2319,
+      "72h": 0.2906,
+      "120h": 0.3581,
+      "168h": 0.3872
+    },
+    "current_dir_mae_deg": {
+      "1h": 8.9459,
+      "3h": 24.5385,
+      "6h": 36.3396,
+      "12h": 23.104,
+      "24h": 22.2881,
+      "48h": 33.0812,
+      "72h": 42.8098,
+      "120h": 55.7516,
+      "168h": 62.038
+    },
+    "eulerian_speed_mae_mps": {
+      "1h": 0.0082,
+      "3h": 0.0228,
+      "6h": 0.0403,
+      "12h": 0.0596,
+      "24h": 0.0607,
+      "48h": 0.0873,
+      "72h": 0.1069,
+      "120h": 0.1286,
+      "168h": 0.1394
+    }
+  }
+}

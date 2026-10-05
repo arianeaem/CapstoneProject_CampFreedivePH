@@ -85,7 +85,7 @@ class DemoSeeder extends Seeder
      */
     private function createStaff(): array
     {
-        $password = Hash::make('DemoPass123!');
+        $password = Hash::make('CampFreedive2026!');
         $makeUser = function (string $name, string $email, string $role) use ($password): User {
             return User::create([
                 'name' => $name,
@@ -100,12 +100,12 @@ class DemoSeeder extends Seeder
         };
 
         return [
-            'owner' => $makeUser('Demo Owner', 'owner@example.com', 'owner'),
-            'admin' => $makeUser('Demo Admin', 'admin@example.com', 'admin'),
+            'owner' => $makeUser('Antonio Mercado', 'owner@campfreedive.ph', 'owner'),
+            'admin' => $makeUser('Maria Santos', 'admin@campfreedive.ph', 'admin'),
             'coaches' => [
-                $makeUser('Demo Coach Alpha', 'coach.alpha@example.com', 'coach'),
-                $makeUser('Demo Coach Bravo', 'coach.bravo@example.com', 'coach'),
-                $makeUser('Demo Coach Charlie', 'coach.charlie@example.com', 'coach'),
+                $makeUser('Jose Reyes', 'jose.reyes@campfreedive.ph', 'coach'),
+                $makeUser('Mary Grace Bautista', 'mary.bautista@campfreedive.ph', 'coach'),
+                $makeUser('Daniel Navarro', 'daniel.navarro@campfreedive.ph', 'coach'),
             ],
         ];
     }
@@ -130,7 +130,7 @@ class DemoSeeder extends Seeder
 
             return PricingRule::create([
                 'name' => $name,
-                'description' => 'Demo pricing rule for October 6 presentation.',
+                'description' => 'Pricing rule configured for seasonal booking operations.',
                 'rule_type' => $type,
                 'condition_operator' => $operator,
                 'condition_value' => $value,
@@ -165,14 +165,14 @@ class DemoSeeder extends Seeder
     private function createBatch(Carbon $startDate, string $status, int $number): Batch
     {
         return Batch::create([
-            'name' => 'Demo Batch ' . $number,
-            'batch_code' => 'DEMO-' . $startDate->format('Ymd') . '-' . str_pad((string) $number, 2, '0', STR_PAD_LEFT),
+            'name' => 'Anilao Freedive Batch ' . $number,
+            'batch_code' => 'CFP-' . $startDate->format('Ymd') . '-' . str_pad((string) $number, 2, '0', STR_PAD_LEFT),
             'start_date' => $startDate,
             'end_date' => $startDate->copy()->addDay(),
             'lifecycle_status' => $status === 'completed' ? 'completed' : ($status === 'full' ? 'sold_out' : 'open'),
             'max_capacity' => 45,
             'status' => $status,
-            'notes' => 'Simulated demo batch; not real customer data.',
+            'notes' => 'Scheduled Anilao freediving operations batch.',
         ]);
     }
 
@@ -188,13 +188,13 @@ class DemoSeeder extends Seeder
                     'coach_id' => $coach->id,
                     'date' => $batch->start_date,
                     'status' => 'available',
-                    'notes' => 'Demo availability for coach matching.',
+                    'notes' => 'Coach availability for scheduled operations.',
                 ]);
                 CoachAvailability::create([
                     'coach_id' => $coach->id,
                     'date' => $batch->end_date,
                     'status' => 'available',
-                    'notes' => 'Demo availability for coach matching.',
+                    'notes' => 'Coach availability for scheduled operations.',
                 ]);
             }
         }
@@ -229,6 +229,27 @@ class DemoSeeder extends Seeder
      */
     private function createBooking(Batch $batch, int $sequence, int $pax, string $classType, array $rules): Booking
     {
+        $customerNames = [
+            'Juan Dela Cruz',
+            'Sarah Aquino',
+            'John Paul Mendoza',
+            'Robert Gonzales',
+            'Stephanie De Leon',
+            'David Lim',
+            'Angela Villanueva',
+            'Miguel Ramirez',
+            'Camille Navarro',
+            'Paolo Fernandez',
+            'Christine Manalo',
+            'Rafael Castillo',
+            'Beatriz Santiago',
+            'Nicolas Rivera',
+            'Patricia Flores',
+            'Marco Villareal',
+            'Isabel Bautista',
+            'Gabriel Santos',
+        ];
+        $contactName = $customerNames[($sequence - 1) % count($customerNames)];
         $isCertified = $classType === 'fundive';
         $quote = app(PricingRuleEngine::class)->evaluate($classType, $batch->start_date, $isCertified, $pax);
         $ownTransport = $sequence % 2 === 0;
@@ -244,14 +265,14 @@ class DemoSeeder extends Seeder
 
         $booking = Booking::create([
             'batch_id' => $batch->id,
-            'booking_number' => 'DEMO-' . now()->format('Y') . '-' . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT),
+            'booking_number' => 'CFP-' . now()->format('Y') . '-' . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT),
             'pin' => (string) (1000 + $sequence),
             'class_type' => $classType,
             'is_certified_diver' => $isCertified,
             'start_date' => $batch->start_date,
             'end_date' => $batch->end_date,
             'pickup_option' => $ownTransport ? 'own' : 'carpool',
-            'pickup_location' => $ownTransport ? null : 'Demo Pickup Hub - 3:00 AM',
+            'pickup_location' => $ownTransport ? null : 'Tiendesitas - 3:00 AM',
             'carpool_fee' => $carpoolFee,
             'boat_dive' => $boatFee > 0,
             'boat_dive_fee' => $boatFee,
@@ -261,8 +282,8 @@ class DemoSeeder extends Seeder
             'total_amount' => $total,
             'downpayment_amount' => $downpayment,
             'balance_amount' => $total - $downpayment,
-            'contact_name' => 'Demo Customer ' . $sequence,
-            'contact_email' => 'customer' . $sequence . '@example.com',
+            'contact_name' => $contactName,
+            'contact_email' => 'booking' . $sequence . '@campfreedive.ph',
             'contact_phone' => '09' . str_pad((string) (170000000 + $sequence), 9, '0', STR_PAD_LEFT),
             'status' => $status,
         ]);
@@ -270,7 +291,7 @@ class DemoSeeder extends Seeder
         for ($participantIndex = 1; $participantIndex <= $pax; $participantIndex++) {
             $participant = [
                 'booking_id' => $booking->id,
-                'name' => "Demo Student {$sequence}-{$participantIndex}",
+                'name' => $customerNames[($sequence + $participantIndex - 2) % count($customerNames)],
                 'age' => 20 + $participantIndex,
                 'health_condition' => 'None declared',
                 'swimmer_status' => 'swimmer',
@@ -288,7 +309,7 @@ class DemoSeeder extends Seeder
         Payment::create([
                 'booking_id' => $booking->id,
                 'payment_method' => $sequence % 2 === 0 ? 'bank_transfer' : 'gcash',
-                'transaction_id' => 'DEMO-TXN-' . str_pad((string) $sequence, 5, '0', STR_PAD_LEFT),
+                'transaction_id' => 'CFP-TXN-' . str_pad((string) $sequence, 5, '0', STR_PAD_LEFT),
                 'amount' => $isHistory ? $total : $downpayment,
                 'fee_amount' => 0,
                 'net_amount' => $isHistory ? $total : $downpayment,
@@ -303,8 +324,8 @@ class DemoSeeder extends Seeder
                 'booking_id' => $booking->id,
                 'pricing_rule_id' => $rule?->id,
                 'rule_name' => $adjustment['rule_name'],
-                'rule_type' => $rule?->rule_type ?? 'demo',
-                'condition_summary' => $rule?->condition_summary ?? 'Demo adjustment',
+                'rule_type' => $rule?->rule_type ?? 'seasonality',
+                'condition_summary' => $rule?->condition_summary ?? 'Pricing adjustment',
                 'base_price' => $quote['base_price_per_pax'],
                 'adjustment_amount' => $adjustment['delta_per_pax'],
                 'adjusted_price' => $quote['base_price_per_pax'] + $adjustment['delta_per_pax'],
@@ -328,7 +349,7 @@ class DemoSeeder extends Seeder
             'current_end_date' => $rescheduleBooking->end_date,
             'requested_start_date' => $rescheduleBooking->start_date->copy()->addDays(7),
             'requested_end_date' => $rescheduleBooking->end_date->copy()->addDays(7),
-            'reason' => 'Demo customer schedule conflict.',
+            'reason' => 'Schedule conflict requested by the customer.',
             'status' => 'pending',
         ]);
 
@@ -337,13 +358,13 @@ class DemoSeeder extends Seeder
         CancellationRequest::create([
             'booking_id' => $cancellationBooking->id,
             'calculated_refund_amount' => $cancellationBooking->downpayment_amount,
-            'reason' => 'Demo customer cancellation request.',
+            'reason' => 'Cancellation requested by the customer.',
             'status' => 'pending',
         ]);
 
         $refundBooking = $upcoming[2];
         $payment = $refundBooking->payments()->firstOrCreate(
-            ['transaction_id' => 'DEMO-TXN-REFUND-001'],
+            ['transaction_id' => 'CFP-TXN-REFUND-001'],
             [
                 'payment_method' => 'gcash',
                 'amount' => $refundBooking->downpayment_amount,
@@ -365,7 +386,7 @@ class DemoSeeder extends Seeder
                 'calculated_refund' => $refundBooking->downpayment_amount,
             ]),
             'status' => 'pending',
-            'notes' => 'Demo refund request linked to a cancelled booking.',
+            'notes' => 'Refund request linked to a cancelled booking.',
         ]);
     }
 }

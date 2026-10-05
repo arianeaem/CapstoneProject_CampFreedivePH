@@ -1,0 +1,219 @@
+{
+  "manifest_version": "1.4",
+  "snapshot_id": "2026-10-04_rev4",
+  "supersedes": "2026-10-04_rev3",
+  "created_at_utc": "2026-10-04T02:38:57.394404+00:00",
+  "download_date": "2026-10-04",
+  "index_timezone": "Asia/Manila",
+  "site": {
+    "name": "Camp FreedivePH (Bagalangit / Mainit Point, Mabini, Batangas)",
+    "latitude": 13.6874,
+    "longitude": 120.8931
+  },
+  "files": {
+    "cmems_waves.parquet": {
+      "sha256": "15b14e0baa6312acc266b7d504e95fd35b217cc2bc88680bc56c9bc9f3cdb449",
+      "file_size_bytes": 638222,
+      "row_count": 34366,
+      "columns": [
+        "hs",
+        "tp",
+        "swell_height",
+        "wind_wave_height",
+        "wave_is_interpolated",
+        "is_provisional"
+      ],
+      "start_time_utc": "2022-11-01T03:00:00+00:00",
+      "end_time_utc": "2026-10-03T00:00:00+00:00",
+      "provisional_rows_count": 12,
+      "dataset_id": "cmems_mod_glo_wav_anfc_0.083deg_PT3H-i",
+      "dataset_version": "202411",
+      "cell_center": {
+        "lat": 13.6667,
+        "lon": 120.9167
+      },
+      "distance_from_site_km": 3.43,
+      "location_description": "Maricaban Strait wave analysis cell (0.083\u00b0 native)",
+      "operational_lag_hours": 12,
+      "native_time_step_hours": 3
+    },
+    "cmems_currents.parquet": {
+      "sha256": "5d44843315ac581b0ba0a56ddd74e6adb3b71f4ca06c36db57d92691e1142070",
+      "file_size_bytes": 2318708,
+      "row_count": 51889,
+      "columns": [
+        "current_u",
+        "current_v",
+        "eulerian_u",
+        "eulerian_v",
+        "tide_u",
+        "tide_v",
+        "stokes_u",
+        "stokes_v",
+        "current_speed",
+        "current_dir",
+        "eulerian_speed",
+        "eulerian_dir",
+        "tide_speed",
+        "tide_dir",
+        "stokes_speed",
+        "stokes_dir",
+        "current_is_interpolated",
+        "is_provisional"
+      ],
+      "start_time_utc": "2020-11-01T00:00:00+00:00",
+      "end_time_utc": "2026-10-03T00:00:00+00:00",
+      "provisional_rows_count": 24,
+      "dataset_id": "cmems_mod_glo_phy_anfc_merged-uv_PT1H-i",
+      "dataset_version": "202211",
+      "cell_center": {
+        "lat": 13.6667,
+        "lon": 120.8333
+      },
+      "distance_from_site_km": 6.86,
+      "location_description": "Balayan Bay entrance / Verde Island Passage numerical model current cell (1/12\u00b0 native)",
+      "operational_lag_hours": 24,
+      "native_time_step_hours": 1
+    },
+    "era5_wind_pressure.parquet": {
+      "sha256": "9acb119bb88d0e4785bd1a84297e7a85e014082d2dd9c5e907bc0db02c284d62",
+      "file_size_bytes": 3511868,
+      "row_count": 52538,
+      "columns": [
+        "wind_u",
+        "wind_v",
+        "wind_speed",
+        "wind_gust",
+        "wind_dir",
+        "slp",
+        "era5_is_interpolated",
+        "is_provisional",
+        "era5t_revision_risk"
+      ],
+      "start_time_utc": "2020-10-01T00:00:00+00:00",
+      "end_time_utc": "2026-09-29T01:00:00+00:00",
+      "provisional_rows_count": 120,
+      "revision_risk_rows_count": 2161,
+      "dataset_id": "reanalysis-era5-single-levels",
+      "dataset_version": "ERA5 / ERA5T (ECMWF CDS API)",
+      "spatial_representation": "Bilinear spatial interpolation over 0.25\u00b0 grid (~31 km resolution) across 4 land-sea mixed grid corners to site coordinates (13.6874\u00b0N, 120.8931\u00b0E) with corner maximum gust (i10fg)",
+      "grid_corners": [
+        {
+          "corner": "NW",
+          "lat": 13.75,
+          "lon": 120.75
+        },
+        {
+          "corner": "NE",
+          "lat": 13.75,
+          "lon": 121.0
+        },
+        {
+          "corner": "SW",
+          "lat": 13.5,
+          "lon": 120.75
+        },
+        {
+          "corner": "SE",
+          "lat": 13.5,
+          "lon": 121.0
+        }
+      ],
+      "operational_lag_hours": 120,
+      "native_time_step_hours": 1,
+      "realized_end_utc": "2026-09-29T01:00:00+00:00",
+      "nominal_month_end_utc": "2026-09-30T23:00:00+00:00",
+      "unreleased_trailing_hours": 46,
+      "unreleased_hours_rationale": "ECMWF ERA5T has an operational availability lag of ~5 days (120 hours); the final 46 hours of September 2026 remain unreleased by ECMWF CDS as of 2026-10-04.",
+      "reanalysis_download_provenance": {
+        "august_2026_download_status": "Manual two-step merge performed on 2026-10-04. The original CDS batch request omitted i10fg for August 2026 (cause remains unverified / unknown upstream CDS server anomaly, as July and September 2026 batch requests received i10fg without issue). A dedicated CDS request for i10fg was retrieved using the identical canonical area [14.0, 120.7, 13.5, 121.1]. Coordinate assertion confirmed exact bit-for-bit alignment across all 3 latitudes [14.0, 13.75, 13.5], 2 longitudes [120.75, 121.0], and 744 hourly timestamps. Merged array has 0 NaNs.",
+        "sha256_idempotency_proof": "The interim parquet SHA-256 (9acb119bb88d0e4785bd1a84297e7a85e014082d2dd9c5e907bc0db02c284d62) was bit-for-bit identical between the manual re-merge and the previous patched extraction, proving that ECMWF CDS returned identical underlying numerical values and that the extraction logic is reproducible.",
+        "august_synoptic_analysis": "Daily analysis of August 2026 demonstrates sustained South-Southwest to West-Southwest flow (mean direction 222\u00b0 to 259\u00b0) spanning multi-week surges (Aug 3-12, Aug 16-19, Aug 27-31). This synoptic signature is characteristic of sustained Southwest Monsoon (Habagat) channeling through Verde Island Passage / Balayan Bay, rather than an isolated 24-48h tropical cyclone transit. Cross-verification with IMERG Late rainfall will be conducted upon completion of precipitation ingestion.",
+        "september_era5t_context": "September 2026 ERA5T (expver=0005) exhibits typical climatological behavior (speed mean 2.97 m/s, gust mean 6.79 m/s, Gust/Speed ratio 2.29), exactly centered within historical 2021-2025 Septembers (speed 2.52-3.59 m/s, ratio 2.13-2.46)."
+      }
+    }
+  },
+  "pending_sources": {
+    "imerg": "Ingestion active in background. Dedicated retry tool (safety-forecast/src/ingest/retry_gpm_failures.py) ready for transient 503 errors. Will be sealed in rev5 snapshot upon completion."
+  },
+  "dynamic_audit_summary": {
+    "file_path": "C:\\Users\\bryan\\CampFreedivePH_Phase1_Final\\safety-forecast\\data\\snapshots\\2026-10-04_rev4\\era5_wind_pressure.parquet",
+    "total_rows": 52538,
+    "columns": [
+      "wind_u",
+      "wind_v",
+      "wind_speed",
+      "wind_gust",
+      "wind_dir",
+      "slp",
+      "era5_is_interpolated",
+      "is_provisional",
+      "era5t_revision_risk"
+    ],
+    "start_time_pht": "2020-10-01T08:00:00+08:00",
+    "end_time_pht": "2026-09-29T09:00:00+08:00",
+    "start_time_utc": "2020-10-01T00:00:00+00:00",
+    "end_time_utc": "2026-09-29T01:00:00+00:00",
+    "nominal_end_utc": "2026-09-30T23:00:00+00:00",
+    "nominal_total_hours": 52584,
+    "unreleased_trailing_hours": 46,
+    "missing_hours_realized": 0,
+    "total_nans": 0,
+    "column_nans": {
+      "wind_u": 0,
+      "wind_v": 0,
+      "wind_speed": 0,
+      "wind_gust": 0,
+      "wind_dir": 0,
+      "slp": 0,
+      "era5_is_interpolated": 0,
+      "is_provisional": 0,
+      "era5t_revision_risk": 0
+    },
+    "wind_speed_min_mean_max": [
+      0.01213107370425431,
+      3.805961548297174,
+      15.251896377084888
+    ],
+    "wind_gust_min_mean_max": [
+      1.4017810821533203,
+      7.988252929323903,
+      33.74884033203125
+    ],
+    "slp_min_mean_max_hpa": [
+      991.6779249127999,
+      1010.3477239536219,
+      1020.921854152
+    ],
+    "gust_ge_speed_violations": 0,
+    "deepest_slp_event": {
+      "pressure_hpa": 991.6779249127999,
+      "time_pht": "2022-10-29T14:00:00+08:00",
+      "time_utc": "2022-10-29T06:00:00+00:00",
+      "historical_cyclone_note": "Coincides with STS Paeng (2022-10-29); requires PAGASA/JMA best-track confirmation."
+    },
+    "max_gust_event": {
+      "gust_ms": 33.74884033203125,
+      "time_pht": "2020-10-26T12:00:00+08:00",
+      "time_utc": "2020-10-26T04:00:00+00:00",
+      "historical_cyclone_note": "Coincides with Typhoon Quinta (2020-10-26); requires PAGASA/JMA best-track confirmation."
+    },
+    "spatial_grid_representation": "Bilinear spatial interpolation over 0.25\u00b0 grid (~31 km resolution) across 4 land-sea mixed grid corners to (13.6874\u00b0N, 120.8931\u00b0E) with corner maximum gust",
+    "provisional_availability_rows": 120,
+    "era5t_revision_risk_rows": 2161
+  },
+  "governance_rules": {
+    "read_only": true,
+    "interim_access_prohibited": true,
+    "superseded_snapshots_note": "rev1, rev2, and rev3 are read-only and preserved for archival provenance. rev3 was superseded before any model training due to 2026-08 coordinate-asserted merge and formal addition of the era5t_revision_risk quarantine column.",
+    "era5t_refresh_plan": "ECMWF transitions ERA5T to final ERA5 reanalysis after ~2-3 months. A scheduled refresh is planned for ~December 2026 to re-download July-September 2026 in a single batch and issue a subsequent snapshot rev5. Since July-September 2026 is strictly located in the holdout test set (post-2025-09-30), this reanalysis revision does not alter model training splits.",
+    "dual_quarantine_policy": {
+      "availability_lag": "is_provisional flags the trailing 120 hours (5 days) ending at last observation for operational serving cutoff simulation.",
+      "reanalysis_revision_risk": "era5t_revision_risk flags the trailing ~90 days (2026-07-01 to 2026-09-29) where ERA5T provisional reanalysis is subject to monthly revisions by ECMWF. This period is part of the holdout evaluation set."
+    },
+    "physical_consistency_caveat": "gust >= speed check is mathematically favored by taking the maximum corner gust against vector-averaged bilinear speed, plus np.maximum lower bound. It does not replace in-situ ground-truth station validation.",
+    "squall_hazard_risk_warning": "ERA5 parameterized gust (0.25\u00b0 grid) does not resolve localized microscale convective squalls. A max gust of 33.75 m/s vs sustained speed of 15.25 m/s (ratio > 2.2x) reflects subgrid parametrization. Rigorous thresholding of 'squall event' must be defined before modeling to meet the PRD squall recall target (>= 80%).",
+    "storm_attribution_caveat": "Deepest SLP (991.68 hPa on 2022-10-29) and peak gust (33.75 m/s on 2020-10-26) temporally coincide with STS Paeng and Typhoon Quinta, but require formal PAGASA/JMA best-track distance cross-validation before claiming direct storm association.",
+    "model_tide_caveat": "Tidal velocities (utide, vtide) represent 1/12 degree numerical model physics at the 6.86 km offshore cell (13.6667N, 120.8333E), not an in-situ pier tide gauge."
+  }
+}
