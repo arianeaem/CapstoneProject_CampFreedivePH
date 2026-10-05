@@ -115,4 +115,20 @@ class ForecastQuantileScoringTest extends TestCase
         $this->assertGreaterThan(0.0, $score);
         $this->assertLessThanOrEqual(100.0, $score);
     }
+
+    public function test_hourly_tier_uses_weighted_score_and_does_not_use_high_gust_probability(): void
+    {
+        $result = $this->service->calculateTierAndLabel([
+            'hs' => ['source' => 'climatology', 'p50' => 0.40, 'p90' => 0.70],
+            'current_speed' => ['source' => 'climatology', 'p50' => 0.15, 'p90' => 0.30],
+            'wind_speed' => ['source' => 'climatology', 'p50' => 12.0],
+            'wind_gust' => ['source' => 'climatology', 'p50' => 18.0],
+            'p_high_gust' => 0.99,
+        ]);
+
+        $this->assertSame('Very Safe', $result['tier']);
+        $this->assertSame($result['score_details']['classification_from_weighted_score'], 'Very Safe');
+        $this->assertFalse($result['score_details']['p_high_gust_used']);
+        $this->assertFalse($result['score_details']['hard_gate_triggered']);
+    }
 }

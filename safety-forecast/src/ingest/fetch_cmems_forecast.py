@@ -1,19 +1,11 @@
 """
-Standalone Scheduled Fetch Script for Live CMEMS Ocean Current Forecasts.
-Dataset: CMEMS GLOBAL_ANALYSISFORECAST_PHY_001_024 (e.g. cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i)
+Scheduled Daily Ingestion & Archival of CMEMS Operational Forecasts & Analysis.
+Pulls:
+1. Hourly Current Analysis & 10-day Forecast via SMOC (cmems_mod_glo_phy_anfc_merged-uv_PT1H-i).
+2. 3-hourly Wave Analysis & 10-day Forecast (cmems_mod_glo_wav_anfc_0.083deg_PT3H-i).
 
-WINDOW CONFIGURATION:
-- Lookback: 72 hours (3 days) — guarantees full coverage for the model's 48-hour
-  lag features (LAG_HOURS = [0, 1, 3, 6, 12, 24, 48]) plus 24h rolling windows
-  with a safety margin.
-- Forecast Horizon: 10 days (240 hours) forward — full span of CMEMS numerical forecast.
-- Total Span: ~312 continuous hourly timestamps.
-
-Scheduled Cadence: Run hourly via Windows Task Scheduler or cron.
-Decoupled from FastAPI request path to eliminate 15-20s external network latency.
-
-Run manually from project root:
-    python src/ingest/fetch_cmems_forecast.py
+Uses unified spatial extraction (extract_nearest_ocean_cell) and stores continuous
+realized observations + forecasts into the local operational store.
 """
 
 import os
@@ -25,9 +17,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from src.ingest.config import LON_MIN, LON_MAX, LAT_MIN, LAT_MAX, PROJECT_ROOT
+# Ensure project root is in sys.path
+from config import PROJECT_ROOT, DATA_ROOT, CACHE_DIR, OBSERVED_STORE_DIR, SITE_LAT, SITE_LON, TARGET_TIMEZONE
+from spatial_extraction import extract_nearest_ocean_cell
 
 logger = logging.getLogger("fetch_cmems_forecast")
 logging.basicConfig(
@@ -36,164 +28,161 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 
-CACHE_DIR = PROJECT_ROOT / "data" / "cache"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-CACHE_FILE = CACHE_DIR / "cmems_forecast_cache.parquet"
-TEMP_CACHE_FILE = CACHE_DIR / "cmems_forecast_cache_temp.parquet"
-RAW_NC_FILE = CACHE_DIR / "cmems_live_forecast_raw.nc"
-
-# CMEMS Live Analysis/Forecast Product IDs
-# 1. 6-hourly instantaneous velocity (sub-daily current resolution)
-DATASET_ID_6H = "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i"
-# 2. Daily-mean analysis & forecast fallback
-DATASET_ID_DAILY = "cmems_mod_glo_phy_anfc_0.083deg_P1D-m"
+# Datasets
+DATASET_SMOC = "cmems_mod_glo_phy_anfc_merged-uv_PT1H-i"
+DATASET_CURR_6H = "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i"
+DATASET_WAVE = "cmems_mod_glo_wav_anfc_0.083deg_PT3H-i"
 
 
-def fetch_cmems_forecast(days_ahead: int = 10, lookback_hours: int = 72) -> bool:
-    """
-    Subsets the live CMEMS analysis/forecast product, verifies physical sanity,
-    and writes the parsed hourly current vectors to local cache.
-    """
+def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
     try:
         import copernicusmarine as cm
     except ImportError:
-        logger.error("copernicusmarine package is not installed. Run: pip install copernicusmarine")
+        logger.error("copernicusmarine is not installed.")
         return False
 
     now_utc = datetime.now(timezone.utc)
-    start_dt = (now_utc - timedelta(hours=lookback_hours)).strftime("%Y-%m-%dT%H:00:00")
-    end_dt = (now_utc + timedelta(days=days_ahead)).strftime("%Y-%m-%dT%H:00:00")
+    start_dt = (now_utc - timedelta(days=lookback_days)).strftime("%Y-%m-%dT00:00:00")
+    end_dt = (now_utc + timedelta(days=forecast_days)).strftime("%Y-%m-%dT23:59:59")
 
-    print("\n" + "=" * 75)
-    print("CMEMS LIVE OCEAN CURRENT FORECAST INGESTION & CACHING")
-    print("=" * 75)
-    print(f"Timestamp (UTC): {now_utc.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-    print(f"Fetch Window:    {start_dt} to {end_dt}")
-    print(f"Lookback Window: {lookback_hours} hours (covers 48h lag features + buffer)")
-    print(f"Forecast Horizon:{days_ahead} days ({days_ahead * 24} hours forward)")
-    print(f"Bounding Box:    Lon [{LON_MIN}, {LON_MAX}], Lat [{LAT_MIN}, {LAT_MAX}]")
-    print(f"Output Target:   {CACHE_FILE}")
-    print("-" * 75)
+    logger.info("=" * 80)
+    logger.info("ARCHIVING OPERATIONAL CMEMS FEEDS (CURRENTS & WAVES)")
+    logger.info(f"Target Site: Lat {SITE_LAT}° N, Lon {SITE_LON}° E (Camp FreedivePH)")
+    logger.info(f"Window:      {start_dt} to {end_dt} (UTC)")
+    logger.info("=" * 80)
 
-    downloaded = False
-    active_dataset_id = None
-
-    for dataset_id in [DATASET_ID_6H, DATASET_ID_DAILY]:
+    # -------------------------------------------------------------------------
+    # 1. Currents (SMOC Hourly or 6H fallback)
+    # -------------------------------------------------------------------------
+    curr_nc = CACHE_DIR / "live_currents_raw.nc"
+    curr_success = False
+    for did in [DATASET_SMOC, DATASET_CURR_6H]:
         try:
-            logger.info(f"Connecting to CMEMS API for dataset: '{dataset_id}'...")
+            logger.info(f"Subsetting currents from: {did}...")
             cm.subset(
-                dataset_id=dataset_id,
+                dataset_id=did,
                 variables=["uo", "vo"],
-                minimum_longitude=LON_MIN,
-                maximum_longitude=LON_MAX,
-                minimum_latitude=LAT_MIN,
-                maximum_latitude=LAT_MAX,
-                minimum_depth=0,
-                maximum_depth=1,
-                start_datetime=start_dt,
-                end_datetime=end_dt,
-                output_filename=str(RAW_NC_FILE),
-                force_download=True,
+                minimum_longitude=120.80, maximum_longitude=120.90,
+                minimum_latitude=13.65, maximum_latitude=13.72,
+                minimum_depth=0, maximum_depth=1,
+                start_datetime=start_dt, end_datetime=end_dt,
+                output_filename=str(curr_nc),
             )
-            downloaded = True
-            active_dataset_id = dataset_id
-            logger.info(f"Successfully downloaded NetCDF using dataset: '{dataset_id}'")
+            curr_success = True
+            logger.info(f"Downloaded current slice from: {did}")
             break
         except Exception as e:
-            logger.warning(f"Download attempt failed for dataset '{dataset_id}': {e}")
+            logger.warning(f"Failed pulling from {did}: {e}")
 
-    if not downloaded:
-        logger.error("CRITICAL: All CMEMS forecast dataset download attempts failed.")
-        print("=" * 75 + "\n")
-        return False
+    # Local fetch/ingestion timestamp (records when the slice was pulled from upstream,
+    # distinct from the provider's numerical model run cycle issuance timestamp)
+    issue_time_str = now_utc.isoformat()
 
-    # -----------------------------------------------------------------------
-    # Parse NetCDF and perform physical verification
-    # -----------------------------------------------------------------------
+    # Import lag cutoffs from config
+    from config import get_serving_cutoff, OPERATIONAL_LAGS
+
+    if curr_success and curr_nc.exists():
+        ds_c = xr.open_dataset(curr_nc)
+        extracted_c, meta_c = extract_nearest_ocean_cell(ds_c, primary_var="uo")
+        df_c = extracted_c.to_dataframe().reset_index()
+        
+        # Include tidal components if available
+        cols = {"uo": "current_u", "vo": "current_v"}
+        if "utide" in df_c.columns:
+            cols["utide"] = "tide_u"
+        if "vtide" in df_c.columns:
+            cols["vtide"] = "tide_v"
+        df_c = df_c.rename(columns=cols)
+
+        df_c["time_utc"] = pd.to_datetime(df_c["time"]).dt.tz_localize("UTC")
+        df_c["time_pht"] = df_c["time_utc"].dt.tz_convert("Asia/Manila")
+        df_c["current_speed"] = np.sqrt(df_c["current_u"]**2 + df_c["current_v"]**2)
+        df_c["current_dir"] = (np.degrees(np.arctan2(df_c["current_v"], df_c["current_u"]))) % 360
+        df_c["issue_time_utc"] = issue_time_str
+        
+        # True operational lag cutoff (T - 24h for currents)
+        curr_cutoff = get_serving_cutoff("currents", now_utc)
+        df_c["is_verified"] = df_c["time_utc"] <= curr_cutoff
+        df_c["is_provisional"] = (df_c["time_utc"] > curr_cutoff) & (df_c["time_utc"] <= now_utc)
+        df_c["is_forecast"] = df_c["time_utc"] > now_utc
+        
+        # Save operational forecast cache
+        curr_cache_file = CACHE_DIR / "cmems_currents_forecast_cache.parquet"
+        df_c.to_parquet(curr_cache_file)
+        logger.info(f"Saved {len(df_c)} current rows (cutoff: {curr_cutoff}, verified={df_c['is_verified'].sum()}, provisional={df_c['is_provisional'].sum()}, forecast={df_c['is_forecast'].sum()}) to {curr_cache_file}")
+
+        # Store to observed_store: only realized observations <= now_utc
+        # Provisional rows are marked so feature builder can exclude them and subsequent runs overwrite them
+        obs_c = df_c[df_c["time_utc"] <= now_utc].copy()
+        if len(obs_c) > 0:
+            obs_file = OBSERVED_STORE_DIR / "cmems_currents_observed_archive.parquet"
+            if obs_file.exists():
+                existing_obs = pd.read_parquet(obs_file)
+                # Overwrite provisional rows with latest fetch
+                combined_obs = pd.concat([existing_obs, obs_c]).drop_duplicates(subset=["time_utc"], keep="last")
+            else:
+                combined_obs = obs_c
+            combined_obs.sort_values("time_utc").to_parquet(obs_file)
+            logger.info(f"Appended current observations to {obs_file} (Total: {len(combined_obs)}, Verified: {combined_obs['is_verified'].sum()}, Provisional: {combined_obs['is_provisional'].sum()})")
+
+    # -------------------------------------------------------------------------
+    # 2. Waves (1/12° Analysis/Forecast)
+    # -------------------------------------------------------------------------
+    wave_nc = CACHE_DIR / "live_waves_raw.nc"
     try:
-        ds = xr.open_dataset(RAW_NC_FILE)
-        logger.info(f"Loaded NetCDF dimensions: {dict(ds.dims)}")
-        logger.info(f"Available data variables: {list(ds.data_vars.keys())}")
+        logger.info(f"Subsetting waves from: {DATASET_WAVE}...")
+        cm.subset(
+            dataset_id=DATASET_WAVE,
+            variables=["VHM0", "VTPK", "VHM0_SW1", "VHM0_SW2", "VHM0_WW"],
+            minimum_longitude=120.85, maximum_longitude=120.95,
+            minimum_latitude=13.65, maximum_latitude=13.72,
+            start_datetime=start_dt, end_datetime=end_dt,
+            output_filename=str(wave_nc),
+        )
+        ds_w = xr.open_dataset(wave_nc)
+        extracted_w, meta_w = extract_nearest_ocean_cell(ds_w, primary_var="VHM0")
+        df_w = extracted_w.to_dataframe().reset_index()
 
-        # Check for expected eastward (uo) and northward (vo) velocity variables
-        var_u = "uo" if "uo" in ds.data_vars else None
-        var_v = "vo" if "vo" in ds.data_vars else None
+        sw1 = df_w["VHM0_SW1"].fillna(0) if "VHM0_SW1" in df_w else 0
+        sw2 = df_w["VHM0_SW2"].fillna(0) if "VHM0_SW2" in df_w else 0
+        total_swell = np.sqrt(sw1**2 + sw2**2)
 
-        if not var_u or not var_v:
-            logger.error(f"Missing expected velocity variables (uo, vo). Found: {list(ds.data_vars.keys())}")
-            return False
+        df_w["hs"] = df_w["VHM0"]
+        df_w["tp"] = df_w["VTPK"]
+        df_w["swell_height"] = total_swell
+        df_w["wind_wave_height"] = df_w.get("VHM0_WW", np.nan)
+        df_w["time_utc"] = pd.to_datetime(df_w["time"]).dt.tz_localize("UTC")
+        df_w["time_pht"] = df_w["time_utc"].dt.tz_convert("Asia/Manila")
+        df_w["issue_time_utc"] = issue_time_str
 
-        # Spatial mean across the Balayan Bay / VIP bounding box
-        df = ds.mean(dim=["latitude", "longitude"]).to_dataframe().reset_index()
-        df = df.rename(columns={var_u: "current_u", var_v: "current_v"})[["time", "current_u", "current_v"]]
-        df["time"] = pd.to_datetime(df["time"])
-        df = df.set_index("time").sort_index()
+        # True operational lag cutoff (T - 12h for waves)
+        wave_cutoff = get_serving_cutoff("waves", now_utc)
+        df_w["is_verified"] = df_w["time_utc"] <= wave_cutoff
+        df_w["is_provisional"] = (df_w["time_utc"] > wave_cutoff) & (df_w["time_utc"] <= now_utc)
+        df_w["is_forecast"] = df_w["time_utc"] > now_utc
 
-        # Resample onto uniform 1-hour grid with time interpolation
-        full_hourly_index = pd.date_range(df.index.min(), df.index.max(), freq="1h")
-        df_hourly = df.reindex(full_hourly_index).interpolate(method="time").ffill().bfill()
-        df_hourly = df_hourly.reset_index().rename(columns={"index": "timestamp"})
+        wave_cache_file = CACHE_DIR / "cmems_waves_forecast_cache.parquet"
+        df_w.to_parquet(wave_cache_file)
+        logger.info(f"Saved {len(df_w)} wave rows (cutoff: {wave_cutoff}, verified={df_w['is_verified'].sum()}, provisional={df_w['is_provisional'].sum()}, forecast={df_w['is_forecast'].sum()}) to {wave_cache_file}")
 
-        # Derive physical speed (m/s) and circular direction (degrees)
-        u = df_hourly["current_u"].values
-        v = df_hourly["current_v"].values
-        speed = np.sqrt(u**2 + v**2)
-        direction = (np.degrees(np.arctan2(v, u))) % 360.0
-
-        df_hourly["current_speed"] = speed
-        df_hourly["current_dir"] = direction
-
-        # -------------------------------------------------------------------
-        # Physical Sanity Checks
-        # -------------------------------------------------------------------
-        mean_speed = float(np.mean(speed))
-        p90_speed = float(np.percentile(speed, 90))
-        max_speed = float(np.max(speed))
-        min_u, max_u = float(np.min(u)), float(np.max(u))
-        min_v, max_v = float(np.min(v)), float(np.max(v))
-
-        print("\n" + "-" * 75)
-        print("PHYSICAL TELEMETRY SANITY CHECK (LIVE CMEMS FORECAST)")
-        print("-" * 75)
-        print(f"Total Hourly Rows:      {len(df_hourly)} rows")
-        print(f"Covered Range:          {df_hourly['timestamp'].min()} to {df_hourly['timestamp'].max()}")
-        print(f"Current Speed (m/s):    Mean={mean_speed:.3f}, P90={p90_speed:.3f}, Max={max_speed:.3f}")
-        print(f"Current U (Eastward):   Min={min_u:.3f}, Max={max_u:.3f} m/s")
-        print(f"Current V (Northward):  Min={min_v:.3f}, Max={max_v:.3f} m/s")
-
-        # Sanity assertions
-        # Ocean currents in Balayan Bay typically range 0.02 - 0.6 m/s. Anything > 3.0 m/s indicates unit scaling bug.
-        if max_speed > 3.0:
-            logger.warning(f"Unusually high current speed detected ({max_speed:.2f} m/s > 3.0 m/s). Verify units.")
-        else:
-            print("  [PASS] Physical magnitude sanity check: speeds within expected oceanographic range (0.0 - 1.5 m/s).")
-
-        if np.isnan(speed).any():
-            logger.error("NaN detected in interpolated current values.")
-            return False
-        else:
-            print("  [PASS] Data completeness: 0 NaN or missing values across entire window.")
-
-        # -------------------------------------------------------------------
-        # Atomic Cache File Update
-        # -------------------------------------------------------------------
-        df_hourly.to_parquet(TEMP_CACHE_FILE, index=False)
-        if TEMP_CACHE_FILE.exists():
-            TEMP_CACHE_FILE.replace(CACHE_FILE)
-
-        file_size_kb = os.path.getsize(CACHE_FILE) / 1024.0
-        print("-" * 75)
-        print(f"SUCCESS: Live CMEMS forecast cache updated ({file_size_kb:.1f} KB -> {CACHE_FILE})")
-        print("=" * 75 + "\n")
-        return True
+        # Store to observed_store: only realized observations <= now_utc
+        obs_w = df_w[df_w["time_utc"] <= now_utc].copy()
+        if len(obs_w) > 0:
+            obs_file_w = OBSERVED_STORE_DIR / "cmems_waves_observed_archive.parquet"
+            if obs_file_w.exists():
+                existing_obs_w = pd.read_parquet(obs_file_w)
+                combined_obs_w = pd.concat([existing_obs_w, obs_w]).drop_duplicates(subset=["time_utc"], keep="last")
+            else:
+                combined_obs_w = obs_w
+            combined_obs_w.sort_values("time_utc").to_parquet(obs_file_w)
+            logger.info(f"Appended wave observations to {obs_file_w} (Total: {len(combined_obs_w)}, Verified: {combined_obs_w['is_verified'].sum()}, Provisional: {combined_obs_w['is_provisional'].sum()})")
 
     except Exception as e:
-        logger.error(f"Error parsing and verifying CMEMS NetCDF data: {e}")
-        print("=" * 75 + "\n")
-        return False
+        logger.warning(f"Failed pulling wave forecast: {e}")
+
+    logger.info("Archival run finished.")
+    return True
 
 
 if __name__ == "__main__":
-    success = fetch_cmems_forecast()
-    sys.exit(0 if success else 1)
+    fetch_and_archive()

@@ -1,0 +1,22 @@
+{
+  "freeze_date": "2026-10-05",
+  "git_tag": "forecast-freeze-2026-10-05",
+  "git_tag_points_to": "495421a",
+  "working_tree_dirty_at_tag_time": true,
+  "model_version": "2.0.0",
+  "feature_manifest_version": "1.1",
+  "data_snapshot": "2026-10-04_rev4",
+  "data_snapshot_manifest_sha256": "4764EF9A3957AC00599403B4C4009FCA54B508C2405C1FFC2956FF7D8838FF94",
+  "operational_store_refreshed_at": "2026-10-05 00:04:21.493245+08:00",
+  "operational_store_sha256": "AD208FDEA25BD64B897993A26A6C55A7A73F64E6A620DE9C466F40DAC4479FA6",
+  "database_backup": {
+    "type": "logical-json-data-export",
+    "path": "camp-freedive-ph/storage/app/private/db-backups/2026-10-05_pre_forecast_freeze.json",
+    "sha256": "53C194896E262A70EA923E47AAE7081C5C270D92C040E28F1C4E1CDE00FAB6B0",
+    "bytes": 1709971
+  },
+  "rollback": {
+    "forecast_source": "legacy",
+    "environment_setting": "FORECAST_SOURCE=legacy"
+  }
+}

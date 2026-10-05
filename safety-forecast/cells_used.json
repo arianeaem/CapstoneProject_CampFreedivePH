@@ -1,0 +1,81 @@
+{
+  "target_site": {
+    "name": "Camp FreedivePH (Bagalangit / Mainit Point, Mabini, Batangas)",
+    "latitude": 13.6874,
+    "longitude": 120.8931,
+    "timezone": "Asia/Manila"
+  },
+  "cmems_wave": {
+    "operational_analysis_product": {
+      "product_id": "GLOBAL_ANALYSISFORECAST_WAV_001_027",
+      "dataset_id": "cmems_mod_glo_wav_anfc_0.083deg_PT3H-i",
+      "grid_resolution": "0.083 deg (1/12 deg)",
+      "cell_center": {
+        "latitude": 13.6667,
+        "longitude": 120.9167
+      },
+      "distance_km": 3.43,
+      "is_land_masked": false,
+      "geographic_location": "Sheltered Maricaban Strait channel immediately south of Bagalangit Point."
+    },
+    "historical_reanalysis_product": {
+      "product_id": "GLOBAL_MULTIYEAR_WAV_001_032",
+      "dataset_id": "cmems_mod_glo_wav_my_0.2deg_PT3H-i",
+      "grid_resolution": "0.20 deg",
+      "cell_center": {
+        "latitude": 13.6000,
+        "longitude": 120.8000
+      },
+      "distance_km": 13.99,
+      "is_land_masked": false,
+      "geographic_location": "Open water of Verde Island Passage / Balayan Bay outer approach (~14 km southwest of site)."
+    },
+    "grid_mismatch_note": "The 0.2 deg reanalysis cell sits in unsheltered open water 14 km away, causing wave heights to run higher than the sheltered Anilao shore. The 1/12 deg analysis cell sits 3.4 km away directly in the strait."
+  },
+  "cmems_currents": {
+    "product_id": "GLOBAL_ANALYSISFORECAST_PHY_001_024",
+    "dataset_id": "cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i",
+    "dataset_id_hourly_smoc": "cmems_mod_glo_phy_anfc_merged-uv_PT1H-i",
+    "grid_resolution": "0.083 deg (1/12 deg)",
+    "extraction_method": "nearest_non_nan_ocean_cell",
+    "cell_center": {
+      "latitude": 13.6667,
+      "longitude": 120.8333
+    },
+    "distance_km": 6.86,
+    "is_land_masked": false,
+    "geographic_location": "Balayan Bay entrance / Northwest passage off Maricaban Island (6.86 km west of site).",
+    "geographic_caveat": "In the GLORYS 1/12 deg physics grid, cell (13.6667, 120.9167) is classified as land by Maricaban Island. The nearest open water cell (13.6667, 120.8333) sits on the Balayan Bay approach, capturing open-channel exchange currents rather than the sheltered cove eddy. UI wording must clarify that current speeds reflect this exposed western approach."
+  },
+  "era5_atmosphere": {
+    "product": "ECMWF ERA5 Reanalysis",
+    "grid_resolution": "0.25 deg",
+    "extraction_method": "2d_bilinear_u_v_msl_with_peak_preserving_max_corner_gust",
+    "interpolated_point": {
+      "latitude": 13.6874,
+      "longitude": 120.8931
+    },
+    "gust_methodology": "Maximum of 4 surrounding corners to prevent convective squall peak attenuation.",
+    "surrounding_grid_corners": [
+      {"position": "NW", "latitude": 13.75, "longitude": 120.75},
+      {"position": "NE", "latitude": 13.75, "longitude": 121.00},
+      {"position": "SW", "latitude": 13.50, "longitude": 120.75},
+      {"position": "SE", "latitude": 13.50, "longitude": 121.00}
+    ]
+  },
+  "gpm_precipitation": {
+    "product": "NASA GPM IMERG Final Run V07B",
+    "grid_resolution": "0.10 deg",
+    "extraction_method": "bilinear_interpolation",
+    "interpolated_point": {
+      "latitude": 13.6874,
+      "longitude": 120.8931
+    },
+    "nearest_cell_center": {
+      "latitude": 13.6500,
+      "longitude": 120.8500
+    },
+    "distance_km": 6.24,
+    "source_archive_end_date": "2025-09-30 (Day 273 of 2025, verified via GES DISC OPeNDAP directory listing)"
+  }
+}

@@ -79,19 +79,29 @@ class WeatherSafetyService
                 ];
             }
 
-                $reliability = $assessment['reliability'] ?? WeatherForecastService::getReliabilityCategory($daysOut);
+            $relObj = $assessment['reliability'] ?? WeatherForecastService::getReliabilityCategory($daysOut);
+            $reliability = is_array($relObj) ? ($relObj['label'] ?? 'Moderate') : (string)$relObj;
             $confidence = $assessment['confidence'] ?? ($daysOut >= 4 ? 'low' : 'high');
             $rawAdvisory = $assessment['confidence_advisory'] ?? ($confidence === 'low' ? "Confidence is low this far out, recheck in 2 days." : null);
             $confidenceAdvisory = $rawAdvisory ? preg_replace('/^(Very Safe|Safe|Moderate|High Risk|Critical Risk)[\.\:\-]\s*/i', '', $rawAdvisory) : null;
+            $seasonalEstimate = ($day1['seasonal_estimate'] ?? false)
+                && ($day2['seasonal_estimate'] ?? false);
 
             $formattedDescription = $riskConfig['description'];
 
             return [
                 'is_benchmark' => false,
-                'risk_level' => $riskLevel,
-                'overall_classification' => $overallClass,
-                'confidence' => $confidence,
+                'risk_level' => $seasonalEstimate ? 'seasonal' : $riskLevel,
+                'overall_classification' => $seasonalEstimate ? null : $overallClass,
+                'confidence' => $seasonalEstimate ? 'seasonal' : $confidence,
+                'reliability' => $seasonalEstimate ? 'Seasonal estimate' : ($assessment['reliability'] ?? null),
                 'confidence_advisory' => $confidenceAdvisory,
+                'is_seasonal_estimate' => $seasonalEstimate,
+                'historical_replay' => $assessment['historical_replay'] ?? false,
+                'historical_replay_label' => $assessment['historical_replay_label'] ?? null,
+                'evaluating_engine' => $assessment['evaluating_engine'] ?? 'prd_site_forecast',
+                'data_source' => $assessment['data_source'] ?? null,
+                'engines' => $assessment['engines'] ?? null,
                 'title' => $riskConfig['title'],
                 'badge_color' => $riskConfig['badge_color'],
                 'border_color' => $riskConfig['border_color'],
@@ -99,26 +109,26 @@ class WeatherSafetyService
                 'text_color' => $riskConfig['text_color'],
                 'icon' => $riskConfig['icon'],
                 'description' => $formattedDescription,
-                'is_bookable' => $riskLevel !== 'critical_risk',
+                'is_bookable' => $seasonalEstimate || $riskLevel !== 'critical_risk',
                 'has_storm_signal' => $riskLevel === 'critical_risk',
                 'days_out' => $daysOut,
                 'reliability' => $reliability,
-                'day1' => [
+                'day1' => array_merge($day1, [
                     'date' => $start->format('M d, Y'),
                     'classification' => $day1['classification'] ?? 'Safe',
                     'confidence' => $day1['confidence'] ?? $confidence,
                     'confidence_advisory' => $day1['confidence_advisory'] ?? $confidenceAdvisory,
                     'recommended_action' => $day1['recommended_action'] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $day1['worst_hour'] ?? '11:00 AM',
-                ],
-                'day2' => [
+                ]),
+                'day2' => array_merge($day2, [
                     'date' => $end->format('M d, Y'),
                     'classification' => $day2['classification'] ?? 'Safe',
                     'confidence' => $day2['confidence'] ?? $confidence,
                     'confidence_advisory' => $day2['confidence_advisory'] ?? $confidenceAdvisory,
                     'recommended_action' => $day2['recommended_action'] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $day2['worst_hour'] ?? '11:00 AM',
-                ],
+                ]),
                 'suggested_dates' => $suggestedDates,
                 'location' => 'Mabini / Anilao, Batangas',
             ];
@@ -129,28 +139,57 @@ class WeatherSafetyService
         $riskConfig = $this->getRiskConfig('safe');
         return [
             'is_benchmark' => true,
+            'is_seasonal_estimate' => true,
             'risk_level' => 'safe',
             'overall_classification' => 'Safe',
+            'confidence' => 'low',
+            'confidence_advisory' => 'Seasonal climatological baseline for advance planning. Operational models update as trip approaches.',
             'title' => 'Booking Open (Standard Season Benchmark)',
             'badge_color' => $riskConfig['badge_color'],
             'border_color' => $riskConfig['border_color'],
             'bg_color' => $riskConfig['bg_color'],
             'text_color' => $riskConfig['text_color'],
             'icon' => $riskConfig['icon'],
-            'description' => 'Dates beyond 16 days use historical climate benchmarks. Live Open-Meteo marine and meteorological radar models evaluate high-resolution conditions 16 days prior to departure.',
+            'description' => 'Seasonal estimate: typical conditions for this time of year. Historical climatological baseline active; live models evaluate 16 days prior to departure.',
             'is_bookable' => true,
             'has_storm_signal' => false,
+            'days_out' => $daysOut,
+            'reliability' => 'Seasonal Baseline',
             'day1' => [
                 'date' => $start->format('M d, Y'),
                 'classification' => 'Safe',
+                'confidence' => 'low',
+                'confidence_advisory' => 'Advance seasonal baseline',
                 'recommended_action' => 'Conditions are generally safe, but normal safety protocols should still be followed.',
-                'worst_hour' => 'N/A',
+                'worst_hour' => 'Daylight Baseline',
+                'wave_height_m' => 0.35,
+                'current_speed_ms' => 0.30,
+                'wind_speed_kmh' => 15.0,
+                'wind_speed_ms' => 4.2,
+                'wind_gust_kmh' => 22.0,
+                'wind_gust_ms' => 6.1,
+                'rain_daily_mm' => 3.5,
+                'rain_label' => 'Light Rain',
+                'p_wet' => 0.45,
+                'p_high_gust' => 0.05,
             ],
             'day2' => [
                 'date' => $end->format('M d, Y'),
                 'classification' => 'Safe',
+                'confidence' => 'low',
+                'confidence_advisory' => 'Advance seasonal baseline',
                 'recommended_action' => 'Conditions are generally safe, but normal safety protocols should still be followed.',
-                'worst_hour' => 'N/A',
+                'worst_hour' => 'Daylight Baseline',
+                'wave_height_m' => 0.35,
+                'current_speed_ms' => 0.30,
+                'wind_speed_kmh' => 15.0,
+                'wind_speed_ms' => 4.2,
+                'wind_gust_kmh' => 22.0,
+                'wind_gust_ms' => 6.1,
+                'rain_daily_mm' => 3.5,
+                'rain_label' => 'Light Rain',
+                'p_wet' => 0.45,
+                'p_high_gust' => 0.05,
             ],
             'suggested_dates' => [],
             'location' => 'Mabini / Anilao, Batangas',
