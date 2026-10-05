@@ -92,7 +92,7 @@ class WeatherForecastService
     /**
      * Determine Forecast Reliability Category based on Lead Time Horizon.
      *
-     * Range         | Reliability Category      | Operational Impact
+     * Range         | Reliability Category   | Operational Impact
      * Days 1-3      | High Reliability       | Highly actionable. Use directly for operational safety window greenlighting.
      * Days 4-7      | Medium Reliability     | Excellent for spotting long-range trends, shifting winds, or monsoon setups.
      * Days 8-16     | Low Reliability        | Climatological trend only. Do not use for safety-critical go/no-go logic.
@@ -1496,9 +1496,6 @@ class WeatherForecastService
      */
     public function updateAllForecasts(int $forecastDays = 16): array
     {
-        $today = Carbon::today(self::TIMEZONE);
-        $startDateStr = $today->format('Y-m-d');
-        $endDateStr = $today->copy()->addDays($forecastDays - 1)->format('Y-m-d');
         $cachedContinuous = Cache::get('forecast:continuous_16d');
 
         // 1. Fetch 16-Day Marine Forecast in a single API call through rate-controlled ExternalApiClient
@@ -1508,8 +1505,7 @@ class WeatherForecastService
                     'latitude' => config('forecast.site_lat', self::LATITUDE),
                     'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
-                    'start_date' => $startDateStr,
-                    'end_date' => $endDateStr,
+                    'forecast_days' => $forecastDays,
                     'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity',
                 ],
                 'timeout' => 10,
@@ -1528,8 +1524,9 @@ class WeatherForecastService
                     'latitude' => config('forecast.site_lat', self::LATITUDE),
                     'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
-                    'start_date' => $startDateStr,
-                    'end_date' => $endDateStr,
+                    // forecast_days instead of start/end dates: Open-Meteo validates dates against UTC,
+                    // so a Manila-based end_date is rejected (HTTP 400) between 00:00 and 08:00 PHT.
+                    'forecast_days' => $forecastDays,
                     'hourly' => 'precipitation,rain,showers,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m',
                 ],
                 'timeout' => 10,
