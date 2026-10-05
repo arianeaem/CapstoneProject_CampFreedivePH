@@ -8,7 +8,7 @@ use App\Services\Analytics\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class ReportsController extends Controller
 {
@@ -46,9 +46,9 @@ class ReportsController extends Controller
     }
 
     /**
-     * Stream CSV export for the selected dataset and date range.
+     * Download the Excel (.xlsx) export for the selected report and date range.
      */
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request): Response
     {
         $user = Auth::user();
         $isOwner = ($user->role === 'owner');
@@ -60,7 +60,7 @@ class ReportsController extends Controller
 
         $range = $this->analyticsService->resolveDateRange($preset, $customStart, $customEnd);
 
-        return $this->exportService->streamCsv($type, $range, $isOwner);
+        return $this->exportService->download($type, $range, $isOwner);
     }
 
     /**

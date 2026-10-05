@@ -47,6 +47,42 @@ class AnalyticsService
         return 'going';
     }
 
+    /** Plain-language booking status shared by the report screen, print summary and exports. */
+    public static function bookingStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'reschedule_requested' => 'Asked to reschedule',
+            'cancellation_requested' => 'Asked to cancel',
+            default => match (self::bookingGroup($status)) {
+                'completed' => 'Finished trip',
+                'waiting' => 'Waiting for downpayment',
+                'cancelled' => 'Cancelled',
+                'no_show' => 'No-show',
+                default => 'Paid & going',
+            },
+        };
+    }
+
+    public static function batchStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'completed' => 'Finished',
+            'cancelled', 'cancelled_by_camp' => 'Cancelled',
+            'full' => 'Full',
+            'confirmed' => 'Confirmed',
+            default => 'Open for booking',
+        };
+    }
+
+    public static function swimLabel(?string $status): string
+    {
+        return match (self::swimGroup($status)) {
+            'cannot_swim' => "Can't swim",
+            'strong' => 'Strong swimmer',
+            default => 'Can swim',
+        };
+    }
+
     /** Swimming ability buckets: every participant lands in exactly one. */
     public static function swimGroup(?string $status): string
     {

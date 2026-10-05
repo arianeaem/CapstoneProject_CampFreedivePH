@@ -126,16 +126,28 @@ class ReportsAndAnalyticsTest extends TestCase
         $responseCustom->assertSee('₱2,000.00');
     }
 
-    public function test_csv_export_streams_proper_csv_content(): void
+    public function test_exports_download_branded_excel_workbooks(): void
     {
-        $response = $this->actingAs($this->owner)->get('/owner/reports/export?type=revenue&preset=this_month');
+        foreach (['revenue' => 'Monthly/Yearly Total Revenue and Growth (%)', 'bookings' => 'Where every booking stands', 'batches' => 'Batches at a glance'] as $type => $section) {
+            $response = $this->actingAs($this->owner)->get("/owner/reports/export?type={$type}&preset=this_month");
 
-        $response->assertStatus(200);
-        $this->assertEquals('text/csv; charset=UTF-8', $response->headers->get('content-type'));
-        $this->assertStringContainsString('attachment; filename=', $response->headers->get('content-disposition'));
-        $this->assertStringContainsString('revenue-', $response->headers->get('content-disposition'));
-        $this->assertStringContainsString('Monthly/Yearly Total Revenue and Growth (%)', $response->streamedContent());
-        $this->assertStringContainsString('Quota/Breakeven', $response->streamedContent());
+            $response->assertStatus(200);
+            $this->assertEquals('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $response->headers->get('content-type'));
+            $this->assertStringContainsString("{$type}-", $response->headers->get('content-disposition'));
+            $this->assertStringContainsString('.xlsx', $response->headers->get('content-disposition'));
+
+            $xlsx = $response->getContent();
+            $this->assertStringStartsWith("PK", $xlsx);
+            $this->assertStringContainsString($section, $xlsx);
+        }
+
+        $this->assertStringContainsString('Quota/Breakeven', $this->actingAs($this->owner)->get('/owner/reports/export?type=revenue&preset=this_month')->getContent());
+    }
+
+    public function test_admin_cannot_export_revenue(): void
+    {
+        $this->actingAs($this->admin)->get('/admin/reports/export?type=revenue&preset=this_month')->assertStatus(403);
+        $this->actingAs($this->admin)->get('/admin/reports/export?type=bookings&preset=this_month')->assertStatus(200);
     }
 
     public function test_print_summary_renders_properly(): void
@@ -143,7 +155,10 @@ class ReportsAndAnalyticsTest extends TestCase
         $response = $this->actingAs($this->owner)->get('/owner/reports/print?preset=this_month');
 
         $response->assertStatus(200);
-        $response->assertSee('Executive', false);
-        $response->assertSee('Key Performance Indicators');
+        $response->assertSee('Reports summary');
+        $response->assertSee('At a glance');
+        $response->assertSee('Where every booking stands');
+        // Only prints by itself when opened directly, so the Reports page's frame prints once
+        $response->assertSee('if (window.self === window.top) window.print()', false);
     }
 }

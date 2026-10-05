@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Requests\Admin\Pricing\UpdatePricingRuleRequest;
 use App\Http\Controllers\Controller;
 use App\Models\BookingPriceAdjustment;
 use App\Models\PricingRule;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Pricing\StorePricingRuleRequest;
 
 class PricingRuleController extends Controller
 {
@@ -73,34 +75,9 @@ class PricingRuleController extends Controller
     /**
      * Store newly created pricing rule.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StorePricingRuleRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:pricing_rules,name',
-            'description' => 'nullable|string|max:1000',
-            'rule_type' => 'required|in:demand,seasonality,lead_time',
-            'condition_operator' => 'nullable|required_if:rule_type,lead_time|in:<=,>=,<,>,==',
-            'condition_value' => [
-                'required',
-                'string',
-                function ($attribute, $value, $fail) use ($request) {
-                    $type = $request->input('rule_type');
-                    if ($type === 'demand' && !in_array($value, ['high', 'medium', 'low'])) {
-                        $fail('The selected demand level is invalid. Must be High, Medium, or Low.');
-                    } elseif ($type === 'seasonality' && !in_array($value, ['peak', 'shoulder', 'off_peak'])) {
-                        $fail('The selected season is invalid. Must be Peak, Shoulder, or Off-Peak.');
-                    } elseif ($type === 'lead_time' && (!is_numeric($value) || (int)$value < 0)) {
-                        $fail('The lead time days must be a non-negative number.');
-                    }
-                }
-            ],
-            'applies_to' => 'required|in:all,discovery,fundive,refinement',
-            'adjustment_type' => 'required|in:increase,decrease',
-            'adjustment_method' => 'required|in:percentage,fixed',
-            'adjustment_value' => 'required|numeric|min:0.01|max:50000',
-            'priority' => 'nullable|integer|min:1|max:999',
-            'status' => 'required|in:active,inactive',
-        ]);
+        $validated = $request->validated();
 
         $validated['priority'] = $validated['priority'] ?? 1;
         $validated['created_by'] = Auth::id();
@@ -130,39 +107,9 @@ class PricingRuleController extends Controller
     /**
      * Update an existing pricing rule.
      */
-    public function update(Request $request, PricingRule $rule): RedirectResponse
+    public function update(UpdatePricingRuleRequest $request, PricingRule $rule): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('pricing_rules')->ignore($rule->id),
-            ],
-            'description' => 'nullable|string|max:1000',
-            'rule_type' => 'required|in:demand,seasonality,lead_time',
-            'condition_operator' => 'nullable|required_if:rule_type,lead_time|in:<=,>=,<,>,==',
-            'condition_value' => [
-                'required',
-                'string',
-                function ($attribute, $value, $fail) use ($request) {
-                    $type = $request->input('rule_type');
-                    if ($type === 'demand' && !in_array($value, ['high', 'medium', 'low'])) {
-                        $fail('The selected demand level is invalid.');
-                    } elseif ($type === 'seasonality' && !in_array($value, ['peak', 'shoulder', 'off_peak'])) {
-                        $fail('The selected season is invalid.');
-                    } elseif ($type === 'lead_time' && (!is_numeric($value) || (int)$value < 0)) {
-                        $fail('The lead time days must be a non-negative number.');
-                    }
-                }
-            ],
-            'applies_to' => 'required|in:all,discovery,fundive,refinement',
-            'adjustment_type' => 'required|in:increase,decrease',
-            'adjustment_method' => 'required|in:percentage,fixed',
-            'adjustment_value' => 'required|numeric|min:0.01|max:50000',
-            'priority' => 'nullable|integer|min:1|max:999',
-            'status' => 'required|in:active,inactive',
-        ]);
+        $validated = $request->validated();
 
         $validated['priority'] = $validated['priority'] ?? 1;
 

@@ -383,7 +383,7 @@
                          x-transition:leave="transition ease-in duration-100 transform"
                          x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                          x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                         class="absolute right-0 mt-2 w-64 bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-3.5 z-50 space-y-3">
+                         class="popover-panel absolute right-0 mt-2 space-y-3">
                         
                         <!-- User Information -->
                         <div class="flex items-center gap-3 pb-3 border-b border-[#E5E5EA]">

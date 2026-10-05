@@ -26,7 +26,7 @@
                 <div x-show="customOpen" 
                      @click.away="customOpen = false" 
                      x-cloak 
-                     class="absolute left-0 sm:left-auto sm:right-0 mt-2 w-72 max-w-[calc(100vw-48px)] bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-xl z-30 space-y-3">
+                     class="popover-panel absolute left-0 sm:left-auto sm:right-0 mt-2 space-y-3">
                     <h4 class="text-sm font-bold text-[#1D1D1F]">Select Custom Date Range</h4>
                     <form method="GET" action="{{ auth()->user()->isOwner() ? route('owner.reports.index') : route('admin.reports.index') }}" class="space-y-2.5">
                         <input type="hidden" name="preset" value="custom">

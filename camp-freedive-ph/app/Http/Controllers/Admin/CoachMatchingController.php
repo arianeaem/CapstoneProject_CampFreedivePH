@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Requests\Admin\Coaches\AssignCoachesRequest;
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
 use App\Models\BookingParticipant;
@@ -16,6 +17,9 @@ use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Coaches\UnassignCoachRequest;
+use App\Http\Requests\Admin\Coaches\BroadcastOpeningRequest;
+use App\Http\Requests\Admin\Coaches\BulkApproveCoachRequestsRequest;
 
 class CoachMatchingController extends Controller
 {
@@ -164,14 +168,10 @@ class CoachMatchingController extends Controller
     /**
      * Batch Assignment: Assign one or multiple coaches to a batch.
      */
-    public function batchAssign(Request $request): RedirectResponse
+    public function batchAssign(AssignCoachesRequest $request): RedirectResponse
     {
         if ($request->has('assignments')) {
-            $validated = $request->validate([
-                'batch_id' => 'required|exists:batches,id',
-                'assignments' => 'required|array|min:1',
-                'exception_note' => 'nullable|string|max:500',
-            ]);
+            $validated = $request->validated();
 
             try {
                 $batch = Batch::findOrFail($validated['batch_id']);
@@ -209,16 +209,11 @@ class CoachMatchingController extends Controller
     /**
      * Assign selected coach(es) to a batch.
      */
-    public function assign(Request $request): RedirectResponse
+    public function assign(AssignCoachesRequest $request): RedirectResponse
     {
         // Support legacy single-student assignment if participant_ids provided
         if ($request->has('participant_ids')) {
-            $validated = $request->validate([
-                'participant_ids' => 'required|array|min:1',
-                'participant_ids.*' => 'exists:booking_participants,id',
-                'coach_id' => 'required|exists:users,id',
-                'batch_id' => 'required|exists:batches,id',
-            ]);
+            $validated = $request->validated();
 
             try {
                 $coach = User::findOrFail($validated['coach_id']);
@@ -242,12 +237,7 @@ class CoachMatchingController extends Controller
         }
 
         // New clean Batch Coach Assignment
-        $validated = $request->validate([
-            'batch_id' => 'required|exists:batches,id',
-            'coach_ids' => 'nullable|array',
-            'coach_ids.*' => 'exists:users,id',
-            'coach_id' => 'nullable|exists:users,id',
-        ]);
+        $validated = $request->validated();
 
         $batch = Batch::findOrFail($validated['batch_id']);
         if ($batch->total_participants_count === 0) {
@@ -282,12 +272,9 @@ class CoachMatchingController extends Controller
     /**
      * Unassign a coach from a batch.
      */
-    public function unassign(Request $request): RedirectResponse
+    public function unassign(UnassignCoachRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'batch_id' => 'required|exists:batches,id',
-            'coach_id' => 'required|exists:users,id',
-        ]);
+        $validated = $request->validated();
 
         try {
             $batch = Batch::findOrFail($validated['batch_id']);
@@ -304,12 +291,9 @@ class CoachMatchingController extends Controller
     /**
      * Broadcast an open slot to the Coach Portal when no coach is available.
      */
-    public function broadcastOpening(Request $request): RedirectResponse
+    public function broadcastOpening(BroadcastOpeningRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'batch_id' => 'required|exists:batches,id',
-            'notes' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         try {
             $batch = Batch::findOrFail($validated['batch_id']);
@@ -340,9 +324,15 @@ class CoachMatchingController extends Controller
         $pendingRequests = $requests->where('status', 'pending')->groupBy('batch_id');
         $reviewedRequests = $requests->where('status', '!=', 'pending');
 
+        // Approved coaches per batch (from the list already loaded, so the view needs no queries)
+        $approvedByBatch = $requests->where('status', 'approved')->countBy('batch_id');
+        $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
+
         return view('admin.coaches.requests', compact(
             'pendingRequests',
-            'reviewedRequests'
+            'reviewedRequests',
+            'approvedByBatch',
+            'coachRatio'
         ));
     }
 
@@ -365,12 +355,9 @@ class CoachMatchingController extends Controller
     /**
      * Bulk approve selected coach requests.
      */
-    public function bulkApproveRequests(Request $request): RedirectResponse
+    public function bulkApproveRequests(BulkApproveCoachRequestsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'request_ids' => 'required|array|min:1',
-            'request_ids.*' => 'exists:coach_requests,id',
-        ]);
+        $validated = $request->validated();
 
         $approvedCount = 0;
         $coachNames = [];

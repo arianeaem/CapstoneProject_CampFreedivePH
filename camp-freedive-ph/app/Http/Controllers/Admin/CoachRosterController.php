@@ -13,6 +13,7 @@ use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Coaches\ReassignStudentRequest;
 
 class CoachRosterController extends Controller
 {
@@ -151,13 +152,9 @@ class CoachRosterController extends Controller
     /**
      * Reassign a student away from this coach.
      */
-    public function reassignStudent(Request $request, User $coach): RedirectResponse
+    public function reassignStudent(ReassignStudentRequest $request, User $coach): RedirectResponse
     {
-        $validated = $request->validate([
-            'participant_id' => 'required|exists:booking_participants,id',
-            'new_coach_id' => 'required|exists:users,id',
-            'reason' => 'required|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         try {
             $participant = BookingParticipant::findOrFail($validated['participant_id']);

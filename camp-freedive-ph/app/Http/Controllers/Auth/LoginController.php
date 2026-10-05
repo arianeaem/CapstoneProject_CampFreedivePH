@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use App\Http\Requests\Auth\LoginRequest;
 
 class LoginController extends Controller
 {
@@ -41,12 +42,9 @@ class LoginController extends Controller
     /**
      * Handle internal login attempt.
      */
-    public function login(Request $request): RedirectResponse
+    public function login(LoginRequest $request): RedirectResponse
     {
-        $credentials = $request->validate([
-            'email' => ['required', 'string', 'email'],
-            'password' => ['required', 'string'],
-        ]);
+        $credentials = $request->validated();
 
         $throttleKey = Str::transliterate(Str::lower($request->input('email')) . '|' . $request->ip());
 

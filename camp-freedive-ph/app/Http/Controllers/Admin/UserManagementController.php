@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Illuminate\Support\Facades\Gate;
+use App\Http\Requests\Admin\Users\UpdateUserRequest;
+use App\Http\Requests\Admin\Users\StoreUserRequest;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\AuditLogger;
@@ -94,42 +97,12 @@ class UserManagementController extends Controller
     /**
      * Provision and store a new internal user account.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StoreUserRequest $request): RedirectResponse
     {
         $currentUser = Auth::user();
+        $validated = $request->validated();
 
-        // Only Owner can create Admin accounts; Admin can only create Coach accounts
-        $allowedRoles = $currentUser->isOwner() ? ['admin', 'coach'] : ['coach'];
-
-        $validated = $request->validate([
-            'first_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'middle_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'no_middle_name' => ['nullable', 'boolean'],
-            'last_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'suffix' => ['nullable', 'string', 'max:20'],
-            'name' => ['nullable', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'phone' => ['required', 'string', 'max:50'],
-            'role' => ['required', Rule::in($allowedRoles)],
-            'temp_password' => ['nullable', 'string', 'min:8'],
-        ], [
-            'first_name.regex' => 'First name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'middle_name.regex' => 'Middle name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'last_name.regex' => 'Last name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-        ]);
-
-        $first = trim($validated['first_name'] ?? '');
-        $middle = (!empty($validated['no_middle_name'])) ? '' : trim($validated['middle_name'] ?? '');
-        $last = trim($validated['last_name'] ?? '');
-        $suffix = trim($validated['suffix'] ?? '');
-        if ($suffix === 'None' || $suffix === 'none') {
-            $suffix = '';
-        }
-
-        $fullName = implode(' ', array_filter([$first, $middle, $last, $suffix]));
-        if (empty($fullName)) {
-            $fullName = $validated['name'] ?? '';
-        }
+        $fullName = $request->fullName() ?: ($validated['name'] ?? '');
         if (empty($fullName)) {
             return back()->withErrors(['first_name' => 'First and Last name are required.'])->withInput();
         }
@@ -173,12 +146,8 @@ class UserManagementController extends Controller
      */
     public function edit(User $user): View
     {
+        Gate::authorize('update', $user);
         $currentUser = Auth::user();
-
-        // Admins cannot edit other Admins or the Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only manage Freediving Coach profiles.');
-        }
 
         return view('admin.users.edit', compact('user', 'currentUser'));
     }
@@ -186,51 +155,16 @@ class UserManagementController extends Controller
     /**
      * Update an internal user's profile details.
      */
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
         $currentUser = Auth::user();
-
-        // Admins cannot update other Admins or Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only manage Freediving Coach profiles.');
-        }
-
-        $allowedRoles = $currentUser->isOwner() ? ['owner', 'admin', 'coach'] : ['coach'];
-
-        $validated = $request->validate([
-            'first_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'middle_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'no_middle_name' => ['nullable', 'boolean'],
-            'last_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'suffix' => ['nullable', 'string', 'max:20'],
-            'name' => ['nullable', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['required', 'string', 'max:50'],
-            'role' => ['required', Rule::in($allowedRoles)],
-            'status' => ['required', 'in:active,inactive'],
-            'new_password' => ['nullable', 'string', 'min:8'],
-        ], [
-            'first_name.regex' => 'First name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'middle_name.regex' => 'Middle name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'last_name.regex' => 'Last name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-        ]);
+        $validated = $request->validated();
 
         if ($user->isActive() && $validated['status'] === 'inactive' && ($blocked = $this->blockIfCoachHasUpcomingWork($user, 'deactivated'))) {
             return $blocked->withInput();
         }
 
-        $first = trim($validated['first_name'] ?? '');
-        $middle = (!empty($validated['no_middle_name'])) ? '' : trim($validated['middle_name'] ?? '');
-        $last = trim($validated['last_name'] ?? '');
-        $suffix = trim($validated['suffix'] ?? '');
-        if ($suffix === 'None' || $suffix === 'none') {
-            $suffix = '';
-        }
-
-        $fullName = implode(' ', array_filter([$first, $middle, $last, $suffix]));
-        if (empty($fullName)) {
-            $fullName = $validated['name'] ?? $user->name;
-        }
+        $fullName = $request->fullName() ?: ($validated['name'] ?? $user->name);
 
         $changes = [];
         if ($user->name !== $fullName) $changes[] = "Name: {$user->name} → {$fullName}";
@@ -297,10 +231,7 @@ class UserManagementController extends Controller
             return back()->with('error', 'You cannot deactivate your own account.');
         }
 
-        // Admins cannot toggle status of other Admins or Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only toggle status of Coach accounts.');
-        }
+        Gate::authorize('changeStatus', $user);
 
         if ($user->isActive() && ($blocked = $this->blockIfCoachHasUpcomingWork($user, 'deactivated'))) {
             return $blocked;
@@ -337,10 +268,7 @@ class UserManagementController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
 
-        // Admins cannot delete other Admins or Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only delete Freediving Coach accounts.');
-        }
+        Gate::authorize('delete', $user);
 
         if ($user->isArchived()) {
             return back()->with('error', "{$user->name}'s account is already removed.");

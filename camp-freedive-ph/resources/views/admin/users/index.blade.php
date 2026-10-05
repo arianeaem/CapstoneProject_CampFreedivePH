@@ -196,10 +196,10 @@
                              x-transition:leave="transition ease-in duration-100 transform"
                              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                              x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                             class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                             class="popover-panel absolute right-0 mt-2 space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Staff</h4>
-                                <a href="{{ route('admin.users.index') }}" class="text-sm text-[#780000] hover:underline font-bold">Reset</a>
+                                <h4 class="popover-title">Filter Staff</h4>
+                                <a href="{{ route('admin.users.index') }}" class="popover-reset">Reset</a>
                             </div>
 
                             <form method="GET" action="{{ route('admin.users.index') }}" class="space-y-3 text-sm">
@@ -318,12 +318,11 @@
                                          x-transition:leave="transition ease-in duration-100 transform"
                                          x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                                          x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                                         class="absolute right-0 mt-1.5 w-48 bg-white rounded-xl border border-[#E5E5EA] shadow-xl p-1.5 z-50 space-y-1 text-left">
+                                         class="menu-panel absolute right-0 mt-2">
                                         
                                         <!-- Edit Account -->
                                         <a href="{{ route('admin.users.edit', $user) }}" 
-                                           class="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-lg transition-colors">
-                                            <img src="{{ asset('icons/icons8-edit-60.png') }}" alt="Edit" class="w-4.5 h-4.5 object-contain inline-block shrink-0">
+                                           class="menu-item">
                                             <span>Edit Profile</span>
                                         </a>
 
@@ -334,14 +333,14 @@
                                                 @method('PATCH')
                                                 <button type="submit" 
                                                         onclick="return confirm('Are you sure you want to {{ $user->isActive() ? 'deactivate' : ($user->isArchived() ? 'restore' : 'activate') }} this account?')"
-                                                        class="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold {{ $user->isActive() ? 'text-amber-700 hover:bg-amber-50' : 'text-emerald-700 hover:bg-emerald-50' }} rounded-lg transition-colors text-left cursor-pointer">
+                                                        class="menu-item">
                                                     <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                                                     <span>{{ $user->isActive() ? 'Deactivate' : ($user->isArchived() ? 'Restore Account' : 'Activate') }}</span>
                                                 </button>
                                             </form>
                                             
                                             @unless($user->isArchived())
-                                            <div class="border-t border-[#E5E5EA] my-1"></div>
+                                            <div class="menu-divider"></div>
 
                                             <!-- Remove (archive) User Option -->
                                             <button type="button" 
@@ -352,7 +351,7 @@
                                                         role: '{{ addslashes($user->role_badge['label']) }}',
                                                         url: '{{ route('admin.users.destroy', $user) }}'
                                                     }); openMenu = false;"
-                                                    class="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-[#780000] hover:bg-[#FEF2F2] rounded-lg transition-colors text-left cursor-pointer">
+                                                    class="menu-item menu-item-danger">
                                                 <svg class="w-3.5 h-3.5 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                                                 <span>Remove Account</span>
                                             </button>

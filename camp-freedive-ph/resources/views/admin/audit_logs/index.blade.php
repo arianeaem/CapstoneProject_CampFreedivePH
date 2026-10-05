@@ -107,10 +107,10 @@
                              x-transition:leave="transition ease-in duration-100 transform"
                              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                              x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                             class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                             class="popover-panel absolute right-0 mt-2 space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Audit Logs</h4>
-                                <a href="{{ route('admin.audit_logs.index') }}" class="min-h-[44px] px-3 py-1.5 rounded-lg text-sm text-[#780000] hover:bg-[#F2F2F7] active:scale-[0.98] transition-all font-bold inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#780000]">Reset</a>
+                                <h4 class="popover-title">Filter Audit Logs</h4>
+                                <a href="{{ route('admin.audit_logs.index') }}" class="popover-reset">Reset</a>
                             </div>
 
                             <form method="GET" action="{{ route('admin.audit_logs.index') }}" class="space-y-3 text-sm">

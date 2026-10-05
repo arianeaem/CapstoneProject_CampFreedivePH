@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use App\Http\Requests\Auth\SendResetLinkRequest;
+use App\Http\Requests\Auth\ResetPasswordRequest;
 
 class PasswordResetController extends Controller
 {
@@ -30,12 +32,8 @@ class PasswordResetController extends Controller
     /**
      * Send password reset link to user.
      */
-    public function sendResetLink(Request $request): RedirectResponse
+    public function sendResetLink(SendResetLinkRequest $request): RedirectResponse
     {
-        $request->validate([
-            'email' => ['required', 'email'],
-        ]);
-
         $user = User::where('email', $request->email)->first();
         $resetUrl = null;
 
@@ -87,14 +85,8 @@ class PasswordResetController extends Controller
     /**
      * Reset the user password.
      */
-    public function resetPassword(Request $request): RedirectResponse
+    public function resetPassword(ResetPasswordRequest $request): RedirectResponse
     {
-        $request->validate([
-            'token' => ['required'],
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
-
         $resetRecord = DB::table('password_reset_tokens')
             ->where('email', $request->email)
             ->first();

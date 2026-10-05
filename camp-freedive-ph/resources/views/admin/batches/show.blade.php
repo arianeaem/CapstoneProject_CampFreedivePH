@@ -65,21 +65,21 @@
                          x-transition:leave="transition ease-in duration-75"
                          x-transition:leave-start="transform opacity-100 scale-100"
                          x-transition:leave-end="transform opacity-0 scale-95"
-                         class="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-[#E5E5EA] p-1.5 z-50 focus:outline-none text-sm">
+                         class="menu-panel absolute right-0 mt-2">
                         
                         <!-- Reschedule Action -->
                         <button type="button"
                                 @click="openActionsMenu = false; openRescheduleModal = true"
-                                class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
+                                class="menu-item">
                             <span>Reschedule Batch</span>
                         </button>
 
-                        <div class="h-px bg-[#F2F2F7] my-1"></div>
+                        <div class="menu-divider"></div>
 
                         <!-- Cancel by Camp Action -->
                         <button type="button"
                                 @click="openActionsMenu = false; openCancelModal = true"
-                                class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
+                                class="menu-item menu-item-danger">
                             <svg class="w-4 h-4 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"/>
                                 <line x1="15" y1="9" x2="9" y2="15"/>
@@ -124,12 +124,12 @@
                          x-transition:leave="transition ease-in duration-75"
                          x-transition:leave-start="transform opacity-100 scale-100"
                          x-transition:leave-end="transform opacity-0 scale-95"
-                         class="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-[#E5E5EA] p-1.5 z-50 focus:outline-none text-sm">
+                         class="menu-panel absolute right-0 mt-2">
                         
                         <!-- Reschedule Action -->
                         <button type="button"
                                 @click="openActionsMenu = false; openRescheduleModal = true"
-                                class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
+                                class="menu-item">
                             <span>Reschedule Batch</span>
                         </button>
                     </div>

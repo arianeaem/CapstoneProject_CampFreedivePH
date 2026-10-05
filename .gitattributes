@@ -1,0 +1,5 @@
+safety-forecast/models/**/*.onnx filter=lfs diff=lfs merge=lfs -text
+safety-forecast/models/**/*.json filter=lfs diff=lfs merge=lfs -text
+safety-forecast/models/*.json filter=lfs diff=lfs merge=lfs -text
+safety-forecast/models/**/*.pkl filter=lfs diff=lfs merge=lfs -text
+safety-forecast/models/**/*.joblib filter=lfs diff=lfs merge=lfs -text

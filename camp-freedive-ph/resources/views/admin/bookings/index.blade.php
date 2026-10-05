@@ -11,10 +11,6 @@
             <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Booking Management</h1>
         </div>
 
-        @php
-            $pendingRequestsCount = \App\Models\RescheduleRequest::where('status', 'pending')->count() + \App\Models\CancellationRequest::where('status', 'pending')->count();
-        @endphp
-
         <div class="flex items-center gap-2.5 flex-wrap">
             <a href="{{ route('admin.bookings.requests') }}" class="btn-secondary px-3.5 py-2 text-sm sm:text-sm font-semibold flex items-center gap-2">
                 <span>Pending Requests</span>
@@ -156,10 +152,10 @@
                              x-transition:leave="transition ease-in duration-100 transform"
                              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                              x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                             class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                             class="popover-panel absolute right-0 mt-2 space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 class="font-bold text-sm text-[#1D1D1F]">Filter & Sort Bookings</h4>
-                                <a href="{{ route('admin.bookings.index') }}" class="text-sm text-[#780000] hover:underline font-bold">Reset</a>
+                                <h4 class="popover-title">Filter & Sort Bookings</h4>
+                                <a href="{{ route('admin.bookings.index') }}" class="popover-reset">Reset</a>
                             </div>
 
                             <form method="GET" action="{{ route('admin.bookings.index') }}" class="space-y-3 text-sm">
