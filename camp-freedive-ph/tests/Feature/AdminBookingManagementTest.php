@@ -325,4 +325,54 @@ class AdminBookingManagementTest extends TestCase
         $response->assertRedirect(route('admin.bookings.show', $booking));
         $this->assertEquals('Market! Market! (BGC, Taguig) - 3:40 AM', $booking->fresh()->pickup_location);
     }
+
+    public function test_manual_booking_is_allowed_on_a_critical_risk_date(): void
+    {
+        $admin = User::where('email', 'admin@campfreedive.ph')->first();
+        $this->actingAs($admin);
+
+        // The public booking form rejects this forecast; manual booking must not.
+        $this->mock(\App\Services\WeatherSafetyService::class, function ($mock) {
+            $mock->shouldReceive('getForecast')->andReturn([
+                'risk_level' => 'critical_risk',
+                'overall_classification' => 'Critical Risk',
+                'day1' => ['classification' => 'Critical Risk'],
+                'day2' => ['classification' => 'Critical Risk'],
+                'is_bookable' => false,
+            ]);
+        });
+
+        $startDate = Carbon::now()->addDays(1)->format('Y-m-d');
+        $endDate = Carbon::now()->addDays(2)->format('Y-m-d');
+
+        $resp = $this->post('/admin/bookings', [
+            'class_type' => 'discovery',
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'pickup_option' => 'own',
+            'boat_dive' => false,
+            'contact_name' => 'Critical Risk Demo',
+            'contact_email' => 'critical.demo@example.com',
+            'contact_phone' => '0917 000 1111',
+            'payment_method' => 'cash',
+            'payment_stage' => 'downpayment',
+            'payment_reference' => 'CASH-DEMO-001',
+            'admin_notes' => 'Panel demo of a Critical Risk date',
+            'participants' => [
+                [
+                    'name' => 'Critical Demo Diver',
+                    'birthdate' => Carbon::now()->subYears(25)->format('Y-m-d'),
+                    'gender' => 'male',
+                    'swimmer_status' => 'swimmer',
+                    'health_condition' => 'None declared',
+                ],
+            ],
+        ]);
+        $resp->assertSessionHasNoErrors()->assertSessionMissing('error');
+
+        $this->assertDatabaseHas('bookings', [
+            'contact_name' => 'Critical Risk Demo',
+            'status' => 'confirmed',
+        ]);
+    }
 }
