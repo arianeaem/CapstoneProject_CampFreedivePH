@@ -27,21 +27,15 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Core Weather & Marine Safety Engine for Anilao, Batangas Freediving Operations.
+ * Weather and sea safety checks for our dive site in Anilao, Batangas.
  *
- * Core Responsibilities & Domain Algorithms:
- * 1. 9-Parameter Physical Risk Scoring: Evaluates wave height, swell height, wave period,
- *    wind waves, wind speed & gusts, ocean current, rain rate, sea level pressure, and wind direction.
- * 2. Synergy Hazard Multipliers: Detects when multiple moderate ocean hazards occur concurrently
- *    (e.g., strong currents opposing wind chop) and penalizes the composite risk score non-linearly (+15% to +25%).
- * 3. 16-Day 24-Hour Continuous Sliding Cache: Pre-fetches hourly marine parameters across the entire 16-day
- *    horizon in a single Open-Meteo batch, caching results in Redis/File cache for instant sub-millisecond retrieval.
- * 4. Dual-Engine Orchestration: Interfaces with WeatherSafetyMLService to provide side-by-side comparison
- *    between heuristic rule-based assessments and 12 multi-horizon ONNX ML models.
- * 5. Batch Safety Lifecycle & Automated Force Majeure: Manages batch risk transitions, admin manual overrides,
- *    and automated customer cancellation notifications with 100% refund entitlement.
- * 6. Historical Forecast Accuracy Audit: Automatically snapshots multi-horizon predictions (T-14, T-7, T-3, T-1)
- *    and archives scientific accuracy logs comparing predictions against realized marine observations (T-0).
+ * What it does:
+ * - scores each hour using 9 weather/sea values (waves, swell, wind, current, rain, pressure, etc.)
+ * - adds extra risk when several bad conditions happen at the same time
+ * - gets 16 days of hourly forecast from Open-Meteo and keeps it in the cache
+ * - compares the rule-based result with the ML model result
+ * - handles batch risk, admin overrides and weather cancellations (full refund)
+ * - saves forecast snapshots so we can check later how accurate they were
  */
 class WeatherForecastService
 {
@@ -52,13 +46,13 @@ class WeatherForecastService
         $this->apiClient = $apiClient ?? app(ExternalApiClient::class);
     }
 
-    // Anilao / Mabini, Batangas Site Coordinates (Camp FreedivePH primary training basin)
+    // Dive site location (Anilao / Mabini, Batangas)
     public const LATITUDE = 13.6874;
     public const LONGITUDE = 120.8931;
     public const TIMEZONE = 'Asia/Manila';
     public const MAX_FORECAST_DAYS = 16;
 
-    // 9 Environmental Feature Weights (Tide Height removed; total = 1.000 / 100%)
+    // Weights for the 9 weather values (they add up to 1.0)
     public const WEIGHTS = [
         'wave_height' => 0.160,
         'wind_speed' => 0.150,
@@ -90,12 +84,11 @@ class WeatherForecastService
     ];
 
     /**
-     * Determine Forecast Reliability Category based on Lead Time Horizon.
+     * Get how reliable the forecast is based on how many days away the date is.
      *
-     * Range         | Reliability Category   | Operational Impact
-     * Days 1-3      | High Reliability       | Highly actionable. Use directly for operational safety window greenlighting.
-     * Days 4-7      | Medium Reliability     | Excellent for spotting long-range trends, shifting winds, or monsoon setups.
-     * Days 8-16     | Low Reliability        | Climatological trend only. Do not use for safety-critical go/no-go logic.
+     * Days 1-3:  High   - ok to use for go/no-go decisions
+     * Days 4-7:  Medium - good for seeing trends
+     * Days 8-16: Low    - rough trend only, don't use for go/no-go
      */
     public static function getReliabilityCategory(int|float $daysOut): array
     {
@@ -133,14 +126,13 @@ class WeatherForecastService
     }
 
     /**
-     * Determine Operational Horizon Status based on Batch or Dive Date.
+     * Get the forecast status of a batch based on how far away the dive is.
      *
-     * States:
-     * - CONCLUDED: Dive operations finished or past.
-     * - TACTICAL_CLEARANCE: Day 0 / H <= 1h (Live Departure Clearance).
-     * - PROVISIONAL_TREND_OUTLOOK: 1h < H <= 24h (24-Hour Planning Forecast).
-     * - EXTENDED_TREND_OUTLOOK: H > 24h (Extended Planning Outlook).
-     * - BEYOND_HORIZON: > 16 days out.
+     * - CONCLUDED: dive is already done
+     * - TACTICAL_CLEARANCE: dive day, 1 hour or less before
+     * - PROVISIONAL_TREND_OUTLOOK: within 24 hours
+     * - EXTENDED_TREND_OUTLOOK: more than 24 hours away
+     * - BEYOND_HORIZON: more than 16 days away
      */
     public static function getOperationalHorizon(Batch|Carbon $dateOrBatch): array
     {
@@ -231,9 +223,8 @@ class WeatherForecastService
     }
 
     /**
-     * Run full risk assessment for a 2D1N Batch across all 4 fixed windows:
-     * - Day 1 AM (09:30-12:00) & PM (15:30-17:30)
-     * - Day 2 AM (09:30-12:00) & PM (15:30-17:30)
+     * Check the risk for a 2-day batch using the 4 dive windows:
+     * Day 1 AM (09:30-12:00) and PM (15:30-17:30), same for Day 2.
      */
     public function assessBatch(Batch $batch, ?array $overrides = null, ?User $assessedBy = null): array
     {
@@ -241,7 +232,7 @@ class WeatherForecastService
             $startDate = $batch->start_date->copy()->startOfDay();
             $endDate = $batch->end_date ? $batch->end_date->copy()->startOfDay() : $startDate->copy()->addDay();
 
-            // If the batch is already completed / finished and has existing assessments, lock and return the last identified assessment
+            // If the batch is already done and was assessed before, just return the last assessment
             $isFinished = in_array($batch->status, ['completed', 'cancelled', 'cancelled_by_camp']) || 
                           in_array($batch->lifecycle_status, ['completed', 'cancelled', 'cancelled_by_camp']) ||
                           $endDate->isPast();
@@ -286,19 +277,19 @@ class WeatherForecastService
 
             $assessedAt = now();
 
-            // 1. Assess Day 1
+            // Day 1
             $day1Result = $this->assessDay($batch, 1, $startDate, $overrides, $assessedBy, $assessedAt);
 
-            // 2. Assess Day 2
+            // Day 2
             $day2Result = $this->assessDay($batch, 2, $endDate, $overrides, $assessedBy, $assessedAt);
 
-            // 3. Determine Overall Batch Classification (worse of Day 1 and Day 2)
+            // Overall result is the worse of Day 1 and Day 2
             $rank1 = self::RISK_RANK[$day1Result['classification']] ?? 1;
             $rank2 = self::RISK_RANK[$day2Result['classification']] ?? 1;
             $worseRank = max($rank1, $rank2);
             $overallClassification = array_search($worseRank, self::RISK_RANK) ?: 'Safe';
 
-            // Convert to slug for batches.risk_classification
+            // Slug version for batches.risk_classification
             $riskSlug = match ($overallClassification) {
                 'Very Safe' => 'very_safe',
                 'Safe' => 'safe',
@@ -313,7 +304,7 @@ class WeatherForecastService
                 'risk_classification' => $riskSlug,
             ]);
 
-            // 4. ML Safety Microservice Assessment (Dual-Engine Pipeline)
+            // Also get the ML model result
             $day1ML = $this->assessMLSafetyForDate($startDate->format('Y-m-d'), '08:00', '18:00', $overrides);
             $day2ML = $this->assessMLSafetyForDate($endDate->format('Y-m-d'), '08:00', '18:00', $overrides);
 
@@ -361,7 +352,7 @@ class WeatherForecastService
         if (in_array($classification, ['High Risk', 'Critical Risk'], true)) {
             $assessedBatch = $batch->fresh();
             app(\App\Services\AdminNotificationService::class)->risk($assessedBatch, $classification);
-            // Less than 18 hours before the dive: email guests and owners/admins (Critical = reschedule/refund options, High = heads-up)
+            // Less than 18 hours before the dive: email guests and admins (Critical = reschedule/refund, High = heads-up)
             app(\App\Services\WeatherRiskNotifier::class)->handle($assessedBatch, $classification);
         }
 
@@ -369,7 +360,7 @@ class WeatherForecastService
     }
 
     /**
-     * Assess an individual day (AM window + PM window) with "Worst Window Wins".
+     * Check one day (AM and PM windows). The worse window is used for the day.
      */
     public function assessDay(Batch $batch, int $dayNumber, Carbon $date, ?array $overrides, ?User $assessedBy, ?Carbon $assessedAt = null): array
     {
@@ -378,7 +369,7 @@ class WeatherForecastService
         $leadTimeHours = max(0, Carbon::now(self::TIMEZONE)->diffInHours($date->copy()->setTime(9, 30), false));
         $overrideTriggered = $this->checkOverrideConditions($overrides);
 
-        // Check if date is in past (> 1 day ago) for finished/completed batches
+        // Date is already past (for finished batches)
         if (!$overrideTriggered && $daysOut < -1) {
             $finalClass = match ($batch->risk_classification) {
                 'very_safe' => 'Very Safe',
@@ -430,7 +421,7 @@ class WeatherForecastService
             ];
         }
 
-        // Check if date is outside the 16-day forecast model horizon
+        // Date is more than 16 days away, outside the forecast range
         if (!$overrideTriggered && $daysOut > self::MAX_FORECAST_DAYS) {
             $dayClassification = 'Not Available';
             $recommendedAction = "Forecast model is not yet available beyond 16 days out. Assessment will unlock on " . $date->copy()->subDays(16)->format('M d, Y') . " (16 days before dive date).";
@@ -466,13 +457,13 @@ class WeatherForecastService
             ];
         }
 
-        // Evaluate AM Window (09:30 - 12:00)
+        // AM window (09:30 - 12:00)
         $amData = $this->assessWindow($date->format('Y-m-d'), '09:30', '12:00', 'am', $overrides);
 
-        // Evaluate PM Window (15:30 - 17:30)
+        // PM window (15:30 - 17:30)
         $pmData = $this->assessWindow($date->format('Y-m-d'), '15:30', '17:30', 'pm', $overrides);
 
-        // Retrieve whole-day daytime baseline (06:00 - 18:00)
+        // Whole daytime (06:00 - 18:00)
         $cachedDay = $this->getCachedDayForecast($date->format('Y-m-d'));
         if (!$cachedDay && !$overrideTriggered) {
             try {
@@ -481,7 +472,7 @@ class WeatherForecastService
             } catch (\Throwable $e) {}
         }
 
-        // Live ML Safety Evaluation across training hours
+        // ML model check for the dive hours
         $mlAssessment = !$overrideTriggered ? $this->assessMLSafetyForDate($date->format('Y-m-d'), '08:00', '18:00', $overrides) : null;
         $mlRank = $mlAssessment ? (self::RISK_RANK[$mlAssessment['overall_recommendation'] ?? 'Safe'] ?? 1) : 1;
 
@@ -504,7 +495,7 @@ class WeatherForecastService
             $recommendedAction = self::MEANING_MAP[$dayClassification] ?? 'Proceed with caution.';
         }
 
-        // Persist BatchRiskAssessment
+        // Save the day assessment
         $riskAssessment = BatchRiskAssessment::create([
             'batch_id' => $batch->id,
             'day_number' => $dayNumber,
@@ -521,7 +512,7 @@ class WeatherForecastService
             'assessed_at' => $assessedAt,
         ]);
 
-        // Persist HourlyAssessments for AM
+        // Save hourly rows for AM
         foreach ($amData['hourly'] as $h) {
             HourlyAssessment::create(array_merge($h, [
                 'risk_assessment_id' => $riskAssessment->id,
@@ -530,7 +521,7 @@ class WeatherForecastService
             ]));
         }
 
-        // Persist HourlyAssessments for PM
+        // Save hourly rows for PM
         foreach ($pmData['hourly'] as $h) {
             HourlyAssessment::create(array_merge($h, [
                 'risk_assessment_id' => $riskAssessment->id,
@@ -555,13 +546,13 @@ class WeatherForecastService
     }
 
     /**
-     * Preview assessment for client date selection on the booking form.
+     * Weather preview for the date picked on the booking form.
      *
-     * Runs both forecast engines so they can be compared side by side:
-     * - legacy:     Open-Meteo API forecast -> Camp FreedivePH ONNX safety model
-     * - historical: PRD historical site model (/forecast/site + climatology)
-     * The legacy result is the primary (top-level) answer; the historical model is used when the
-     * legacy pipeline is unavailable. Both are returned under 'engines'.
+     * Runs both forecast engines so we can compare them:
+     * - legacy: Open-Meteo forecast, then our ONNX safety model
+     * - historical: our site model (/forecast/site + climatology)
+     * Legacy is the main answer. If it is not available we use historical.
+     * Both results are returned under 'engines'.
      */
     public function previewDateAssessment(Carbon $startDate, bool $historicalReplay = false): array
     {
@@ -577,7 +568,7 @@ class WeatherForecastService
             ];
         }
 
-        // Both trip days must fall inside the 16-day Open-Meteo window (today = day 0).
+        // Both trip days must be inside the 16-day Open-Meteo range (today = day 0)
         $legacy = (!$historicalReplay && ($daysOut + 1) < self::MAX_FORECAST_DAYS)
             ? $this->previewFromApiForecastThenModel($startDate, $endDate, (int) $daysOut)
             : null;
@@ -593,8 +584,8 @@ class WeatherForecastService
     }
 
     /**
-     * Historical Model vs Legacy Forecast comparison for an upcoming batch's dates
-     * (same engines as the booking page). Null for past batches or when unavailable.
+     * Historical vs legacy comparison for a batch (same as the booking page).
+     * Returns null for past batches or if it's not available.
      */
     public function modelComparisonForBatch(Batch $batch): ?array
     {
@@ -611,7 +602,7 @@ class WeatherForecastService
     }
 
     /**
-     * Compact per-engine view of a preview result for the side-by-side comparison on the booking form.
+     * Short summary of one engine's result for the comparison on the booking form.
      */
     protected function summarizePreviewEngine(string $label, ?array $preview): array
     {
@@ -639,8 +630,8 @@ class WeatherForecastService
     }
 
     /**
-     * Historical model preview: PRD site forecast (forecast_daily / forecast_hourly), with
-     * a live Open-Meteo window evaluation as last resort.
+     * Historical model preview using forecast_daily / forecast_hourly.
+     * If that fails we check the dive windows using Open-Meteo directly.
      */
     protected function previewFromHistoricalModel(Carbon $startDate, bool $historicalReplay = false): array
     {
@@ -660,7 +651,7 @@ class WeatherForecastService
         $isBenchmark = ($daysOut > self::MAX_FORECAST_DAYS);
         $reliability = $isBenchmark ? 'Seasonal Baseline' : self::getReliabilityCategory($daysOut);
 
-        // Check if day 1 and day 2 are in the unified cache
+        // Check if both days are in the cache
         $d1Key = $startDate->format('Y-m-d');
         $d2Key = $endDate->format('Y-m-d');
 
@@ -673,12 +664,12 @@ class WeatherForecastService
                 $d1Cache = $this->getCachedDayForecast($d1Key);
                 $d2Cache = $this->getCachedDayForecast($d2Key);
             } catch (\Throwable $e) {
-                // Ignore failure and fallback to live window calculation
+                // Ignore the error, we fall back to the window check below
             }
         }
 
         if ($d1Cache && $d2Cache) {
-            // Helper closure to extract window metrics and physical conditions
+            // Gets the window results and weather readings for one day
             $extractDayDetails = function (array $cache, Carbon $date, string $conf, ?string $advisory) use ($daysOut) {
                 $hourly = $cache['hourly'] ?? [];
                 $daily = $cache['daily'] ?? [];
@@ -721,7 +712,7 @@ class WeatherForecastService
                         $worstHourAll = $isoTime;
                     }
 
-                    // Daytime operational hours (06:00 - 18:00)
+                    // Daytime hours (06:00 - 18:00)
                     if ($hourInt >= 6 && $hourInt <= 18) {
                         if ($score > $maxScore0618) {
                             $maxScore0618 = $score;
@@ -751,7 +742,7 @@ class WeatherForecastService
                         if ($hGust > $maxGustMs) $maxGustMs = $hGust;
                     }
 
-                    // AM Window (09:30 - 12:00)
+                    // AM window (09:30 - 12:00)
                     if ($hourInt >= 9 && $hourInt <= 12) {
                         if ($score > $maxScoreAM) {
                             $maxScoreAM = $score;
@@ -760,7 +751,7 @@ class WeatherForecastService
                         }
                     }
 
-                    // PM Window (15:30 - 17:30)
+                    // PM window (15:30 - 17:30)
                     if ($hourInt >= 15 && $hourInt <= 18) {
                         if ($score > $maxScorePM) {
                             $maxScorePM = $score;
@@ -786,7 +777,7 @@ class WeatherForecastService
                     'recommended_action' => self::MEANING_MAP[$dayClassification] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $worstHour0618 ? Carbon::parse($worstHour0618)->format('g:i A') : ($worstHourAll ? Carbon::parse($worstHourAll)->format('g:i A') : '11:00 AM'),
                     'lead_time' => max(0, Carbon::now(self::TIMEZONE)->diffInHours($date->copy()->setTime(9, 30), false)) . ' hours',
-                    // Operational Windows breakdown
+                    // Results per window
                     'operational_hours' => [
                         'window' => '06:00 - 18:00',
                         'worst_tier' => $worstTier0618,
@@ -804,7 +795,7 @@ class WeatherForecastService
                         'classification' => $worstTierPM,
                         'worst_hour' => $worstHourPM ? Carbon::parse($worstHourPM)->format('g:i A') : '4:00 PM',
                     ],
-                    // Physical readings & indicators
+                    // Weather readings
                     'physics' => [
                         'hs_p50_m' => round($peakHs, 2),
                         'hs_p90_m' => round($peakHsP90, 2),
@@ -823,7 +814,7 @@ class WeatherForecastService
                         'p_high_gust' => round($pHighGust * 100, 1) . '%',
                     ],
                     'seasonal_estimate' => $hsSource === 'climatology' && $currentSource === 'climatology',
-                    // Top-level aliases for UI accessibility
+                    // Extra keys used by the UI
                     'wave_height_m' => round($peakHs, 2),
                     'current_speed_ms' => round($peakCurrent, 2),
                     'wind_speed_ms' => round($maxWindMs, 2),
@@ -866,7 +857,7 @@ class WeatherForecastService
             $day1Class = $d1Details['classification'];
             $day2Class = $d2Details['classification'];
 
-            // Trip Overall (worse of Day 1 and Day 2 24-hour peaks)
+            // Trip result is the worse of Day 1 and Day 2
             $worseRank = max(self::RISK_RANK[$day1Class] ?? 1, self::RISK_RANK[$day2Class] ?? 1);
             $overallClass = array_search($worseRank, self::RISK_RANK) ?: 'Safe';
 
@@ -902,7 +893,7 @@ class WeatherForecastService
             ];
         }
 
-        // Fallback to Window Evaluation (Open-Meteo)
+        // Fallback: check the dive windows using Open-Meteo
         $day1AM = $this->assessWindow($startDate->format('Y-m-d'), '09:30', '12:00', 'am');
         $day1PM = $this->assessWindow($startDate->format('Y-m-d'), '15:30', '17:30', 'pm');
         $day1Class = (self::RISK_RANK[$day1PM['classification']] ?? 1) > (self::RISK_RANK[$day1AM['classification']] ?? 1)
@@ -971,12 +962,12 @@ class WeatherForecastService
     }
 
     /**
-     * Booking preview: Open-Meteo API forecast -> Camp FreedivePH safety model (/assess-booking).
+     * Booking preview: Open-Meteo forecast, then our safety model (/assess-booking).
      *
-     * The API forecast is scored by the rule engine first; the model then receives the same
-     * API hourly readings and its recommendation becomes the day's classification. When the
-     * model is unreachable the API rule-based classification is used instead.
-     * Returns null when no API forecast is available so the caller can fall back to PRD/climatology.
+     * The forecast is scored with our rules first. Then the same hourly data is sent to
+     * the model and the model's answer is used for the day. If the model is down we use
+     * the rule-based result. Returns null if there is no forecast so the caller can use
+     * the historical model instead.
      */
     protected function previewFromApiForecastThenModel(Carbon $startDate, Carbon $endDate, int $daysOut): ?array
     {
@@ -985,7 +976,7 @@ class WeatherForecastService
         foreach ([1 => $startDate, 2 => $endDate] as $dayNumber => $date) {
             $dateKey = $date->format('Y-m-d');
 
-            // Step 1: API forecast (Open-Meteo), cache-first
+            // Step 1: get the Open-Meteo forecast (cache first)
             $apiDay = Cache::get("forecast:date:{$dateKey}");
             if (empty($apiDay)) {
                 try {
@@ -1001,7 +992,7 @@ class WeatherForecastService
 
             $apiClass = $apiDay['overall_classification'] ?? 'Safe';
 
-            // Worst daytime (06:00 - 18:00) hour according to the API rule scoring
+            // Worst daytime hour (06:00 - 18:00) based on the rule score
             $worstApiHour = null;
             $worstApiScore = -1;
             foreach ($apiDay['hourly'] as $h) {
@@ -1012,7 +1003,7 @@ class WeatherForecastService
                 }
             }
 
-            // Step 2: Camp FreedivePH safety model, fed with the same API forecast
+            // Step 2: send the same forecast to our safety model
             $model = $this->assessMLSafetyForDate($dateKey, '06:00', '18:00');
             $modelClass = $model['overall_recommendation'] ?? null;
 
@@ -1032,7 +1023,7 @@ class WeatherForecastService
                 'model_classification' => $modelClass,
                 'model_primary_hazard' => $model['worst_hour']['primary_hazard'] ?? null,
                 'seasonal_estimate' => false,
-                // Physical readings from the API forecast (daytime 06:00 - 18:00)
+                // Weather readings from the forecast (06:00 - 18:00)
                 'wave_height_m' => round((float) ($apiDay['max_wave_height'] ?? 0), 2),
                 'current_speed_ms' => round((float) ($apiDay['avg_ocean_current'] ?? 0), 2),
                 'wind_speed_kmh' => round((float) ($apiDay['avg_wind_speed'] ?? 0), 1),
@@ -1075,9 +1066,8 @@ class WeatherForecastService
     }
 
     /**
-     * Run ML Safety Assessment via the 12 ONNX microservice pipeline.
-     * Guaranteed to output one of the 5 standard safety classifications:
-     * Very Safe, Safe, Moderate, High Risk, Critical Risk.
+     * Get the ML safety result for a date.
+     * Always returns one of: Very Safe, Safe, Moderate, High Risk, Critical Risk.
      */
     public function assessMLSafetyForDate(
         string $date,
@@ -1091,7 +1081,7 @@ class WeatherForecastService
                 return null;
             }
 
-            // Step 1: model input comes from the Open-Meteo API forecast (cache-first)
+            // Step 1: model input is the Open-Meteo forecast (cache first)
             $hourlyReadings = [];
             $weather = $this->fetchOpenMeteoWeather($date);
             $marine = $this->fetchOpenMeteoMarine($date);
@@ -1110,7 +1100,7 @@ class WeatherForecastService
                 ];
             }
 
-            // Fallback when the API is unreachable: cached day forecast (legacy Open-Meteo or PRD rows, m/s -> km/h)
+            // If the API is down, use the cached day forecast instead (m/s -> km/h)
             if (empty($hourlyReadings)) {
                 $dayForecast = $this->getCachedDayForecast($date);
                 foreach ($dayForecast['hourly'] ?? [] as $h) {
@@ -1146,7 +1136,7 @@ class WeatherForecastService
     }
 
     /**
-     * Apply Manual Override (PAGASA-style advisories) to a batch.
+     * Apply an admin override (like a PAGASA advisory) to a batch.
      */
     public function applyManualOverride(Batch $batch, array $overrideData, User $operator, bool $cancelBatch = false, ?string $cancelReason = null): array
     {
@@ -1167,10 +1157,10 @@ class WeatherForecastService
                 'created_at' => now(),
             ]);
 
-            // Re-run batch assessment with override flags
+            // Assess the batch again with the override
             $assessmentResult = $this->assessBatch($batch, $overrideData, $operator);
 
-            // Cancel batch if requested
+            // Cancel the batch if the admin asked for it
             if ($cancelBatch && $isOverrideActive) {
                 $reasonText = $cancelReason ?: ($overrideData['reason'] ?: 'Camp cancellation due to active PAGASA severe weather advisory');
                 $this->cancelBatchWithRefundsAndNotifications($batch, $reasonText, $operator);
@@ -1191,7 +1181,7 @@ class WeatherForecastService
     }
 
     /**
-     * Cancel whole batch, trigger 100% force majeure refunds, and dispatch templated emails.
+     * Cancel the whole batch, mark refunds as 100% and email the guests.
      */
     public function cancelBatchWithRefundsAndNotifications(Batch $batch, string $cancellationReason, User $operator): int
     {
@@ -1210,7 +1200,7 @@ class WeatherForecastService
             'note' => "Cancelled by Camp due to weather safety advisory: {$cancellationReason}",
         ]);
 
-        // Skip bookings that are already cancelled or finished so nobody is emailed twice
+        // Skip bookings that are already cancelled or done so nobody gets emailed twice
         $connectedBookings = $batch->bookings()
             ->whereNotIn('status', ['cancelled', 'cancelled_by_guest', 'cancelled_by_camp', 'completed', 'no_show'])
             ->get();
@@ -1221,7 +1211,7 @@ class WeatherForecastService
             $bookingOldStatus = $booking->status;
             $booking->update(['status' => 'cancelled_by_camp']);
 
-            // Auto-trigger 100% force majeure refund eligibility
+            // Weather cancellation means full refund
             foreach ($booking->payments()->where('status', 'completed')->get() as $payment) {
                 RefundRequest::create([
                     'payment_id' => $payment->id,
@@ -1240,7 +1230,7 @@ class WeatherForecastService
                 ]);
             }
 
-            // Plain-language summary of the guest email, kept in the batch's notification log
+            // Short summary of the email, saved in the notification log
             $scheduledDateStr = $booking->start_date->format('M d, Y') . ' - ' . $booking->end_date->format('M d, Y');
             $paid = (float) $booking->payments()->where('status', 'completed')->sum('amount');
             $messageBody = "Hello {$booking->contact_name}, we cancelled your trip on {$scheduledDateStr} for your safety.\n\nWhy: {$cancellationReason}\n\n"
@@ -1261,8 +1251,7 @@ class WeatherForecastService
                 'sent_at' => now(),
             ]);
 
-            // Asynchronous Queue Worker Dispatch:
-            // Offloads email network I/O to background queue workers to maintain instant admin UI response times
+            // Send the email through the queue so the admin page doesn't have to wait
             try {
                 Mail::to($booking->contact_email)->queue(
                     new BatchWeatherCancellationMail($booking, $batch, $cancellationReason)
@@ -1286,7 +1275,7 @@ class WeatherForecastService
     }
 
     /**
-     * Check if any manual override condition is active.
+     * Check if any override is turned on.
      */
     public function checkOverrideConditions(?array $overrides): bool
     {
@@ -1299,23 +1288,23 @@ class WeatherForecastService
         $thunderstorm = (bool) ($overrides['thunderstorm_advisory'] ?? false);
         $typhoon = (bool) ($overrides['typhoon_within_distance'] ?? false);
         $tsunami = (bool) ($overrides['tsunami_warning'] ?? false);
-        // Non-weather hazards (oil spill, red tide, no-sail order, ...) also force Critical Risk
+        // Non-weather problems (oil spill, red tide, no-sail order, ...) also mean Critical Risk
         $otherHazard = !empty($overrides['other_hazard']);
 
         return ($tcwsSignal >= 3 || $galeWarning || $thunderstorm || $typhoon || $tsunami || $otherHazard);
     }
 
     /**
-     * Assess a single open water window (e.g. 09:30-12:00 or 15:30-17:30).
+     * Check one dive window (e.g. 09:30-12:00 or 15:30-17:30).
      */
     protected function assessWindow(string $plannedDate, string $diveStart, string $diveEnd, string $windowType, ?array $overrides = null): array
     {
-        // Native live Open-Meteo & sub-millisecond cached scoring pipeline
+        // Uses Open-Meteo data (cached)
         return $this->evaluateWindowNatively($plannedDate, $diveStart, $diveEnd, $windowType, $overrides);
     }
 
     /**
-     * Native evaluation pipeline using live Open-Meteo APIs and sustained window scoring.
+     * Score a dive window using Open-Meteo data.
      */
     protected function evaluateWindowNatively(string $plannedDate, string $diveStart, string $diveEnd, string $windowType, ?array $overrides): array
     {
@@ -1327,7 +1316,7 @@ class WeatherForecastService
         
         $hourlyList = [];
 
-        // Fetch live marine & weather data from Open-Meteo
+        // Get marine and weather data from Open-Meteo
         $marineData = $this->fetchOpenMeteoMarine($plannedDate);
         $weatherData = $this->fetchOpenMeteoWeather($plannedDate);
 
@@ -1344,14 +1333,14 @@ class WeatherForecastService
 
         foreach ($hours as $hour) {
             $timeStr = sprintf('%sT%02d:00:00+08:00', $plannedDate, $hour);
-            $idx = $hour; // Index in hourly array
+            $idx = $hour; // index in the hourly array
 
             $waveHeight = isset($marineData['wave_height'][$idx]) ? (float)$marineData['wave_height'][$idx] : 0.70;
             $wavePeriod = isset($marineData['wave_period'][$idx]) ? (float)$marineData['wave_period'][$idx] : 6.10;
             $swellHeight = isset($marineData['swell_wave_height'][$idx]) ? (float)$marineData['swell_wave_height'][$idx] : 0.60;
             $windWaveHeight = isset($marineData['wind_wave_height'][$idx]) ? (float)$marineData['wind_wave_height'][$idx] : 0.35;
             
-            // Open-Meteo ocean current velocity in km/h -> convert to m/s
+            // Open-Meteo gives current in km/h, convert to m/s
             $rawCurrent = isset($marineData['ocean_current_velocity'][$idx]) ? (float)$marineData['ocean_current_velocity'][$idx] : 1.1;
             $oceanCurrent = round($rawCurrent * 0.27778, 2);
 
@@ -1376,7 +1365,7 @@ class WeatherForecastService
             $windowPressures[] = $pressure;
             $windowWindDirections[] = $windDir;
 
-            // Hourly point scores for granular breakdown
+            // Score per hour
             $hourScores = [
                 'wave_height' => $this->scoreWaveHeight($waveHeight),
                 'wind_speed' => $this->scoreWindSpeed($rawWindSpeed, $windGusts),
@@ -1423,14 +1412,14 @@ class WeatherForecastService
         $meanWindWaveHeight = $count ? array_sum($windowWindWaveHeights) / $count : 0.35;
         $meanWindDirection = $count ? array_sum($windowWindDirections) / $count : 245.0;
 
-        // Desensitized Sustained Window Physical Hard-Gates:
-        // 1. Sustained Wind >= 42.0 km/h (10-Min Rolling Mean; PCG gale/banca safety limit)
-        // 2. Peak Squall Gust >= 48.0 km/h (Instant single telemetric spike)
-        // 3. Significant Wave >= 1.80 m (30-Min Rolling Mean)
-        // 4. Swell Wave Height >= 1.80 m (30-Min Rolling Mean)
-        // 5. Ocean Current Velocity >= 0.80 m/s (10-Min Rolling Mean)
-        // 6. Precipitation >= 25.0 mm accumulation OR >= 25.0 mm/hr rate (15-Min Window)
-        // 7. Severe Low Pressure <= 998.0 hPa OR delta P >= 2.0 hPa / 3 hrs
+        // Hard limits for the window (any one of these = Critical Risk):
+        // 1. Wind >= 42 km/h (10-min average)
+        // 2. Gust >= 48 km/h
+        // 3. Waves >= 1.8 m (30-min average)
+        // 4. Swell >= 1.8 m (30-min average)
+        // 5. Current >= 0.8 m/s (10-min average)
+        // 6. Rain >= 25 mm total or >= 25 mm/hr
+        // 7. Pressure <= 998 hPa or drops 2 hPa or more in 3 hours
         $isPhysicalBreach = (
             $meanWindSpeed >= 42.0 ||
             $maxWindGust >= 48.0 ||
@@ -1457,7 +1446,7 @@ class WeatherForecastService
         $windowWeightedScorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($windowScores);
         $windowClass = ($overrideTriggered || $isPhysicalBreach) ? 'Critical Risk' : $this->classifyScore($windowWeightedScorePct);
 
-        // Find worst hour in window
+        // Find the worst hour in the window
         $worstScore = -1;
         $worstHour = null;
         foreach ($hourlyList as $item) {
@@ -1491,14 +1480,14 @@ class WeatherForecastService
     }
 
     /**
-     * Master cache updater: pulls 16-day continuous 24-hour marine and weather forecasts from Open-Meteo
-     * and saves structured continuous data in cache for sub-millisecond lookups.
+     * Get 16 days of hourly marine and weather forecast from Open-Meteo
+     * and save it in the cache.
      */
     public function updateAllForecasts(int $forecastDays = 16): array
     {
         $cachedContinuous = Cache::get('forecast:continuous_16d');
 
-        // 1. Fetch 16-Day Marine Forecast in a single API call through rate-controlled ExternalApiClient
+        // 1. Marine forecast (16 days, one API call)
         try {
             $marineRes = $this->apiClient->execute('open_meteo', 'GET', 'https://marine-api.open-meteo.com/v1/marine', [
                 'query' => [
@@ -1517,15 +1506,15 @@ class WeatherForecastService
             $marineHourly = [];
         }
 
-        // 2. Fetch 16-Day Atmospheric Weather Forecast in a single API call through rate-controlled ExternalApiClient
+        // 2. Weather forecast (16 days, one API call)
         try {
             $weatherRes = $this->apiClient->execute('open_meteo', 'GET', 'https://api.open-meteo.com/v1/forecast', [
                 'query' => [
                     'latitude' => config('forecast.site_lat', self::LATITUDE),
                     'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
-                    // forecast_days instead of start/end dates: Open-Meteo validates dates against UTC,
-                    // so a Manila-based end_date is rejected (HTTP 400) between 00:00 and 08:00 PHT.
+                    // Use forecast_days, not start/end dates. Open-Meteo checks dates in UTC,
+                    // so a Manila end_date gets a 400 error between 12 AM and 8 AM PH time.
                     'forecast_days' => $forecastDays,
                     'hourly' => 'precipitation,rain,showers,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m',
                 ],
@@ -1546,7 +1535,7 @@ class WeatherForecastService
             throw new Exception("Unable to communicate with Open-Meteo forecast servers.");
         }
 
-        // 3. Build Day-by-Day 24-Hour Continuous Profiles
+        // 3. Group the hours by day
         $times = $marineHourly['time'] ?? $weatherHourly['time'] ?? [];
         $dayBuckets = [];
         $dailySummaries = [];
@@ -1579,7 +1568,7 @@ class WeatherForecastService
                 ];
             }
 
-            // Populate marine array
+            // Marine values
             $dayBuckets[$dateKey]['marine']['time'][] = $isoTime;
             $wHeight = (float) ($marineHourly['wave_height'][$index] ?? 0.7);
             $wPeriod = (float) ($marineHourly['wave_period'][$index] ?? 6.1);
@@ -1593,7 +1582,7 @@ class WeatherForecastService
             $dayBuckets[$dateKey]['marine']['wind_wave_height'][] = $wwHeight;
             $dayBuckets[$dateKey]['marine']['ocean_current_velocity'][] = $rawCurrent;
 
-            // Populate weather array
+            // Weather values
             $dayBuckets[$dateKey]['weather']['time'][] = $isoTime;
             $precipVal = (float) ($weatherHourly['precipitation'][$index] ?? 0.0);
             $rawRainVal = (float) ($weatherHourly['rain'][$index] ?? 0.0);
@@ -1612,10 +1601,10 @@ class WeatherForecastService
             $dayBuckets[$dateKey]['weather']['wind_gusts_10m'][] = $windGustsVal;
             $dayBuckets[$dateKey]['weather']['wind_direction_10m'][] = $windDir;
 
-            // Calculate hour safety score (0-100%)
+            // Score for this hour (0-100%)
             $oceanCurrent = round($rawCurrent * 0.27778, 2);
 
-            // Deterministic Physical Hard-Gates (PCG Small Craft / Marine Ceilings)
+            // Hard limits (Coast Guard small boat limits)
             $isPhysicalBreach = (
                 $rawWindSpd >= 38.0 || $windGustsVal >= 48.0 ||
                 $wHeight >= 1.80 || $sHeight >= 1.80 ||
@@ -1659,13 +1648,13 @@ class WeatherForecastService
             ];
         }
 
-        // 4. Cache each day individually and summarize metrics
+        // 4. Save each day in the cache with a summary
         $snapshotRows = [];
         foreach ($dayBuckets as $dateKey => $bucket) {
             Cache::put("forecast:marine_cache:{$dateKey}", $bucket['marine'], now()->addMinutes(60));
             Cache::put("forecast:weather_cache:{$dateKey}", $bucket['weather'], now()->addMinutes(60));
 
-            // Calculate daytime sustained operational metrics (06:00 - 18:00)
+            // Daytime values (06:00 - 18:00)
             $daytimeHours = range(6, 18);
             $daytimeWinds = [];
             $daytimeGusts = [];
@@ -1706,7 +1695,7 @@ class WeatherForecastService
             $meanDaytimeWindWave = array_sum($daytimeWindWaves) / $dayCount;
             $meanDaytimeWindDir = array_sum($daytimeWindDirs) / $dayCount;
 
-            // 3-hour Barometric Tendency check across daytime hours
+            // Pressure change over 3 hours (daytime only)
             $maxPressureDrop3h = 0.0;
             for ($i = 0; $i < count($daytimePressures) - 3; $i++) {
                 $drop = $daytimePressures[$i] - $daytimePressures[$i + 3];
@@ -1715,13 +1704,12 @@ class WeatherForecastService
                 }
             }
 
-            // Tier 2 Compound Precursor Check:
-            // A rapid barometric drop (>= 2.5 hPa / 3h) requires companion storm indicators
-            // (Squall Gusts >= 38.0 km/h OR Rain Rate >= 15.0 mm/hr) to trigger an emergency breach.
-            // Diurnal solar tides on calm sunny days will NOT trigger a false critical alarm.
+            // A fast pressure drop (>= 2.5 hPa in 3h) only counts if there are also
+            // strong gusts (>= 38 km/h) or heavy rain (>= 15 mm/hr).
+            // This way normal daily pressure changes on calm days don't trigger an alarm.
             $hasCompoundPressureBreach = ($maxPressureDrop3h >= 2.5 && ($maxDaytimeGust >= 38.0 || $daytimeMaxRainRate >= 15.0));
 
-            // Tier 1 Absolute Physical Hard-Gates (PCG Banca / Small Craft Safety Limits)
+            // Hard limits (Coast Guard small boat limits)
             $isDaytimePhysicalBreach = (
                 $meanDaytimeWind >= 42.0 ||
                 $maxDaytimeGust >= 48.0 ||
@@ -1778,12 +1766,12 @@ class WeatherForecastService
             Cache::put("forecast:date:{$dateKey}", $summary, now()->addMinutes(60));
             $dailySummaries[$dateKey] = $summary;
 
-            // Multi-horizon historical forecast snapshot (saved in one upsert below)
+            // Forecast snapshot for later accuracy checks (saved below in one query)
             $daysOut = max(0, (int) Carbon::now(self::TIMEZONE)->startOfDay()->diffInDays(Carbon::parse($dateKey)->startOfDay(), false));
             $snapshotRows[] = $this->forecastSnapshotRow($dateKey, $daysOut, $summary);
         }
 
-        // ... and persist them in a single query instead of two per day
+        // Save all snapshots in one query instead of two per day
         if (!empty($snapshotRows)) {
             try {
                 ForecastSnapshot::upsert(
@@ -1796,7 +1784,7 @@ class WeatherForecastService
             }
         }
 
-        // 5. Store Master 16-Day Cache and Update Timestamp
+        // 5. Save the full 16-day cache and the update time
         $masterData = [
             'updated_at' => now(self::TIMEZONE)->toIso8601String(),
             'days_cached' => count($dailySummaries),
@@ -1811,8 +1799,8 @@ class WeatherForecastService
     }
 
     /**
-     * Retrieve pre-cached 24-hour forecast for a specific date if available.
-     * Integrates multi-source forecast_daily and forecast_hourly tables when FORECAST_SOURCE=prd.
+     * Get the cached forecast for a date if we have it.
+     * When FORECAST_SOURCE=prd it reads from forecast_daily and forecast_hourly.
      */
     public function getCachedDayForecast(Carbon|string $date): ?array
     {
@@ -1833,7 +1821,7 @@ class WeatherForecastService
                 $requiredDays = min(max(10, $diffDays + 2), 16);
                 $siteForecast = $this->forecastSite(days: $requiredDays);
             } else {
-                // Advance planning: run forecastSite anchored to the target date's seasonal window
+                // Date is far away: run forecastSite for that date
                 $targetIssued = Carbon::parse($dateStr)->copy()->startOfDay()->subHours(6)->toIso8601String();
                 $siteForecast = $this->forecastSite(issuedAt: $targetIssued, days: 3);
             }
@@ -1904,7 +1892,7 @@ class WeatherForecastService
     }
 
     /**
-     * Fetch Open-Meteo Marine Forecast with cache-first lookup and error tolerance.
+     * Get the Open-Meteo marine forecast (cache first).
      */
     protected function fetchOpenMeteoMarine(string $date): array
     {
@@ -1941,7 +1929,7 @@ class WeatherForecastService
     }
 
     /**
-     * Fetch Open-Meteo Weather Forecast with cache-first lookup and error tolerance.
+     * Get the Open-Meteo weather forecast (cache first).
      */
     protected function fetchOpenMeteoWeather(string $date): array
     {
@@ -1977,9 +1965,9 @@ class WeatherForecastService
         return [];
     }
 
-    // =========================================================================
-    // Rule-Based Threshold Scoring Functions (0-4)
-    // =========================================================================
+    // ---------------------------------------------------------------
+    // Scoring functions (each returns 0-4)
+    // ---------------------------------------------------------------
 
     protected function scoreWaveHeight(float $v): int
     {
@@ -2024,7 +2012,7 @@ class WeatherForecastService
 
     protected function scoreWindSpeed(float $sustained, float $gusts): int
     {
-        // Evaluates sustained wind and sudden squall gusts (PCG Small Craft / Banca criteria)
+        // Wind and gusts (Coast Guard small boat limits)
         if ($sustained < 12.0 && $gusts < 18.0) return 0;
         if ($sustained < 20.0 && $gusts < 28.0) return 1;
         if ($sustained < 28.0 && $gusts < 38.0) return 2;
@@ -2034,7 +2022,7 @@ class WeatherForecastService
 
     protected function scoreRain(float $v): int
     {
-        // Tightened bounds: 0.2mm captures tropical monsoon mist and convective drizzle
+        // 0.2 mm so light drizzle still counts
         if ($v < 0.2) return 0;
         if ($v < 2.5) return 1;
         if ($v < 7.5) return 2;
@@ -2044,7 +2032,7 @@ class WeatherForecastService
 
     protected function scoreSeaLevelPressure(float $v): int
     {
-        // Fixed boundary inequality logic to eliminate gaps
+        // Bands have no gaps between them
         if ($v >= 1012.0) return 0;
         if ($v >= 1008.0) return 1;
         if ($v >= 1004.0) return 2;
@@ -2062,7 +2050,7 @@ class WeatherForecastService
 
     public function computeWeightedScore(array $scoresOrForecast): array|float
     {
-        // If passed a physics forecast payload (e.g. ['physics' => [...]] or directly carrying quantile objects)
+        // Input is a forecast with quantiles (e.g. ['physics' => [...]])
         if (isset($scoresOrForecast['physics']) || isset($scoresOrForecast['significant_wave_height_m']) || isset($scoresOrForecast['wind_speed_kmh'])) {
             $physics = $scoresOrForecast['physics'] ?? $scoresOrForecast;
             $scoreDetails = $this->calculatePhysicsWeightedScore($physics);
@@ -2071,13 +2059,13 @@ class WeatherForecastService
             return array_merge($scoreDetails, ['confidence' => $confidence]);
         }
 
-        // Backward-compatible path for direct 0-4 point scores array
+        // Old input format: array of 0-4 scores
         return $this->computeScoreFromWeights($scoresOrForecast);
     }
 
     /**
-     * Evaluate Coast Guard safety ceiling confidence against p10-p90 quantile intervals.
-     * Returns 'low' if any safety ceiling is straddled by [p10, p90], otherwise 'high'.
+     * Check if the p10-p90 range crosses any safety limit.
+     * Returns 'low' if it does, otherwise 'high'.
      */
     public function evaluateConfidence(array $physics): string
     {
@@ -2098,7 +2086,7 @@ class WeatherForecastService
             $p90 = is_array($val) && isset($val['p90']) ? (float) $val['p90'] : null;
 
             if ($p10 !== null && $p90 !== null) {
-                // If interval straddles the safety ceiling
+                // Range crosses the limit
                 if ($p10 < $ceiling && $p90 >= $ceiling) {
                     return 'low';
                 }
@@ -2109,7 +2097,7 @@ class WeatherForecastService
     }
 
     /**
-     * Calculate 9-parameter weighted score from physics forecast values.
+     * Get the weighted score (9 values) from a forecast.
      */
     public function calculatePhysicsWeightedScore(array $physics): array
     {
@@ -2132,7 +2120,7 @@ class WeatherForecastService
         $currentSpeed = $extractVal('current_speed_ms', 0.20);
         $rainRate = $extractVal('rain_rate_mm_hr', 0.0);
 
-        // Check absolute physical hard-gate ceilings
+        // Check the hard limits
         $isPhysicalBreach = (
             $windSpeedKmh >= 42.0 ||
             $windGustKmh >= 48.0 ||
@@ -2167,7 +2155,7 @@ class WeatherForecastService
     }
 
     /**
-     * Compute weighted score from 9-parameter scores (0-4) with multi-hazard synergy multipliers.
+     * Weighted score from the 9 scores (0-4), with extra risk when several hazards happen together.
      */
     protected function computeScoreFromWeights(array $scores): float
     {
@@ -2179,7 +2167,7 @@ class WeatherForecastService
 
         $rawScorePct = ($weightedSum / $maxPossible) * 100.0;
 
-        // Compound Risk Synergy: Exponential penalty when multiple hazards co-occur
+        // More risk when several hazards happen at the same time
         $highRiskFactors = 0;
         if (($scores['wave_height'] ?? 0) >= 2) $highRiskFactors++;
         if (($scores['wind_speed'] ?? 0) >= 2) $highRiskFactors++;
@@ -2189,9 +2177,9 @@ class WeatherForecastService
 
         $synergyMultiplier = 1.0;
         if ($highRiskFactors >= 4) {
-            $synergyMultiplier = 1.25; // 25% compound multiplier for multi-hazard conditions
+            $synergyMultiplier = 1.25; // +25%
         } elseif ($highRiskFactors >= 3) {
-            $synergyMultiplier = 1.15; // 15% compound multiplier
+            $synergyMultiplier = 1.15; // +15%
         }
 
         return min(100.0, round($rawScorePct * $synergyMultiplier, 1));
@@ -2207,7 +2195,7 @@ class WeatherForecastService
     }
 
     /**
-     * Persist or update a multi-horizon forecast snapshot for historical auditing.
+     * Save or update a forecast snapshot (used for accuracy checks).
      */
     public function recordForecastSnapshot(
         string $date,
@@ -2225,7 +2213,7 @@ class WeatherForecastService
     }
 
     /**
-     * Snapshot row in database format (model casts applied) for bulk upserts.
+     * Snapshot row ready for a bulk upsert.
      */
     protected function forecastSnapshotRow(string $date, int $leadTimeDays, array $summary, ?string $mlClassification = null): array
     {
@@ -2256,11 +2244,11 @@ class WeatherForecastService
     }
 
     /**
-     * Retrieve or compute realized on-the-water meteorological & marine conditions for a past date (T-0).
+     * Get the actual weather for a past date (T-0).
      */
     public function fetchRealizedWeather(string $date): array
     {
-        // 1. Check if we have live archive readings from Open-Meteo
+        // 1. Try the Open-Meteo archive first
         $marineData = [];
         $weatherData = [];
 
@@ -2320,7 +2308,7 @@ class WeatherForecastService
             Log::warning("Realized weather fetch exception: " . $e->getMessage());
         }
 
-        // Fallback to local cache if live fetch yielded no readings
+        // If that gave nothing, use the cache
         if (empty($marineData)) {
             $marineData = Cache::get("forecast:marine_cache:{$date}", []);
         }
@@ -2328,7 +2316,7 @@ class WeatherForecastService
             $weatherData = Cache::get("forecast:weather_cache:{$date}", []);
         }
 
-        // 2. Parse daytime window (06:00 - 18:00) readings
+        // 2. Daytime readings (06:00 - 18:00)
         $daytimeHours = range(6, 18);
         $daytimeWaves = [];
         $daytimeSwells = [];
@@ -2358,7 +2346,7 @@ class WeatherForecastService
             }
         }
 
-        // If daytime readings were unavailable, check existing hourly assessments or default baseline
+        // No daytime readings: use saved hourly assessments or default values
         if (empty($daytimeWaves)) {
             $assessments = HourlyAssessment::whereHas('riskAssessment', function ($q) use ($date) {
                 $q->whereDate('dive_date', $date);
@@ -2378,7 +2366,7 @@ class WeatherForecastService
                     $daytimeWindDirs[] = (float) $ha->wind_direction;
                 }
             } else {
-                // Default calm sea baseline
+                // Default calm sea values
                 $daytimeWaves = [0.50];
                 $daytimeSwells = [0.40];
                 $daytimePeriods = [7.0];
@@ -2405,7 +2393,7 @@ class WeatherForecastService
         $meanPressure = !empty($daytimePressures) ? (array_sum($daytimePressures) / count($daytimePressures)) : 1012.0;
         $meanWindDir = !empty($daytimeWindDirs) ? (array_sum($daytimeWindDirs) / count($daytimeWindDirs)) : 45.0;
 
-        // Physical hard-gate evaluation
+        // Check the hard limits
         $isPhysicalBreach = (
             $meanWind >= 42.0 ||
             $maxGust >= 48.0 ||
@@ -2448,16 +2436,16 @@ class WeatherForecastService
     }
 
     /**
-     * Automated Nightly Archive Pipeline:
-     * Compares multi-horizon predictions (T-14, T-7, T-3, T-1) against realized ocean conditions (T-0),
-     * calculates Mean Absolute Error (MAE) and classification accuracy, and persists records in forecast_accuracy_logs.
+     * Nightly accuracy check.
+     * Compares old forecasts (T-14, T-7, T-3, T-1) with the actual weather (T-0),
+     * calculates the error and accuracy, and saves them in forecast_accuracy_logs.
      */
     public function archiveForecastAccuracy(?Carbon $targetDate = null, array $leadTimes = [1, 3, 7, 14]): array
     {
         $targetDate = $targetDate ? $targetDate->copy()->startOfDay() : Carbon::yesterday(self::TIMEZONE)->startOfDay();
         $dateStr = $targetDate->format('Y-m-d');
 
-        // 1. Fetch / determine realized actual weather on the water
+        // 1. Get the actual weather
         $realized = $this->fetchRealizedWeather($dateStr);
         $actualClass = $realized['actual_classification'];
         $actualWave = (float) $realized['actual_wave_height'];
@@ -2476,13 +2464,13 @@ class WeatherForecastService
             $leadDays = (int) $days;
             $label = ForecastSnapshot::formatLeadTimeLabel($leadDays);
 
-            // Retrieve historical snapshot for this date & lead time
+            // Get the snapshot for this date and lead time
             $snapshot = ForecastSnapshot::whereDate('target_date', $dateStr)
                 ->where('lead_time_days', $leadDays)
                 ->first();
 
             if (!$snapshot) {
-                // If no snapshot exists, check if there's a batch risk assessment with approximate lead time
+                // No snapshot: try a batch assessment with a similar lead time
                 $approxHours = $leadDays * 24;
                 $assessment = BatchRiskAssessment::where('dive_date', $dateStr)
                     ->whereBetween('lead_time_hours', [$approxHours - 18, $approxHours + 18])
@@ -2496,7 +2484,7 @@ class WeatherForecastService
                     $predRain = $actualRain;
                     $mlPredClass = null;
                 } else {
-                    continue; // Skip if no historical prediction was captured
+                    continue; // no forecast was saved for this one
                 }
             } else {
                 $predClass = $snapshot->predicted_classification;
@@ -2595,14 +2583,13 @@ class WeatherForecastService
     }
 
     /**
-     * Scores daily precipitation (mm/day) against operational rain bands.
+     * Score daily rain (mm/day).
      *
-     * Bands:
-     * 0: < 1 mm/day (Dry / None)
-     * 1: < 10 mm/day (Light Rain)
-     * 2: < 25 mm/day (Moderate Rain)
-     * 3: < 50 mm/day (Heavy Rain)
-     * 4: >= 50 mm/day (Torrential Rain)
+     * 0: < 1 mm (dry)
+     * 1: < 10 mm (light)
+     * 2: < 25 mm (moderate)
+     * 3: < 50 mm (heavy)
+     * 4: >= 50 mm (very heavy)
      */
     public function scoreRainDaily(float $v): array
     {
@@ -2634,8 +2621,8 @@ class WeatherForecastService
     }
 
     /**
-     * Calculates freediving safety tier from p50 median prediction,
-     * applying adverse tail (p90) escalation ONLY when source is 'model'.
+     * Get the safety tier from the p50 value.
+     * Also checks p90 (worse case) but only when the source is 'model'.
      */
     public function calculateTierAndLabel(array $hourlyData): array
     {
@@ -2675,7 +2662,7 @@ class WeatherForecastService
         $tier = $scoreDetails['classification'];
         $label = self::MEANING_MAP[$tier] ?? 'Conditions require operator review.';
 
-        // Adverse-tail check is model-only and never uses p_high_gust.
+        // p90 check is only for the model and doesn't use p_high_gust
         $adverseTriggered = false;
         $adverseNotes = [];
         $hardGateTriggered = $scoreDetails['is_physical_breach'];
@@ -2714,7 +2701,7 @@ class WeatherForecastService
             $label .= ' [Adverse Tail Alert: ' . implode(', ', $adverseNotes) . ']';
         }
 
-        // When relying on climatology, clearly distinguish from a live hourly forecast
+        // Show that this is climatology, not a real hourly forecast
         if ($hsSource === 'climatology' && $currentSource === 'climatology') {
             $label = 'Seasonal estimate: typical conditions for this time of year. Storms are not detected; check PAGASA advisories.';
         }
@@ -2735,8 +2722,8 @@ class WeatherForecastService
     }
 
     /**
-     * Primary multi-source site forecast engine with circuit breaker, caching,
-     * and automatic persistence to forecast_hourly and forecast_daily.
+     * Site forecast from the forecast service, with a circuit breaker and cache.
+     * Saves the results to forecast_hourly and forecast_daily.
      */
     public function forecastSite(
         ?float $lat = null,
@@ -2755,7 +2742,7 @@ class WeatherForecastService
             return Cache::get($cacheKey);
         }
 
-        // Circuit breaker check
+        // Circuit breaker
         $cbFailuresKey = 'forecast_circuit_breaker_failures';
         $failures = (int) Cache::get($cbFailuresKey, 0);
         $maxFailures = (int) config('forecast.circuit_breaker.max_failures', 5);
@@ -2777,7 +2764,7 @@ class WeatherForecastService
                 $response = Http::timeout($timeout)->post("{$apiUrl}/forecast/site", $payload);
                 if ($response->successful()) {
                     $data = $response->json();
-                    Cache::forget($cbFailuresKey); // reset circuit breaker on success
+                    Cache::forget($cbFailuresKey); // reset the circuit breaker
                 } else {
                     Log::warning("Forecast microservice returned HTTP {$response->status()}", ['body' => $response->body()]);
                     Cache::put($cbFailuresKey, $failures + 1, 300);
@@ -2790,7 +2777,7 @@ class WeatherForecastService
             Log::warning("Forecast circuit breaker OPEN ({$failures} failures). Bypassing remote microservice.");
         }
 
-        // If remote microservice is unreachable, generate local climatology degradation
+        // Service is down: use local climatology instead
         if ($data === null) {
             $data = $this->generateLocalClimatologyFallback($lat, $lon, $issuedAt, $days);
         }
@@ -2798,7 +2785,7 @@ class WeatherForecastService
         $persistedDailyMap = [];
         $issuedTimestamp = Carbon::parse($data['issued_at']);
 
-        // Group hourly by date to evaluate daily metrics
+        // Group the hours by date
         $dailyGroups = [];
         foreach ($data['forecast_hourly'] as &$hRow) {
             $eval = $this->calculateTierAndLabel($hRow);
@@ -2812,14 +2799,14 @@ class WeatherForecastService
         }
         unset($hRow);
 
-        // Process daily rows and save to DB
+        // Save the daily rows
         foreach ($data['forecast_daily'] as &$dRow) {
             $dateStr = $dRow['date'];
             $rainScoreInfo = $this->scoreRainDaily((float)$dRow['rain_daily_mm_p50']);
             $dRow['rain_score'] = $rainScoreInfo['band'];
             $dRow['rain_label'] = $rainScoreInfo['label'];
 
-            // Find worst hourly tier for daytime (06:00 - 18:00)
+            // Worst daytime tier (06:00 - 18:00)
             $dayHours = $dailyGroups[$dateStr] ?? [];
             $maxRank = 0;
             $worstTier = 'Safe';
@@ -2838,7 +2825,7 @@ class WeatherForecastService
             $dRow['daily_tier'] = $worstTier;
             $dRow['daily_label'] = $worstLabel ?: 'Conditions evaluated across operational daylight hours';
 
-            // DB persist
+            // Save to DB
             try {
                 $dailyRecord = ForecastDaily::updateOrCreate(
                     [
@@ -2873,7 +2860,7 @@ class WeatherForecastService
         }
         unset($dRow);
 
-        // Persist hourly rows to DB via bulk upsert
+        // Save the hourly rows (bulk upsert)
         $hourlyRows = [];
         $nowStr = now()->toDateTimeString();
         foreach ($data['forecast_hourly'] as $h) {
@@ -2930,7 +2917,7 @@ class WeatherForecastService
             Log::error("Failed bulk upsert of ForecastHourly: {$ex->getMessage()}");
         }
 
-        // Cache 1 hour
+        // Cache for 1 hour
         $cacheTtl = (int) config('forecast.circuit_breaker.cache_ttl_seconds', 3600);
         Cache::put($cacheKey, $data, $cacheTtl);
 
@@ -2938,7 +2925,7 @@ class WeatherForecastService
     }
 
     /**
-     * Generates local fallback climatology response when remote microservice is unreachable.
+     * Local climatology result for when the forecast service is down.
      */
     protected function generateLocalClimatologyFallback(
         float $lat,

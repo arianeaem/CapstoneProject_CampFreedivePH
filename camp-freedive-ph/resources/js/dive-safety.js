@@ -1,5 +1,5 @@
-// Presentation-only helpers for dive safety / weather evaluations.
-// Exposed to every Alpine template as `$safety` (see app.js). No safety logic lives here.
+// Display helpers for the dive safety / weather results.
+// Available in every Alpine template as `$safety` (see app.js). Only for display, no safety logic here.
 
 const TONE_STYLES = {
     safe: { surface: 'bg-[#F0FDF4] border-[#BBF7D0]', text: 'text-[#047857]', dot: 'bg-[#10B981]' },
@@ -62,7 +62,7 @@ export const DiveSafety = {
         return /\d/.test(value || '');
     },
 
-    // Short plain-language reasons from the Day 1 / Day 2 readings already in the forecast
+    // Short reasons from the Day 1 / Day 2 readings
     highlights(f) {
         if (!f || !f.day1 || !f.day2) return [];
         const peak = (key) => {
@@ -85,7 +85,7 @@ export const DiveSafety = {
         return items.slice(0, 4);
     },
 
-    // The two forecast models, in display order, with customer-friendly names
+    // The two forecast models in display order, with simple names
     engines(f) {
         if (!f || !f.engines) return [];
         return [

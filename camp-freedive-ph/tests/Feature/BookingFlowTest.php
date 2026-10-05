@@ -181,7 +181,7 @@ class BookingFlowTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // Manage Booking — lookup & reschedule
+    // Manage Booking - lookup and reschedule
     // -------------------------------------------------------------------------
 
     public function test_manage_booking_lookup_and_policy_evaluation(): void
@@ -311,7 +311,7 @@ class BookingFlowTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
-    // Field validation — updated for new strict rules
+    // Field validation
     // -------------------------------------------------------------------------
 
     public function test_booking_validation_rejects_invalid_phone_number(): void

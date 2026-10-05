@@ -60,7 +60,7 @@ for d in dates:
     else:
         print(f"Failed {d}: {r.status_code}")
 
-# Patch raw monthly files
+# Patch the monthly files
 raw_dir = Path("data/raw/gpm_daily")
 for d, grid in fetched.items():
     ym = d[:7].replace('-', '_')
@@ -80,7 +80,7 @@ for d, grid in fetched.items():
         df_m.to_parquet(f, index=False)
         print(f"Patched {d} into {f.name}")
 
-# Rebuild full master 30-cell archive and site table
+# Rebuild the full 30-cell file and the site table
 monthly_files = sorted([p for p in raw_dir.glob("gpm_daily_20*.parquet") if "grid_30cells" not in p.name])
 master_df = pd.concat([pd.read_parquet(p) for p in monthly_files], ignore_index=True)
 master_df = master_df.drop_duplicates(subset=['date', 'lon', 'lat']).sort_values(['date', 'lon', 'lat'])

@@ -1,28 +1,25 @@
 """
-Deterministic Physical Safety Limits & Thresholds layer and Operational Horizon Policy.
-Sits directly on top of xgb_safety_classifier's output: any breach of a physical
-threshold or an active PAGASA storm signal forces Critical Risk regardless of what
-the classifier predicted.
+Hard safety limits and the forecast horizon rules.
+This runs after xgb_safety_classifier. If any limit is broken or there is a PAGASA
+storm signal, the result becomes Critical Risk no matter what the classifier said.
 
-OPERATIONAL HORIZON POLICY (Safety Framework & Empirical Horizon Validation):
-- H = 1h (Tactical Departure Window):
-    * ML Safety Classifier is ACTIVE: "TACTICAL_CLEARANCE"
-    * High model fidelity (Empirical Critical FNR = 4.5%, Precision = 96.8%).
-    * Authoritative Go/No-Go dockside departure clearance.
-- 1h < H <= 24h (Provisional Planning Window: 6h, 12h, 24h):
-    * Discrete ML safety tier is SUPPRESSED: "PROVISIONAL_TREND_OUTLOOK"
-    * Empirical Critical FNR is 40.9% - 54.5% (approx. coin-flip reliability due
-      to early-stage MSE variance smoothing).
-    * Surfacing a discrete "Safe" badge with an abstract caution icon creates false
-      reassurance; therefore, discrete classification is suppressed and the UI surfaces
-      the empirical ~45% miss rate, raw physics, P90 tail risk bounds, and active
-      safety threshold backstop for advance planning only. Final clearance deferred to T-1h.
-- H > 24h (Extended Window: 48h, 72h, 96h, 144h):
-    * Discrete ML safety tier is SUPPRESSED: "EXTENDED_TREND_OUTLOOK"
-    * Empirical Critical FNR is 82.0% - 100.0% (climatological mean-regression).
-    * Surfaces raw physical trajectory, P90 tail bounds, and active safety threshold backstop.
+Horizon rules (from our test results):
+- H = 1h (just before leaving):
+    * ML safety level is shown: "TACTICAL_CLEARANCE"
+    * Missed Critical = 4.5%, precision = 96.8%
+    * This is the one used for the final go/no-go at the dock.
+- 1h < H <= 24h (6h, 12h, 24h):
+    * ML safety level is hidden: "PROVISIONAL_TREND_OUTLOOK"
+    * Missed Critical = 40.9% - 54.5% (about a coin flip).
+    * Showing "Safe" here would be misleading, so we hide the level and show
+      the miss rate, the raw values, the P90 values and the hard limits instead.
+      Planning only, the final check is at T-1h.
+- H > 24h (48h, 72h, 96h, 144h):
+    * ML safety level is hidden: "EXTENDED_TREND_OUTLOOK"
+    * Missed Critical = 82% - 100% (it just goes back to the average).
+    * Shows the raw values, the P90 values and the hard limits.
 
-Thresholds are imported from build_safety_labels.py, NOT retyped here.
+The limits come from build_safety_labels.py, they are not typed again here.
 
 Run from the project root: python src/serve/safety_thresholds.py
 """
@@ -36,7 +33,7 @@ from src.labels.build_safety_labels import SAFETY_THRESHOLDS, HARD_GATE, KMH_TO_
 
 TIER_NAMES = ["Very Safe", "Safe", "Moderate", "High Risk", "Critical Risk"]
 TIER_CRITICAL = 4
-TIER_NO_CONSTRAINT = 0  # what the safety threshold contributes to max() when nothing is breached
+TIER_NO_CONSTRAINT = 0  # value used in max() when no limit is broken
 
 TACTICAL_GO_NO_GO_HORIZON_HOURS = 1
 PROVISIONAL_CUTOFF_HORIZON_HOURS = 24
@@ -44,33 +41,27 @@ PROVISIONAL_CUTOFF_HORIZON_HOURS = 24
 
 def check_physical_breach(telemetry: dict) -> tuple[bool, list[str]]:
     """
-    Evaluates individual telemetry variables against deterministic safety thresholds.
+    Check each reading against the hard limits.
 
-    Business Logic / Meteorological Rationale:
-        1. Single-Variable Hard Limits: If sustained winds, gusts, wave heights, swells,
-           currents, rain rate, or minimum barometric pressure exceed safe operating
-           parameters, the session is instantly unsafe regardless of model confidence.
-        2. Context-Aware Compound Precursor Check:
-           A rapid 3-hour barometric drop (>= 2.5 hPa / 3h) is an established cyclone/storm
-           indicator. However, in tropical latitudes, semi-diurnal solar atmospheric tides
-           (the S2 oscillation) naturally drop pressure by 1.5 - 2.0 hPa every afternoon.
-           To prevent daily false alarms on calm sunny days, a rapid barometric drop only
-           triggers an emergency breach if accompanied by squall gusts (>= 38 km/h) or
-           heavy rain (>= 15 mm/hr).
+    1. If wind, gusts, waves, swell, current, rain or low pressure is over the limit,
+       it's unsafe no matter what the model says.
+    2. A fast pressure drop (>= 2.5 hPa in 3h) can mean a storm. But here the pressure
+       normally drops 1.5 - 2.0 hPa every afternoon, so a fast drop only counts
+       if there are also strong gusts (>= 38 km/h) or heavy rain (>= 15 mm/hr).
 
     Parameters:
-        telemetry (dict): Dictionary of physical readings:
-            - wind_speed (float): Sustained wind in m/s.
-            - wind_gust (float): Peak gust in m/s.
-            - hs (float): Significant wave height in meters.
-            - swell_height (float): Swell height in meters.
-            - current_speed (float): Ocean current speed in m/s.
-            - rain_rate_mm_hr (float): Precipitation rate in mm/hr.
-            - slp (float): Sea level pressure in hPa.
-            - delta_p_3h (float, optional): 3-hour barometric tendency in hPa.
+        telemetry (dict):
+            - wind_speed (float): wind in m/s
+            - wind_gust (float): gust in m/s
+            - hs (float): wave height in m
+            - swell_height (float): swell height in m
+            - current_speed (float): current in m/s
+            - rain_rate_mm_hr (float): rain in mm/hr
+            - slp (float): pressure in hPa
+            - delta_p_3h (float, optional): pressure change over 3 hours in hPa
 
     Returns:
-        tuple[bool, list[str]]: (breached, list of human-readable breach explanations).
+        tuple[bool, list[str]]: (broken, list of reasons)
     """
     reasons = []
 
@@ -100,7 +91,7 @@ def check_physical_breach(telemetry: dict) -> tuple[bool, list[str]]:
     wind_gust_ms = telemetry.get("wind_gust", 0.0)
     rain_rate = telemetry.get("rain_rate_mm_hr", 0.0)
     squall_gust_threshold_ms = 38.0 * KMH_TO_MS  # 10.56 m/s (38 km/h)
-    storm_rain_threshold_mm = 15.0  # 15.0 mm/hr
+    storm_rain_threshold_mm = 15.0  # mm/hr
 
     if pressure_drop >= 2.5 and (wind_gust_ms >= squall_gust_threshold_ms or rain_rate >= storm_rain_threshold_mm):
         reasons.append(
@@ -113,21 +104,19 @@ def check_physical_breach(telemetry: dict) -> tuple[bool, list[str]]:
 
 def check_pagasa_override(pagasa: dict | None = None) -> tuple[bool, list[str]]:
     """
-    Evaluates official PAGASA cyclone signals, gale warnings, and tsunami alerts.
+    Check PAGASA storm signals, gale warnings and tsunami alerts.
 
-    Business Logic:
-        Government regulatory marine advisories supersede mathematical forecasting models.
-        TCWS Signal #3+, Gale Warnings, and Tsunami Warnings mandate immediate cessation
-        of all watercraft operations and freediving training.
+    Official warnings win over the models. Signal #3 or higher, gale warnings
+    and tsunami warnings mean no boats and no diving.
 
     Parameters:
-        pagasa (dict | None): Optional dictionary containing:
-            - tcws_signal (int): Tropical Cyclone Wind Signal (0-5).
-            - gale_warning (bool): Active Coast Guard gale warning flag.
-            - tsunami_warning (bool): Active PHIVOLCS tsunami advisory flag.
+        pagasa (dict | None):
+            - tcws_signal (int): storm signal (0-5)
+            - gale_warning (bool): Coast Guard gale warning
+            - tsunami_warning (bool): PHIVOLCS tsunami warning
 
     Returns:
-        tuple[bool, list[str]]: (breached, list of active advisory statements).
+        tuple[bool, list[str]]: (broken, list of warnings)
     """
     if pagasa is None:
         return False, []
@@ -144,27 +133,25 @@ def check_pagasa_override(pagasa: dict | None = None) -> tuple[bool, list[str]]:
 
 def apply_safety_thresholds(ml_prediction: int, telemetry: dict, pagasa: dict | None = None) -> dict:
     """
-    Core Deterministic Safety Threshold Override.
+    Apply the hard limits on top of the ML result.
 
-    Mathematical Logic:
-        Final Risk Tier = max(ml_prediction, safety_threshold_tier, pagasa_override_tier).
-        A physical threshold or advisory breach can only ever escalate the risk tier
-        toward Critical Risk (Tier 4); it can never downgrade a conservative ML classification.
+    final tier = max(ml_prediction, limit tier, pagasa tier)
+    So the limits can only make the risk higher, never lower.
 
     Parameters:
-        ml_prediction (int): Raw integer class (0=Very Safe .. 4=Critical Risk) from xgb_safety_classifier.
-        telemetry (dict): Physical weather and oceanographic variables.
-        pagasa (dict | None): Active PAGASA advisories.
+        ml_prediction (int): class from xgb_safety_classifier (0 = Very Safe .. 4 = Critical Risk)
+        telemetry (dict): weather and sea readings
+        pagasa (dict | None): PAGASA warnings
 
     Returns:
-        dict: Standardized safety evaluation dictionary containing:
-            - final_tier (int): Post-override integer risk tier (0-4).
-            - final_tier_name (str): Label (e.g. 'Critical Risk').
-            - ml_prediction (int): Pre-override classifier prediction.
-            - ml_prediction_name (str): Pre-override classifier label.
-            - safety_threshold_triggered (bool): True if any physical or advisory limit breached.
-            - hard_gate_triggered (bool): Backward-compatible alias.
-            - override_reasons (list[str]): Detailed explanations of all triggered constraints.
+        dict:
+            - final_tier (int): tier after the limits (0-4)
+            - final_tier_name (str): e.g. 'Critical Risk'
+            - ml_prediction (int): classifier result before the limits
+            - ml_prediction_name (str): its label
+            - safety_threshold_triggered (bool): True if any limit or warning was hit
+            - hard_gate_triggered (bool): same as above (old name)
+            - override_reasons (list[str]): why
     """
     physical_breach, physical_reasons = check_physical_breach(telemetry)
     pagasa_breach, pagasa_reasons = check_pagasa_override(pagasa)
@@ -185,7 +172,7 @@ def apply_safety_thresholds(ml_prediction: int, telemetry: dict, pagasa: dict | 
     }
 
 
-# Backwards compatibility alias
+# Old name, kept so older code still works
 apply_hard_gate = apply_safety_thresholds
 
 
@@ -196,21 +183,19 @@ def evaluate_operational_safety(
     pagasa: dict | None = None
 ) -> dict:
     """
-    Operational Decision Function Enforcing the 3-Tier Horizon Cutoff Policy.
+    Apply the 3 horizon bands.
 
     - Band 1 (H = 1h): "TACTICAL_CLEARANCE"
-      Surfaces the authoritative active ML safety verdict + safety thresholds.
-      Empirical Critical FNR = 4.5%, Precision = 96.8%.
+      Shows the ML safety level + hard limits.
+      Missed Critical = 4.5%, precision = 96.8%.
 
-    - Band 2 (1h < H <= 24h, i.e. 6h, 12h, 24h): "PROVISIONAL_TREND_OUTLOOK"
-      SUPPRESSES discrete ML safety tier (displayed_tier: null).
-      Empirical Critical FNR is 40.9% - 54.5% (~45% miss rate). Surfaces raw physics,
-      P90 tail risk, and active safety limits for tentative planning.
+    - Band 2 (1h < H <= 24h, so 6h, 12h, 24h): "PROVISIONAL_TREND_OUTLOOK"
+      Hides the ML level (displayed_tier = null).
+      Missed Critical = 40.9% - 54.5%. Shows raw values, P90 and the hard limits for planning.
 
-    - Band 3 (H > 24h, i.e. 48h, 72h, 96h, 144h): "EXTENDED_TREND_OUTLOOK"
-      SUPPRESSES discrete ML safety tier (displayed_tier: null).
-      Empirical Critical FNR is 82.0% - 100.0% due to climatological mean-regression.
-      Surfaces physical trajectory, P90 tail risk, and active safety limits.
+    - Band 3 (H > 24h, so 48h, 72h, 96h, 144h): "EXTENDED_TREND_OUTLOOK"
+      Hides the ML level (displayed_tier = null).
+      Missed Critical = 82% - 100%. Shows raw values, P90 and the hard limits.
     """
     threshold_result = apply_safety_thresholds(ml_prediction, telemetry, pagasa)
 
@@ -226,7 +211,7 @@ def evaluate_operational_safety(
     elif horizon_hours <= PROVISIONAL_CUTOFF_HORIZON_HOURS:
         operational_status = "PROVISIONAL_TREND_OUTLOOK"
         is_safety_verdict_active = False
-        displayed_tier = None  # Discrete tier suppressed
+        displayed_tier = None  # level is hidden
         displayed_tier_name = "SUPPRESSED_PROVISIONAL_TREND"
         advisory_message = (
             f"Provisional planning outlook ({horizon_hours}h ahead). Discrete safety tier is SUPPRESSED "
@@ -237,7 +222,7 @@ def evaluate_operational_safety(
     else:
         operational_status = "EXTENDED_TREND_OUTLOOK"
         is_safety_verdict_active = False
-        displayed_tier = None  # Discrete tier suppressed
+        displayed_tier = None  # level is hidden
         displayed_tier_name = "SUPPRESSED_FOR_EXTENDED_HORIZON"
         advisory_message = (
             f"Extended macro outlook ({horizon_hours}h ahead). Discrete safety tier is SUPPRESSED "
@@ -263,7 +248,7 @@ def evaluate_operational_safety(
 
 
 # ---------------------------------------------------------------------------
-# Test suite
+# Tests
 # ---------------------------------------------------------------------------
 def _run_tests():
     print("Running safety threshold and operational cutoff test suite...\n")
@@ -285,7 +270,7 @@ def _run_tests():
     check("calm -> final_tier is 0", r["final_tier"] == 0, f"got {r}")
     check("calm -> not triggered", not r["safety_threshold_triggered"], f"got {r}")
 
-    # 2. Safety thresholds must NEVER lower a higher ML prediction, even if physically calm
+    # 2. Limits must never lower a higher ML result, even if the sea is calm
     r = apply_safety_thresholds(3, calm)
     check("ML=3 calm -> final_tier stays 3", r["final_tier"] == 3, f"got {r}")
     check("ML=3 calm -> not triggered", not r["safety_threshold_triggered"], f"got {r}")
@@ -339,42 +324,42 @@ def _run_tests():
     r = apply_safety_thresholds(0, calm, {"tsunami_warning": True})
     check("tsunami -> final_tier is 4", r["final_tier"] == 4, f"got {r}")
 
-    # 13. PAGASA signal 1 / 2 alone do NOT trigger critical override
+    # 13. PAGASA signal 1 or 2 alone is not Critical
     r = apply_safety_thresholds(0, calm, {"tcws_signal": 2})
     check("PAGASA signal 2 -> final_tier is 0 (no critical override)", r["final_tier"] == 0, f"got {r}")
     check("PAGASA signal 2 -> not triggered", not r["safety_threshold_triggered"], f"got {r}")
 
-    # 14. Operational Cutoff Policy: 1h Horizon -> Tactical clearance active
+    # 14. 1h horizon -> level is shown
     op1 = evaluate_operational_safety(1, 0, calm)
     check("1h horizon -> TACTICAL_CLEARANCE", op1["operational_status"] == "TACTICAL_CLEARANCE", f"got {op1}")
     check("1h horizon -> is_safety_verdict_active is True", op1["is_safety_verdict_active"] is True, f"got {op1}")
     check("1h horizon -> displayed_tier is 0", op1["displayed_tier"] == 0, f"got {op1}")
 
-    # 15. Operational Cutoff Policy: 6h Horizon -> Discrete tier suppressed
+    # 15. 6h horizon -> level is hidden
     op6 = evaluate_operational_safety(6, 0, calm)
     check("6h horizon -> PROVISIONAL_TREND_OUTLOOK", op6["operational_status"] == "PROVISIONAL_TREND_OUTLOOK", f"got {op6}")
     check("6h horizon -> is_safety_verdict_active is False", op6["is_safety_verdict_active"] is False, f"got {op6}")
     check("6h horizon -> displayed_tier is None", op6["displayed_tier"] is None, f"got {op6}")
 
-    # 16. Operational Cutoff Policy: 72h with breach -> flags breach
+    # 16. 72h with a broken limit -> still flagged
     op72_breach = evaluate_operational_safety(72, 0, w_breach)
     check("72h with breach -> triggered is True", op72_breach["safety_threshold_triggered"] is True, f"got {op72_breach}")
     check("72h horizon -> EXTENDED_TREND_OUTLOOK", op72_breach["operational_status"] == "EXTENDED_TREND_OUTLOOK", f"got {op72_breach}")
     check("72h horizon -> displayed_tier is None (suppressed)", op72_breach["displayed_tier"] is None, f"got {op72_breach}")
 
-    # 17. Diurnal barometric pressure drop WITHOUT squall gusts or rain -> No breach
+    # 17. Normal afternoon pressure drop with no gusts or rain -> not broken
     diurnal_drop = dict(calm, delta_p_3h=-2.6, wind_gust=5.0, rain_rate_mm_hr=0.0)
     r_diurnal = apply_safety_thresholds(0, diurnal_drop)
     check("diurnal drop (-2.6 hPa) with calm wind -> no breach",
           not r_diurnal["safety_threshold_triggered"], f"got {r_diurnal}")
 
-    # 18. Severe storm precursor drop WITH companion squall gusts (>= 38 km/h / 10.56 m/s) -> Breach
+    # 18. Fast pressure drop with strong gusts (>= 38 km/h / 10.56 m/s) -> broken
     storm_drop_gust = dict(calm, delta_p_3h=-2.6, wind_gust=11.0, rain_rate_mm_hr=0.0)
     r_storm_gust = apply_safety_thresholds(0, storm_drop_gust)
     check("storm precursor drop (-2.6 hPa) + squall gust (11 m/s) -> breach",
           r_storm_gust["safety_threshold_triggered"] is True and r_storm_gust["final_tier"] == 4, f"got {r_storm_gust}")
 
-    # 19. Severe storm precursor drop WITH companion heavy rain (>= 15 mm/hr) -> Breach
+    # 19. Fast pressure drop with heavy rain (>= 15 mm/hr) -> broken
     storm_drop_rain = dict(calm, delta_p_3h=-2.6, wind_gust=5.0, rain_rate_mm_hr=16.0)
     r_storm_rain = apply_safety_thresholds(0, storm_drop_rain)
     check("storm precursor drop (-2.6 hPa) + storm rain (16 mm/hr) -> breach",

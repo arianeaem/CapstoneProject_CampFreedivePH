@@ -1,18 +1,18 @@
 """
-Rigorous Out-of-Fold CV Selection & Holdout Benchmark for ERA5 Atmospheric Baselines.
+CV selection and holdout test for the ERA5 baselines.
 
-Variables Evaluated:
+Variables:
 1. wind_speed (m/s)
 2. wind_gust (m/s)
 3. slp (hPa)
-4. wind_dir (degrees, circular MAE/RMSE evaluated on wind_speed > 1.5 m/s)
+4. wind_dir (degrees, circular MAE/RMSE, only when wind_speed > 1.5 m/s)
 
-Methodology:
-- 6 Walk-Forward Expanding Folds across 2020-10 to 2025-09 (240h purge margin).
-- Climatologies fit strictly on training partitions (No data leakage).
-- Winning baseline selected per horizon based strictly on mean CV validation MAE.
-- Evaluated on untouched Holdout (2025-10-01 to 2026-09-29, N=8,616 non-provisional hours).
-- 168-hour stationary moving block bootstrap (1,000 resamples) for paired Delta MAE 95% CI.
+How:
+- 6 walk-forward folds from 2020-10 to 2025-09 (240h gap)
+- climatology is fit on the training part only (no leakage)
+- best baseline per horizon is picked by mean CV MAE only
+- holdout: 2025-10-01 to 2026-09-29 (N = 8,616 hours, no provisional rows)
+- 168h block bootstrap (1,000 samples) for the Delta MAE 95% CI
 """
 
 import sys
@@ -30,14 +30,14 @@ if str(SAFETY_DIR / "src" / "ingest") not in sys.path:
 from splits import CURRENTS_WALK_FORWARD_FOLDS
 
 HORIZONS = [1, 3, 6, 12, 24, 48, 72, 120, 168, 240]
-OPERATIONAL_LAG = 120  # hours (ECMWF ~5d latency)
-BLOCK_SIZE_HOURS = 168  # 7 days (synoptic block bootstrap)
+OPERATIONAL_LAG = 120  # hours (ERA5 is about 5 days late)
+BLOCK_SIZE_HOURS = 168  # 7 days
 N_BOOT = 1000
-WIND_SPEED_CALM_THRESHOLD = 1.5  # m/s for circular direction evaluation
+WIND_SPEED_CALM_THRESHOLD = 1.5  # m/s, below this the direction isn't scored
 
 
 def circular_diff(deg1: np.ndarray, deg2: np.ndarray) -> np.ndarray:
-    """Computes shortest signed angular difference between two angles in degrees [-180, 180]."""
+    """Shortest signed angle difference in degrees [-180, 180]."""
     return (deg1 - deg2 + 180.0) % 360.0 - 180.0
 
 
@@ -59,7 +59,7 @@ def paired_block_bootstrap(err_model: np.ndarray, err_ref: np.ndarray,
                            block_size: int = BLOCK_SIZE_HOURS,
                            n_boot: int = N_BOOT,
                            alpha: float = 0.05) -> Tuple[float, float, float]:
-    """Moving block bootstrap on paired error differences with stationary block size."""
+    """Block bootstrap on the paired error differences."""
     diff = err_model - err_ref
     diff = diff[~np.isnan(diff)]
     n = len(diff)
@@ -85,14 +85,14 @@ def paired_block_bootstrap(err_model: np.ndarray, err_ref: np.ndarray,
 
 
 def fit_era5_climatology(train_df: pd.DataFrame) -> dict:
-    """Fits hourly-by-month climatology on training partition."""
+    """Hour-by-month climatology from the training part."""
     # Group by (month, hour)
     m_h = train_df.groupby([train_df.index.month, train_df.index.hour])
     speed_clim = m_h["wind_speed"].mean().to_dict()
     gust_clim = m_h["wind_gust"].mean().to_dict()
     slp_clim = m_h["slp"].mean().to_dict()
 
-    # Circular direction climatology: mean of u and v vectors
+    # Direction climatology: average of the u and v vectors
     u_clim = m_h["wind_u"].mean().to_dict()
     v_clim = m_h["wind_v"].mean().to_dict()
     dir_clim = {}
@@ -124,10 +124,10 @@ def run_era5_baselines():
         raise FileNotFoundError(f"Missing {data_path}")
 
     df = pd.read_parquet(data_path)
-    # Filter out provisional rows
+    # Remove provisional rows
     df_clean = df[~df["is_provisional"]].copy()
 
-    # Holdout partition: 2025-10-01 to end of non-provisional
+    # Holdout: 2025-10-01 to the last non-provisional row
     holdout_mask = df_clean.index.tz_convert("UTC") >= pd.Timestamp("2025-10-01 00:00:00+00:00")
     holdout_df = df_clean[holdout_mask].copy()
     train_pool_df = df_clean[~holdout_mask].copy()
@@ -161,22 +161,22 @@ def run_era5_baselines():
             f_train = train_pool_df[(train_pool_df.index.tz_convert("UTC") >= t_start) & (train_pool_df.index.tz_convert("UTC") <= t_end)]
             f_val = train_pool_df[(train_pool_df.index.tz_convert("UTC") >= v_start) & (train_pool_df.index.tz_convert("UTC") <= v_end)]
 
-            # Fit climatology strictly on fold train
+            # Fit climatology on the fold's training data only
             f_clim = fit_era5_climatology(f_train)
 
-            # Evaluate each horizon
+            # Each horizon
             for h in HORIZONS:
-                # Target at t + h
-                # Persistence uses observation at t - OPERATIONAL_LAG
-                # Hence lookback is h + OPERATIONAL_LAG
+                # Target at t + h.
+                # Persistence uses the value at t - OPERATIONAL_LAG,
+                # so we look back h + OPERATIONAL_LAG.
                 lead = h + OPERATIONAL_LAG
                 val_obs = f_val[var].values
                 val_persist = f_train[var].reindex(f_val.index).shift(lead).values if lead > len(f_val) else f_val[var].shift(lead).values
 
-                # Climatology prediction at validation timestamps
+                # Climatology at the validation times
                 val_clim_pred = predict_era5_climatology(f_clim, f_val.index, v_key)
 
-                # Mask for evaluation (for wind_dir, only evaluate when wind_speed > WIND_SPEED_CALM_THRESHOLD)
+                # Rows to score (for wind_dir only when wind_speed > WIND_SPEED_CALM_THRESHOLD)
                 val_ws = f_val["wind_speed"].values
                 eval_mask = ~np.isnan(val_obs)
                 if is_circ:
@@ -194,7 +194,7 @@ def run_era5_baselines():
                 cv_scores["persistence"][h].append(p_mae)
                 cv_scores["climatology"][h].append(c_mae)
 
-        # Compute Mean CV MAE per horizon and select winning baseline
+        # Mean CV MAE per horizon and pick the best baseline
         selected_model_per_h = {}
         cv_summary = {}
         for h in HORIZONS:
@@ -209,7 +209,7 @@ def run_era5_baselines():
             }
 
         # ---------------------------------------------------------------------
-        # HOLDOUT EVALUATION (Fit Climatology on full train_pool_df)
+        # Holdout (climatology fit on all of train_pool_df)
         # ---------------------------------------------------------------------
         full_clim = fit_era5_climatology(train_pool_df)
         holdout_clim_pred = predict_era5_climatology(full_clim, holdout_df.index, v_key)
@@ -223,10 +223,10 @@ def run_era5_baselines():
         holdout_results = []
         for h in HORIZONS:
             lead = h + OPERATIONAL_LAG
-            # Persistence: shifted from full historical series
+            # Persistence: shifted from the full series
             holdout_persist = df_clean[var].reindex(holdout_df.index).shift(lead).values
 
-            # Error arrays for paired bootstrap
+            # Errors for the paired bootstrap
             if is_circ:
                 err_clim = np.abs(circular_diff(holdout_clim_pred, holdout_obs))
                 err_pers = np.abs(circular_diff(holdout_persist, holdout_obs))
@@ -234,7 +234,7 @@ def run_era5_baselines():
                 err_clim = np.abs(holdout_clim_pred - holdout_obs)
                 err_pers = np.abs(holdout_persist - holdout_obs)
 
-            # Apply evaluation mask
+            # Only the rows to score
             h_mask = holdout_eval_mask & ~np.isnan(holdout_persist)
             mae_clim = float(np.mean(err_clim[h_mask]))
             mae_pers = float(np.mean(err_pers[h_mask]))
@@ -271,7 +271,7 @@ def run_era5_baselines():
         h_df = pd.DataFrame(holdout_results)
         print(h_df[["horizon_h", "lead_from_last_obs_h", "selected_model", "holdout_mae_selected", "holdout_mae_clim_ref", "delta_mae", "delta_ci_95_lower", "delta_ci_95_upper", "skill_pct_vs_clim"]].to_string(index=False, float_format="%.4f"))
 
-    # Save to report JSON
+    # Save the report JSON
     out_dir = SAFETY_DIR / "reports" / "baselines"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_json = out_dir / "era5_baseline_report.json"

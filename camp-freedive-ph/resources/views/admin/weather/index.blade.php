@@ -134,7 +134,7 @@
                 $isConcluded = ($batch->end_date && $batch->end_date->isPast()) || in_array($batch->status, ['completed', 'cancelled_by_camp']);
                 $hasML = isset($batchMLAssessments[$batch->id]) && !$isConcluded && $isMLReachable;
 
-                // Live or archived overall recommendation synchronized with show.blade.php
+                // Overall result (same as show.blade.php)
                 $cardRec = $mlData['overall_recommendation'] ?? null;
                 if (!$cardRec) {
                     if ($day1 && $day2) {

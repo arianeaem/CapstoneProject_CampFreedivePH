@@ -22,8 +22,7 @@ class CoachMatchingService
     }
 
     /**
-     * Assign one or multiple coaches to a batch.
-     * Maps batch participants across the assigned coaching team.
+     * Assign one or more coaches to a batch and split the participants between them.
      *
      * @throws Exception
      */
@@ -39,7 +38,7 @@ class CoachMatchingService
                 throw new Exception("No valid active coaches selected.");
             }
 
-            // Get all active participants belonging to this batch
+            // Get the active participants in this batch
             $participants = BookingParticipant::whereHas('booking', function ($q) use ($batch) {
                 $q->where('batch_id', $batch->id)
                   ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'no_show', 'pending_downpayment']);
@@ -50,9 +49,9 @@ class CoachMatchingService
             $allCoachIds = array_values(array_unique(array_merge($existingAssignedCoaches, $coaches->pluck('id')->toArray())));
             $coachCount = count($allCoachIds);
 
-            // Re-assign / Distribute participants evenly across all assigned coaches
+            // Split the participants evenly between the coaches
             if ($totalParticipants > 0 && $coachCount > 0) {
-                // Delete previous active assignments for this batch
+                // Remove the old assignments for this batch
                 ParticipantAssignment::where('batch_id', $batch->id)
                     ->where('status', 'assigned')
                     ->delete();
@@ -81,7 +80,7 @@ class CoachMatchingService
                 }
             }
 
-            // Update availability for each assigned coach
+            // Update each coach's availability
             foreach ($coaches as $coach) {
                 $dateStr1 = $batch->start_date->format('Y-m-d');
                 $dateStr2 = $batch->end_date ? $batch->end_date->format('Y-m-d') : $batch->start_date->copy()->addDay()->format('Y-m-d');
@@ -126,18 +125,18 @@ class CoachMatchingService
     }
 
     /**
-     * Unassign a coach from a batch.
+     * Remove a coach from a batch.
      */
     public function unassignCoachFromBatch(Batch $batch, User $coach, User $unassignedBy): bool
     {
         return DB::transaction(function () use ($batch, $coach, $unassignedBy) {
-            // Delete active assignments for this coach in this batch
+            // Remove this coach's assignments in this batch
             ParticipantAssignment::where('batch_id', $batch->id)
                 ->where('coach_id', $coach->id)
                 ->where('status', 'assigned')
                 ->delete();
 
-            // Revert coach availability back to 'available'
+            // Set the coach back to 'available'
             $dateStr1 = $batch->start_date->format('Y-m-d');
             $dateStr2 = $batch->end_date ? $batch->end_date->format('Y-m-d') : $batch->start_date->copy()->addDay()->format('Y-m-d');
 
@@ -148,7 +147,7 @@ class CoachMatchingService
                     ->update(['status' => 'available', 'notes' => 'Unassigned from batch. Available.']);
             }
 
-            // Redistribute remaining participants among remaining coaches
+            // Split the participants again between the remaining coaches
             $remainingCoachIds = ParticipantAssignment::where('batch_id', $batch->id)
                 ->where('coach_id', '!=', $coach->id)
                 ->where('status', 'assigned')
@@ -162,7 +161,7 @@ class CoachMatchingService
             })->get();
 
             if ($remainingCoaches->isEmpty()) {
-                // No coaches left, clear any remaining assignments for this batch
+                // No coaches left, remove the remaining assignments
                 ParticipantAssignment::where('batch_id', $batch->id)
                     ->where('status', 'assigned')
                     ->delete();
@@ -207,7 +206,7 @@ class CoachMatchingService
     }
 
     /**
-     * Assign a list of participants/students to a coach for a batch dive schedule.
+     * Assign participants to a coach for a batch.
      *
      * @throws Exception
      */
@@ -233,7 +232,7 @@ class CoachMatchingService
             $assignedList = [];
 
             foreach ($participants as $participant) {
-                // If participant had a previous active assignment, mark it reassigned
+                // If the participant had another coach before, mark that as reassigned
                 $oldAssignment = ParticipantAssignment::where('participant_id', $participant->id)
                     ->whereDate('dive_date', $batch->start_date)
                     ->where('status', 'assigned')
@@ -266,7 +265,7 @@ class CoachMatchingService
                 $assignedList[] = $assignment;
             }
 
-            // Update coach availability calendar to 'assigned'
+            // Set the coach's availability to 'assigned'
             $dateStr = $batch->start_date->format('Y-m-d');
             $avail = CoachAvailability::where('coach_id', $coach->id)->whereDate('date', $dateStr)->first();
             if ($avail) {
@@ -302,8 +301,8 @@ class CoachMatchingService
     }
 
     /**
-     * Propose 2-3 viable coach-count options based on total unassigned student count
-     * and the batch-level 4:1 guideline.
+     * Give 2-3 options for how many coaches to use, based on the number of
+     * unassigned students and the 1 coach : 4 students rule.
      */
     public function proposeCoachCountOptions(int $studentCount, int $availableCoachCount): array
     {
@@ -315,7 +314,7 @@ class CoachMatchingService
         $maxCoaches = max(1, min($availableCoachCount, $studentCount));
 
         $ratio = $this->getCoachStudentRatio();
-        // Option 1: Standard ~ratio:1 guideline (Ceiling of studentCount / ratio)
+        // Option 1: normal (students / ratio, rounded up)
         $opt1Count = (int) ceil($studentCount / $ratio);
         $opt1Count = max(1, min($opt1Count, $maxCoaches));
 
@@ -329,7 +328,7 @@ class CoachMatchingService
             'is_recommended' => true,
         ];
 
-        // Option 2: More distributed / lighter split (+1 coach if available and viable)
+        // Option 2: one more coach (lighter groups)
         $opt2Count = $opt1Count + 1;
         if ($opt2Count <= $maxCoaches && ($studentCount / $opt2Count) >= 1.5) {
             $opt2Split = $this->calculateTargetSplit($studentCount, $opt2Count);
@@ -343,7 +342,7 @@ class CoachMatchingService
             ];
         }
 
-        // Option 3: Leaner split (-1 coach if viable and <= ratio per coach)
+        // Option 3: one less coach (if still within the ratio)
         $opt3Count = $opt1Count - 1;
         if ($opt3Count >= 1 && ($studentCount / $opt3Count) <= (float) $ratio) {
             $opt3Split = $this->calculateTargetSplit($studentCount, $opt3Count);
@@ -361,7 +360,7 @@ class CoachMatchingService
     }
 
     /**
-     * Helper to compute integer split of students across N coaches.
+     * Split the students between N coaches.
      */
     protected function calculateTargetSplit(int $totalStudents, int $coachCount): array
     {
@@ -377,8 +376,8 @@ class CoachMatchingService
     }
 
     /**
-     * Generate an initial balanced draft distributing participants across selected coaches,
-     * balancing both headcount and class types (Discovery, Fundive, Refinement).
+     * Make a first draft that splits the participants evenly between the coaches,
+     * also balancing the class types (Discovery, Fundive, Refinement).
      */
     public function generateBalancedDraft($participants, array $coachUsers): array
     {
@@ -391,7 +390,7 @@ class CoachMatchingService
             ];
         }
 
-        // Initialize buckets for each coach
+        // One group per coach
         $draft = [];
         foreach ($coachUsers as $coach) {
             $draft[$coach->id] = [
@@ -402,13 +401,13 @@ class CoachMatchingService
             ];
         }
 
-        // Group participants by class type
+        // Group the participants by class
         $grouped = collect($participants)->groupBy(fn($p) => $p->booking?->class_type ?? 'discovery');
 
-        // Distribute each class type round-robin to coach with smallest load
+        // Give each participant to the coach with the fewest students
         foreach ($grouped as $classType => $students) {
             foreach ($students as $student) {
-                // Find coach with lowest total load (and lowest of this class type as tie breaker)
+                // Coach with the lowest load (if tied, the one with fewer of this class)
                 $targetCoachId = null;
                 $minTotal = PHP_INT_MAX;
                 $minClass = PHP_INT_MAX;
@@ -428,7 +427,7 @@ class CoachMatchingService
             }
         }
 
-        // Compute balance metrics
+        // How balanced the split is
         $headcounts = array_column($draft, 'total_count');
         $minH = !empty($headcounts) ? min($headcounts) : 0;
         $maxH = !empty($headcounts) ? max($headcounts) : 0;
@@ -443,8 +442,8 @@ class CoachMatchingService
     }
 
     /**
-     * Save the finalized batch assignments across multiple coaches atomically.
-     * Logs an intentional exception if an imbalanced split was manually chosen.
+     * Save the final coach assignments for a batch.
+     * If the admin picked an uneven split on purpose, we log it.
      *
      * @throws Exception
      */
@@ -476,7 +475,7 @@ class CoachMatchingService
                 foreach ($participantIds as $pId) {
                     $participant = BookingParticipant::findOrFail($pId);
 
-                    // Reassignment check
+                    // Was this participant reassigned?
                     $oldAssignment = ParticipantAssignment::where('participant_id', $participant->id)
                         ->whereDate('dive_date', $batch->start_date)
                         ->where('status', 'assigned')
@@ -509,7 +508,7 @@ class CoachMatchingService
                     $totalAssigned++;
                 }
 
-                // Update coach availability
+                // Update the coach's availability
                 $dateStr = $batch->start_date->format('Y-m-d');
                 $avail = CoachAvailability::where('coach_id', $coach->id)->whereDate('date', $dateStr)->first();
                 if ($avail) {
@@ -524,7 +523,7 @@ class CoachMatchingService
                 }
             }
 
-            // Check for intentional exception / imbalance
+            // Log if the split is uneven
             $minH = !empty($headcounts) ? min($headcounts) : 0;
             $maxH = !empty($headcounts) ? max($headcounts) : 0;
             $isImbalanced = ($maxH - $minH) > 1;
@@ -556,7 +555,7 @@ class CoachMatchingService
     }
 
     /**
-     * Reassign a single student away from their current coach to a new coach.
+     * Move one student to a different coach.
      *
      * @throws Exception
      */
@@ -627,7 +626,7 @@ class CoachMatchingService
     }
 
     /**
-     * Broadcast an open slot to the Coach Portal when no coach is available.
+     * Post an open slot on the Coach Portal when no coach is available.
      */
     public function postOpeningToPortal(Batch $batch, Carbon $diveDate, User $postedBy, ?string $notes = null): CoachOpening
     {
@@ -653,20 +652,19 @@ class CoachMatchingService
     }
 
     /**
-     * Review & approve a coach request for an open slot.
-     * Assigns the coach to the batch without rigid restrictions on coach count.
+     * Approve a coach's request for an open slot and add them to the batch.
      */
     public function approveCoachRequest(CoachRequest $request, User $reviewer): void
     {
         DB::transaction(function () use ($request, $reviewer) {
-            // 1. Approve selected request
+            // 1. Approve the request
             $request->update([
                 'status' => 'approved',
                 'reviewed_by' => $reviewer->id,
                 'reviewed_at' => now(),
             ]);
 
-            // Mark the opening as filled so it no longer shows as open
+            // Mark the opening as filled
             if ($request->opening_id) {
                 $request->opening?->update(['status' => 'filled']);
             } elseif ($request->batch_id) {
@@ -675,7 +673,7 @@ class CoachMatchingService
                     ->update(['status' => 'filled']);
             }
 
-            // Mark other pending requests for the same opening as not_selected
+            // Other pending requests for the same opening become not_selected
             if ($request->opening_id) {
                 CoachRequest::where('opening_id', $request->opening_id)
                     ->where('id', '!=', $request->id)
@@ -689,12 +687,12 @@ class CoachMatchingService
 
             $batch = $request->batch;
 
-            // 2. Assign the coach to the batch
+            // 2. Add the coach to the batch
             $currentAssignedIds = $batch->assigned_coaches->pluck('id')->toArray();
             $newCoachIds = array_values(array_unique(array_merge($currentAssignedIds, [$request->coach_id])));
             $this->assignCoachesToBatch($batch, $newCoachIds, $reviewer);
 
-            // 3. Mark coach availability to assigned
+            // 3. Set the coach's availability to assigned
             $dateStr1 = $batch->start_date->format('Y-m-d');
             $dateStr2 = $batch->end_date ? $batch->end_date->format('Y-m-d') : $batch->start_date->copy()->addDay()->format('Y-m-d');
 

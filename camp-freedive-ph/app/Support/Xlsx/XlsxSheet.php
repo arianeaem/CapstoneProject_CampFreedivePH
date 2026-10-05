@@ -3,7 +3,7 @@
 namespace App\Support\Xlsx;
 
 /**
- * One worksheet. Rows are lists of cells; a cell is a scalar (auto-styled) or [value, styleId].
+ * One sheet. Rows are lists of cells. A cell is a value (auto style) or [value, styleId].
  */
 class XlsxSheet
 {
@@ -35,7 +35,7 @@ class XlsxSheet
         return $this->row([]);
     }
 
-    /** Branded title block shared by every export. */
+    /** Title at the top of every export. */
     public function titleBlock(string $title, string $period, string $generated): static
     {
         return $this->row([[$title, XlsxWorkbook::TITLE]])
@@ -59,7 +59,7 @@ class XlsxSheet
         return $this->row(array_map(fn ($l) => [$l, XlsxWorkbook::HEADER], $labels));
     }
 
-    /** A list sheet: header on row 1, frozen, with filters. */
+    /** List sheet: header on row 1, frozen, with filters. */
     public function table(array $labels, iterable $rows): static
     {
         $this->header($labels);
@@ -93,7 +93,7 @@ class XlsxSheet
 
     public static function esc(string $v): string
     {
-        // Strip characters that are invalid in XML 1.0
+        // Remove characters that are not allowed in XML
         $v = preg_replace('/[^\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}]/u', '', $v) ?? '';
 
         return htmlspecialchars($v, ENT_QUOTES | ENT_XML1, 'UTF-8');

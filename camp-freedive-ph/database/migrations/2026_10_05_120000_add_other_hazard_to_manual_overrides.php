@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Non-weather hazards for manual safety overrides (e.g. oil spill, red tide, no-sail order).
+     * Non-weather hazards for overrides (e.g. oil spill, red tide, no-sail order).
      */
     public function up(): void
     {

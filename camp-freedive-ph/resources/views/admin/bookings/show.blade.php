@@ -131,7 +131,7 @@
 
         </div>
 
-        <!-- Right Column: Invoice Breakdown & Payment Snapshot -->
+        <!-- Right column: price breakdown and payments -->
         <div class="space-y-6">
             
             <!-- Itemized Invoice Breakdown -->
@@ -185,7 +185,7 @@
                 </div>
             </div>
 
-            <!-- Payment Summary Snapshot -->
+            <!-- Payment summary -->
             <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-6 space-y-4 shadow-2xs">
                 <div class="flex items-center justify-between pb-3">
                     <h3 class="text-base font-bold text-[#1D1D1F]">Payment Summary</h3>
@@ -220,7 +220,7 @@
 
     </div>
 
-    <!-- Booking Audit Trail & History (Placed at the bottom for clean mobile flow) -->
+    <!-- Booking history -->
     <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-6 space-y-4 shadow-2xs">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-[#E5E5EA] pb-3">
             <h3 class="text-base font-bold text-[#1D1D1F]">Booking Audit Trail & History</h3>

@@ -1,7 +1,6 @@
 """
-Unit & Regression Tests: Cutoff Rules, Operational Lags, and No-Future-Rows Verification.
-Guarantees compliance with PRD 7.5 (strict exclusion of forecast horizon from training data)
-and prevents temporal leakage across all model inputs.
+Tests for the cutoff rules, source delays and no future rows.
+Makes sure no forecast data is used for training (PRD 7.5) and there is no time leakage.
 """
 
 from pathlib import Path
@@ -18,9 +17,9 @@ from config import (
 
 def test_cmems_end_dates_exclude_forecast_edge():
     """
-    PRD 7.5 forbids forecast data as input features.
-    CMEMS 10-day forecast horizon extends to ~2026-10-13.
-    Ensures CMEMS analysis endpoints are strictly capped at or before the last analysis timestamp.
+    PRD 7.5 says forecast data can't be used as input.
+    The CMEMS 10-day forecast goes until about 2026-10-13.
+    Check that the CMEMS analysis ends at or before the last analysis time.
     """
     forecast_edge = pd.to_datetime("2026-10-13", utc=True)
     smoc_end = pd.to_datetime(CURRENT_SMOC_END_DATE, utc=True)
@@ -34,8 +33,8 @@ def test_cmems_end_dates_exclude_forecast_edge():
 
 def test_waverys_calibration_overlap():
     """
-    WAVERYS must overlap Wave Analysis sufficiently to support calibration.
-    Fit on early overlap (2022-11 to 2024-12), test on late overlap (2025-01 to 2026-05).
+    WAVERYS must overlap the wave analysis enough for calibration.
+    Fit on the early overlap (2022-11 to 2024-12), test on the late overlap (2025-01 to 2026-05).
     """
     cal = CALIBRATION_WINDOWS["waves_waverys_to_analysis"]
     fit_start = pd.to_datetime(cal["fit_start"])
@@ -51,7 +50,7 @@ def test_waverys_calibration_overlap():
 
 def test_imerg_calibration_overlap():
     """
-    IMERG Late must overlap Final Run through 2025-09-30 to calibrate offset.
+    IMERG Late must overlap the Final Run until 2025-09-30 to calibrate the offset.
     """
     cal = CALIBRATION_WINDOWS["imerg_late_to_final"]
     fit_start = pd.to_datetime(cal["fit_start"])
@@ -65,7 +64,7 @@ def test_imerg_calibration_overlap():
 
 def test_operational_lag_rules():
     """
-    Verifies that serving cutoffs enforce each source's minimum operational lag.
+    Check that the serving cutoffs use each source's delay.
     """
     ref_time = pd.Timestamp("2026-10-04 00:00:00", tz="UTC")
 
@@ -82,9 +81,9 @@ def test_operational_lag_rules():
 
 def test_interim_and_test_data_no_future_rows():
     """
-    Inspects available interim and test datasets to assert:
-    1. Maximum timestamp does not exceed the allowed training cutoff.
-    2. No forecast rows are present.
+    Check the interim and test datasets:
+    1. the last time is not after the training cutoff
+    2. there are no forecast rows
     """
     test_files = [
         PROJECT_ROOT / "safety-forecast" / "data" / "test_2024_10" / "combined_master_2024_10.parquet",
@@ -94,7 +93,7 @@ def test_interim_and_test_data_no_future_rows():
         if not f.exists():
             continue
         df = pd.read_parquet(f)
-        # Check index timestamps
+        # Check the index times
         max_ts = pd.to_datetime(df.index.max())
         if max_ts.tzinfo is None:
             max_ts = max_ts.tz_localize("UTC")
@@ -104,16 +103,16 @@ def test_interim_and_test_data_no_future_rows():
         cutoff_limit = pd.to_datetime("2026-10-04 00:00:00", utc=True)
         assert max_ts <= cutoff_limit, f"Dataset {f.name} contains future timestamps: {max_ts} > {cutoff_limit}"
 
-        # If is_forecast column exists, none must be true in historical sets
+        # If there is an is_forecast column, it must be False everywhere
         if "is_forecast" in df.columns:
             assert df["is_forecast"].sum() == 0, f"Dataset {f.name} contains forecast rows!"
 
 
 def test_real_observed_store_no_future_rows():
     """
-    Reruns on the real observed-store parquet files:
-    Fails if any realized row's time_utc is later than its issue_time_utc minus that source's lag.
-    Fails if any row's time_utc is later than issue_time_utc.
+    Runs on the real observed-store parquet files.
+    Fails if a row's time_utc is after its issue_time_utc minus the source delay,
+    or if any row's time_utc is after issue_time_utc.
     """
     from config import OBSERVED_STORE_DIR
     obs_dir = OBSERVED_STORE_DIR
@@ -149,20 +148,20 @@ def test_real_observed_store_no_future_rows():
         time_utc = pd.to_datetime(df["time_utc"], utc=True)
         issue_time_utc = pd.to_datetime(df["issue_time_utc"], utc=True)
 
-        # For non-provisional rows, time_utc MUST be <= issue_time_utc - lag
+        # Non-provisional rows: time_utc must be <= issue_time_utc - lag
         if "is_provisional" in df.columns:
             realized_mask = ~df["is_provisional"]
         else:
             realized_mask = pd.Series([True] * len(df), index=df.index)
 
-        # Strict check: realized rows must be at or before issue_time_utc - lag
+        # Real rows must be at or before issue_time_utc - lag
         violating_realized = df[realized_mask & (time_utc > (issue_time_utc - lag))]
         assert len(violating_realized) == 0, (
             f"Observed store {f.name} contains {len(violating_realized)} realized rows where "
             f"time_utc > issue_time_utc - {lag}: \n{violating_realized[['time_utc', 'issue_time_utc']].head()}"
         )
 
-        # Strict check: no row may ever exceed issue_time_utc
+        # No row can be after issue_time_utc
         violating_future = df[time_utc > issue_time_utc]
         assert len(violating_future) == 0, (
             f"Observed store {f.name} contains {len(violating_future)} future rows exceeding issue_time_utc: \n"

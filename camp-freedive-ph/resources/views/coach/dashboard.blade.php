@@ -118,7 +118,7 @@
                     @endif
                 </div>
 
-                <!-- Weather safety (shared design: components/dive-safety/status) -->
+                <!-- Weather (uses components/dive-safety/status) -->
                 <x-dive-safety.status :classification="$next['weather_class']" :engines="$next['model_comparison'] ?? null" />
 
                 <div class="flex flex-col sm:flex-row gap-2.5">

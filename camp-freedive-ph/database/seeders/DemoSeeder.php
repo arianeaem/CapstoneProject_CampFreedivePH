@@ -21,9 +21,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Creates disposable, relative-date data for the October 6 demo.
+ * Sample data for the October 6 demo (dates are relative to today).
  *
- * This seeder intentionally never truncates system_settings. Run it after
+ * This seeder doesn't clear system_settings. Run it after the
  * migrations and before the demo commands.
  */
 class DemoSeeder extends Seeder

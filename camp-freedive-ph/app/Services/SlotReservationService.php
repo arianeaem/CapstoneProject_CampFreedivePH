@@ -8,22 +8,18 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Service responsible for distributed slot locking and temporary inventory reservation
- * during the booking and checkout lifecycle.
- *
- * Operational Context:
- * Enforces the strict 45-pax limit per weekend batch mandated by Philippine Coast Guard (PCG)
- * outrigger banca limits and the 1:4 instructor-to-diver safety ratio.
+ * Holds slots while a customer is checking out, so we don't go over
+ * 45 people per weekend batch (boat limit and 1 coach for every 4 divers).
  */
 class SlotReservationService
 {
     /**
-     * Maximum participant capacity per weekend batch (fallback default).
+     * Default max people per batch.
      */
     public const MAX_CAPACITY = 45;
 
     /**
-     * Default duration to hold temporary slots during checkout step 4 (15 minutes).
+     * How long to hold the slots during checkout (15 minutes).
      */
     public const DEFAULT_HOLD_TTL_SECONDS = 900;
 
@@ -34,7 +30,7 @@ class SlotReservationService
     }
 
     /**
-     * Get maximum participant capacity per weekend batch.
+     * Get the max people per batch.
      */
     public function getMaxCapacity(): int
     {
@@ -42,12 +38,13 @@ class SlotReservationService
     }
 
     /**
-     * Executes a callback within an atomic distributed lock for a specific dive date.
+     * Run the callback while holding a lock for the date, so two checkouts
+     * can't take the same slots at the same time.
      *
-     * @param string $startDate Format: YYYY-MM-DD
-     * @param callable $callback Operation to perform while holding the lock
-     * @param int $lockSeconds Duration the lock is held
-     * @param int $blockSeconds Time to wait attempting to acquire the lock before throwing LockTimeoutException
+     * @param string $startDate YYYY-MM-DD
+     * @param callable $callback
+     * @param int $lockSeconds how long the lock lasts
+     * @param int $blockSeconds how long to wait for the lock before giving up
      * @return mixed
      */
     public function withLock(string $startDate, callable $callback, int $lockSeconds = 10, int $blockSeconds = 5): mixed
@@ -59,9 +56,9 @@ class SlotReservationService
     }
 
     /**
-     * Retrieves the count of confirmed participants in the database for a given start date.
+     * Number of confirmed participants saved in the database for a date.
      *
-     * @param string $startDate Format: YYYY-MM-DD
+     * @param string $startDate YYYY-MM-DD
      * @return int
      */
     public function getConfirmedPaxCount(string $startDate): int
@@ -75,9 +72,9 @@ class SlotReservationService
     }
 
     /**
-     * Calculates the sum of active, unexpired temporary slot holds in the cache for a given start date.
+     * Number of people currently held in the cache for a date.
      *
-     * @param string $startDate Format: YYYY-MM-DD
+     * @param string $startDate YYYY-MM-DD
      * @return int
      */
     public function getActiveHoldPaxCount(string $startDate): int
@@ -101,7 +98,7 @@ class SlotReservationService
             }
         }
 
-        // Clean up any expired keys from index
+        // Remove expired holds from the list
         if (count($activeKeys) !== count($holdKeys)) {
             Cache::put($indexKey, $activeKeys, now()->addDay());
         }
@@ -110,9 +107,9 @@ class SlotReservationService
     }
 
     /**
-     * Computes the total effective committed participants (DB Confirmed + Cache Active Holds).
+     * Total taken slots (confirmed in DB + held in cache).
      *
-     * @param string $startDate Format: YYYY-MM-DD
+     * @param string $startDate YYYY-MM-DD
      * @return int
      */
     public function getEffectiveCommittedPax(string $startDate): int
@@ -121,9 +118,9 @@ class SlotReservationService
     }
 
     /**
-     * Calculates the remaining available slots for a given date.
+     * Slots left for a date.
      *
-     * @param string $startDate Format: YYYY-MM-DD
+     * @param string $startDate YYYY-MM-DD
      * @return int
      */
     public function getAvailableSlots(string $startDate): int
@@ -132,14 +129,13 @@ class SlotReservationService
     }
 
     /**
-     * Attempts to acquire a temporary slot hold for a checkout session.
-     * Must be called within an atomic lock for thread-safety.
+     * Try to hold slots for a checkout. Call this inside withLock().
      *
-     * @param string $startDate Format: YYYY-MM-DD
-     * @param string $holdKey Unique identifier (e.g. booking number or session UUID)
-     * @param int $paxCount Number of seats requested
-     * @param int $ttlSeconds Time-to-live in seconds (defaults to 15 minutes)
-     * @return bool True if hold was successfully registered; false if capacity exceeded
+     * @param string $startDate YYYY-MM-DD
+     * @param string $holdKey e.g. booking number or session id
+     * @param int $paxCount number of people
+     * @param int $ttlSeconds how long to hold (default 15 minutes)
+     * @return bool false if there are not enough slots
      */
     public function acquireHold(string $startDate, string $holdKey, int $paxCount, int $ttlSeconds = self::DEFAULT_HOLD_TTL_SECONDS): bool
     {
@@ -150,7 +146,7 @@ class SlotReservationService
             return false;
         }
 
-        // Save individual hold with TTL
+        // Save the hold with an expiry
         $holdData = [
             'pax' => $paxCount,
             'hold_key' => $holdKey,
@@ -161,7 +157,7 @@ class SlotReservationService
 
         Cache::put("slot_hold:{$date}:{$holdKey}", $holdData, now()->addSeconds($ttlSeconds));
 
-        // Register in the date's hold index
+        // Add it to the list of holds for the date
         $indexKey = "slot_holds_index:{$date}";
         $holdKeys = Cache::get($indexKey, []);
         if (!in_array($holdKey, $holdKeys)) {
@@ -175,11 +171,10 @@ class SlotReservationService
     }
 
     /**
-     * Releases an active slot hold (e.g., when payment succeeds and DB status updates to confirmed,
-     * or when a customer explicitly cancels).
+     * Release a hold (after payment or if the customer cancels).
      *
-     * @param string $startDate Format: YYYY-MM-DD
-     * @param string $holdKey Unique identifier
+     * @param string $startDate YYYY-MM-DD
+     * @param string $holdKey
      * @return void
      */
     public function releaseHold(string $startDate, string $holdKey): void

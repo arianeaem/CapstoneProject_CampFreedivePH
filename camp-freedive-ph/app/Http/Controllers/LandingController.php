@@ -7,7 +7,7 @@ use Illuminate\View\View;
 class LandingController extends Controller
 {
     /**
-     * Display the Camp FreedivePH landing page.
+     * Home page.
      */
     public function index(): View
     {

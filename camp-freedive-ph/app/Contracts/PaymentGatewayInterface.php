@@ -7,7 +7,7 @@ use App\Models\Booking;
 interface PaymentGatewayInterface
 {
     /**
-     * Create a secure checkout session for booking downpayment or balance.
+     * Create a checkout session for the downpayment or balance.
      *
      * @param Booking $booking
      * @param float $amount
@@ -17,7 +17,7 @@ interface PaymentGatewayInterface
     public function createCheckoutSession(Booking $booking, float $amount, array $options = []): array;
 
     /**
-     * Verify payment status directly with the gateway provider.
+     * Check the payment status with the payment provider.
      *
      * @param string $paymentId
      * @return array|null
@@ -25,7 +25,7 @@ interface PaymentGatewayInterface
     public function verifyPayment(string $paymentId): ?array;
 
     /**
-     * Execute a refund against a previous transaction.
+     * Refund a payment.
      *
      * @param string $paymentId
      * @param float $amount
@@ -36,7 +36,7 @@ interface PaymentGatewayInterface
     public function refundPayment(string $paymentId, float $amount, string $reason = 'requested_by_customer', ?string $notes = null): array;
 
     /**
-     * Process and verify an incoming webhook payload from the provider.
+     * Check and read a webhook from the provider.
      *
      * @param string $payload
      * @param string $signatureHeader

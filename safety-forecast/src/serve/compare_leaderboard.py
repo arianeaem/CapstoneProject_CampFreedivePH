@@ -1,11 +1,10 @@
 """
-Compare Leaderboard Winners Against Production Model Selection
-==============================================================
-Compares latest leaderboard entries against production_model_selection.json.
-Enforces Phase 0 Step 5 selection rules:
-  1. MASE margin threshold: Challenger must beat incumbent by >= 0.02 MASE improvement to justify promotion.
-  2. TFT Guardrail: TemporalFusionTransformer rejected unless material margin >= 0.05 over non-TFT runner-up.
-  3. Serving path preservation: ONNX vs Python Native vs Climatology.
+Compare the leaderboard winners with production_model_selection.json
+=====================================================================
+Rules for replacing a model:
+  1. the new model must be better by at least 0.02 MASE
+  2. TemporalFusionTransformer is only accepted if it beats the best non-TFT model by >= 0.05
+  3. keep the serving path (ONNX, Python native or climatology)
 """
 
 import json
@@ -58,7 +57,7 @@ def compare_and_evaluate():
         top_model = top_row["model"]
         top_mase = float(top_row["mase"])
 
-        # Check if cell is an explicit Climatology Fallback
+        # Is this a climatology cell?
         is_climatology = (
             "climatology" in str(serving_path).lower() 
             or "climatology" in str(incumbent_model).lower()
@@ -78,7 +77,7 @@ def compare_and_evaluate():
             })
             continue
 
-        # Check TFT Guardrail
+        # TFT rule
         if "TemporalFusionTransformer" in top_model:
             runner_up = sorted_cell.iloc[1] if len(sorted_cell) > 1 else top_row
             tft_margin = float(runner_up["mase"]) - top_mase
@@ -93,7 +92,7 @@ def compare_and_evaluate():
             challenger_model = top_model
             challenger_mase = top_mase
 
-        # If model is an exact match
+        # Same model as now
         if challenger_model == incumbent_model:
             exact_matches += 1
             comparison_records.append({
@@ -108,9 +107,9 @@ def compare_and_evaluate():
             })
             continue
 
-        # Calculate MASE difference
+        # MASE difference
         if incumbent_mase is not None and not pd.isna(incumbent_mase):
-            delta_mase = float(incumbent_mase) - challenger_mase  # Positive if challenger is better
+            delta_mase = float(incumbent_mase) - challenger_mase  # positive if the new one is better
         else:
             delta_mase = 0.0
 

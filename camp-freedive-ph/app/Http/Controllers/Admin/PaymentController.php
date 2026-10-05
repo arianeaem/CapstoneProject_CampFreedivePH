@@ -19,13 +19,13 @@ use App\Http\Requests\Admin\Payments\SettleBalanceRequest;
 class PaymentController extends Controller
 {
     /**
-     * Display a listing of payment transactions.
+     * List of payments.
      */
     public function index(Request $request): View
     {
         $query = Payment::with(['booking.participants', 'createdBy'])->latest('created_at');
 
-        // Search filter (Booking #, Transaction ID, PayMongo ID, Contact Name)
+        // Search (booking #, transaction id, PayMongo id, name)
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
@@ -40,22 +40,22 @@ class PaymentController extends Controller
             });
         }
 
-        // Status filter
+        // Filter by status
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
 
-        // Payment Stage filter
+        // Filter by payment stage
         if ($request->filled('stage')) {
             $query->where('payment_type', $request->input('stage'));
         }
 
-        // Payment Method filter
+        // Filter by payment method
         if ($request->filled('method')) {
             $query->where('payment_method', $request->input('method'));
         }
 
-        // Date range filter
+        // Filter by date range
         if ($request->filled('date_from')) {
             $query->whereDate('paid_at', '>=', $request->input('date_from'));
         }
@@ -78,7 +78,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Show manual payment creation form.
+     * Form to add a payment manually.
      */
     public function create(Request $request): View
     {
@@ -95,7 +95,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Store a manually entered payment record.
+     * Save a manual payment.
      */
     public function store(StorePaymentRequest $request): RedirectResponse
     {
@@ -121,7 +121,7 @@ class PaymentController extends Controller
                 'created_by' => $currentUser->id,
             ]);
 
-            // Recalculate balance on booking
+            // Update the booking balance
             $totalPaid = $booking->payments()->whereIn('status', ['completed', 'paid'])->sum('amount');
             $newBalance = max(0, $booking->total_amount - $totalPaid);
             $booking->update(['balance_amount' => $newBalance]);
@@ -152,7 +152,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Display full payment detail view.
+     * Payment details page.
      */
     public function show(Payment $payment): View
     {
@@ -162,7 +162,7 @@ class PaymentController extends Controller
     }
 
     /**
-     * Settle remaining balance for a booking.
+     * Pay the remaining balance of a booking.
      */
     public function settleBalance(SettleBalanceRequest $request, Payment $payment): RedirectResponse
     {

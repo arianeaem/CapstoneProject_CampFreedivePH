@@ -58,7 +58,7 @@
                 </form>
             @endif
 
-            <!-- 3-Dot More Actions Menu (Secondary & Destructive Actions) -->
+            <!-- More actions menu -->
             <div class="relative inline-block text-left" @click.outside="openActionsMenu = false">
                 <button type="button" 
                         @click="openActionsMenu = !openActionsMenu"

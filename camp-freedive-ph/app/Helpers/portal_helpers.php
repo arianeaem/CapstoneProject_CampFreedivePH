@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Auth;
 
 if (!function_exists('dynamic_portal_prefix')) {
     /**
-     * Get the dynamic portal prefix ('owner' or 'admin') based on the authenticated user.
+     * Get the portal prefix ('owner' or 'admin') for the logged in user.
      *
      * @return string
      */
@@ -20,9 +20,9 @@ if (!function_exists('dynamic_portal_prefix')) {
 
 if (!function_exists('portal_route')) {
     /**
-     * Generate a URL to a named route in the current user's portal namespace.
+     * URL to a route in the current user's portal.
      *
-     * @param  string  $name  Route name without the 'admin.' or 'owner.' prefix (e.g. 'pricing.index')
+     * @param  string  $name  route name without 'admin.' or 'owner.' (e.g. 'pricing.index')
      * @param  mixed   $parameters
      * @param  bool    $absolute
      * @return string
@@ -36,7 +36,7 @@ if (!function_exists('portal_route')) {
             return route($routeName, $parameters, $absolute);
         }
 
-        // Fallback to admin if owner route doesn't exist
+        // Use admin if there is no owner route
         if (\Illuminate\Support\Facades\Route::has("admin.{$name}")) {
             return route("admin.{$name}", $parameters, $absolute);
         }

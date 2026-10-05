@@ -1,15 +1,13 @@
 """
-Runs the four per-source ingestion scripts, then collocates them into one
-hourly, 15-variable Parquet file ready for feature engineering (Day 4).
+Runs the 4 download scripts, then joins them into one hourly parquet file
+with 15 variables, ready for the feature step (Day 4).
 
-Tide (tides.py) is intentionally excluded: it required NAMRIA gauge-calibrated
-harmonic fitting, and the historical gauge CSV was not obtainable within the
-capstone sprint window. This is a stated, documented scope reduction (same
-category as the 3-year data window and capped Optuna trials) — channel-current
-strength is still partially represented via current_speed/current_dir from
-CMEMS GLORYS12V1, just without the tide-derived slack-water signal. Revisit
-post-defense via a pre-fit global harmonic model (e.g. TPXO9 through pyTMD)
-that doesn't require local gauge calibration, if time allows.
+Tide (tides.py) is not included. It needed fitting with NAMRIA tide gauge data and
+we couldn't get the gauge CSV in time, so we left it out (same as the 3-year data
+range and the limited Optuna trials). The current strength is still partly covered by
+current_speed/current_dir from CMEMS GLORYS12V1, just without the slack tide signal.
+If there is time later, we could use a global tide model (e.g. TPXO9 with pyTMD)
+that doesn't need a local gauge.
 
 Usage: python run_all.py
 """

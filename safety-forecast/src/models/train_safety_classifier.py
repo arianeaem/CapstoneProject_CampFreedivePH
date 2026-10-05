@@ -1,16 +1,12 @@
 """
-Trains multi-horizon xgb_safety_classifier: predicts a 5-tier risk class
-(Very Safe -> Safe -> Moderate -> High Risk -> Critical Risk) across all forecast
-horizons (1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h) from the OUTPUTS of the three
-already-trained multi-horizon physics forecasters (wave, wind, current) plus
-tail-risk / P90 uncertainty bounds.
+Trains xgb_safety_classifier: predicts one of 5 risk levels
+(Very Safe, Safe, Moderate, High Risk, Critical Risk) for each horizon
+(1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h) using the OUTPUTS of the wave, wind
+and current models plus P90 values.
 
-TAIL RISK & LONG-HORIZON UTILITY:
-At longer horizons (48h-144h), point predictions naturally regress toward the mean
-under uncertainty. To provide genuine safety utility at multi-day horizons without
-false-positive suppression, the classifier receives both expected mean physics and
-upper-quantile tail uncertainty bounds (P90: pred + 1.645 * sigma_H), allowing it
-to evaluate severe storm risks even when mean forecasts are smoothed.
+Why P90: far ahead (48h-144h) the predictions move toward the average, so storms
+get smoothed out. So the classifier also gets the P90 values
+(pred + 1.645 * sigma_H) to still see the bad cases.
 
 Run from the project root: python src/models/train_safety_classifier.py
 """
@@ -40,10 +36,10 @@ MODEL_NAME = "xgb_safety_classifier"
 TIER_NAMES = ["Very Safe", "Safe", "Moderate", "High Risk", "Critical Risk"]
 KMH_TO_MS = 1000 / 3600
 
-# Class safety weights prioritizing higher-severity risks
+# Class weights (higher risk = more weight)
 CLASS_SAFETY_WEIGHTS = {0: 1.0, 1: 1.0, 2: 2.5, 3: 5.0, 4: 10.0}
 
-# Full 5x5 cost matrix, rows=true, cols=predicted — used for optimization & reporting
+# 5x5 cost matrix, rows = real, cols = predicted (used for tuning and reports)
 COST_MATRIX = np.array([
     [0,   1,  2,  4,  6],
     [1,   0,  2,  4,  6],
@@ -56,7 +52,7 @@ from src.config.targets import WAVE_TARGETS
 WIND_TARGETS = ["wind_speed", "wind_gust", "slp"]
 CURRENT_TARGETS = ["current_u", "current_v"]
 
-# Estimated standard error growth per horizon for P90 tail risk bounds
+# How much the error grows per horizon (for the P90 values)
 SIGMA_GROWTH = {
     "wind_gust": {1: 0.8, 6: 1.5, 12: 2.0, 24: 2.5, 48: 3.2, 72: 3.8, 96: 4.2, 144: 4.8},
     "wind_speed": {1: 0.6, 6: 1.1, 12: 1.5, 24: 1.9, 48: 2.4, 72: 2.9, 96: 3.3, 144: 3.8},
@@ -64,18 +60,18 @@ SIGMA_GROWTH = {
 }
 
 
-# TODO: Implement Split Conformal Prediction sets to generate formal statistical confidence intervals for multi-horizon risk tiers.
+# TODO: add conformal prediction sets for the risk levels
 
 
 def load_regressor(name: str) -> xgb.XGBRegressor:
     """
-    Loads a trained XGBoost physics regressor from the models directory.
+    Load a trained XGBoost model from the models folder.
 
     Parameters:
-        name (str): Model filename prefix (e.g. 'xgb_wave_forecaster_hs').
+        name (str): file name prefix (e.g. 'xgb_wave_forecaster_hs')
 
     Returns:
-        xgb.XGBRegressor: Initialized inference model.
+        xgb.XGBRegressor
     """
     model = xgb.XGBRegressor(n_jobs=-1)
     model.load_model(str(MODELS_DIR / f"{name}.json"))
@@ -84,21 +80,20 @@ def load_regressor(name: str) -> xgb.XGBRegressor:
 
 def generate_classifier_dataset(df: pd.DataFrame, labels: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """
-    Constructs the multi-horizon meta-feature dataset for the safety classifier.
+    Build the input data for the safety classifier.
 
-    Pipeline Rationale:
-        1. Two-Stage Stacked Architecture: The safety classifier does not read raw historical weather
-           directly; instead, it consumes the predictions of the 11 specialized physics regressors.
-        2. Horizon Expansion: Duplicates feature blocks across all 8 operational horizons (1h to 144h).
-        3. P90 Uncertainty Augmentation: Computes upper-tail 90th percentile bounds ($P90 = \mu + 1.645 \cdot \sigma_H$)
-           to ensure extreme squall risks remain visible even when multi-day point forecasts smooth out.
+    1. The classifier doesn't read the raw weather. It uses the predictions
+       of the 11 wave/wind/current models.
+    2. The rows are repeated for each of the 8 horizons (1h to 144h).
+    3. Adds P90 values (P90 = mean + 1.645 * sigma_H) so storms are still
+       visible when the forecast far ahead gets smoothed out.
 
     Parameters:
-        df (pd.DataFrame): Base preprocessed historical features.
-        labels (pd.DataFrame): Canonical ground-truth risk tiers.
+        df (pd.DataFrame): features
+        labels (pd.DataFrame): real risk levels
 
     Returns:
-        tuple[pd.DataFrame, pd.Series]: (classifier_feature_matrix, target_risk_labels).
+        tuple[pd.DataFrame, pd.Series]: (inputs, labels)
     """
     print("Generating lagged/rolling historical features...")
     lagged = build_lagged_features(df)
@@ -145,7 +140,7 @@ def generate_classifier_dataset(df: pd.DataFrame, labels: pd.DataFrame) -> tuple
     preds["pred_current_speed"] = np.sqrt(pred_u ** 2 + pred_v ** 2)
     preds["pred_current_dir"] = (np.degrees(np.arctan2(pred_v, pred_u))) % 360
 
-    # P90 Tail risk / upper quantile features
+    # P90 features
     h_arr = stacked["horizon"].values
     gust_sigma = np.array([SIGMA_GROWTH["wind_gust"].get(int(h), 3.0) for h in h_arr])
     wind_sigma = np.array([SIGMA_GROWTH["wind_speed"].get(int(h), 2.5) for h in h_arr])
@@ -155,7 +150,7 @@ def generate_classifier_dataset(df: pd.DataFrame, labels: pd.DataFrame) -> tuple
     p90_wind_speed = preds["pred_wind_speed"] + 1.645 * wind_sigma
     p90_hs = preds["pred_hs"] + 1.645 * hs_sigma
 
-    # Assemble classifier inputs (aligned by integer position to prevent Cartesian join)
+    # Put the inputs together (by position, so it doesn't make a cross join)
     classifier_X = pd.DataFrame({
         "horizon": stacked["horizon"].values,
         "pred_hs": preds["pred_hs"],
@@ -183,7 +178,7 @@ def generate_classifier_dataset(df: pd.DataFrame, labels: pd.DataFrame) -> tuple
 
 
 def asymmetric_cost_score(y_true, y_pred) -> float:
-    """Fast vectorized asymmetric safety penalty computation."""
+    """Cost of the predictions (higher risk mistakes cost more)."""
     y_t = np.asarray(y_true, dtype=int)
     y_p = np.asarray(y_pred, dtype=int)
     if len(y_t) == 0:
@@ -192,7 +187,7 @@ def asymmetric_cost_score(y_true, y_pred) -> float:
 
 
 def fit_booster(params: dict, train_X, train_y) -> xgb.Booster:
-    """Uses low-level DMatrix/xgb.train API with all CPU threads."""
+    """Uses xgb.train with DMatrix and all CPU threads."""
     params = dict(params)
     num_boost_round = params.pop("n_estimators")
     weights = compute_sample_weight(class_weight=CLASS_SAFETY_WEIGHTS, y=train_y)
@@ -201,13 +196,13 @@ def fit_booster(params: dict, train_X, train_y) -> xgb.Booster:
 
 
 def predict_booster(booster: xgb.Booster, X) -> np.ndarray:
-    """Fast vectorized argmax over multi:softprob per-class probabilities."""
+    """Argmax over the class probabilities."""
     probs = booster.predict(xgb.DMatrix(X, nthread=-1))
     return np.argmax(probs, axis=1)
 
 
 def tune_hyperparameters(train_X, train_y, n_trials=15):
-    """Tunes hyperparameters using multi-threaded walk-forward cross-validation."""
+    """Tune the settings with walk-forward CV."""
     optuna.logging.set_verbosity(optuna.logging.INFO)
 
     def objective(trial):
@@ -260,7 +255,7 @@ def main():
     full = classifier_X.copy()
     full["target_risk_tier"] = classifier_y.values
 
-    train, val, test = temporal_split(full)  # test held out
+    train, val, test = temporal_split(full)  # test is kept aside
     feature_cols = [c for c in full.columns if c != "target_risk_tier"]
 
     print(f"Train split: {len(train)} rows ({train.index.min()} to {train.index.max()})")
@@ -299,7 +294,7 @@ def main():
     print("\nPer-class report:")
     print(classification_report(val_y, val_preds, target_names=TIER_NAMES, zero_division=0))
 
-    # Per-horizon evaluation breakdown across all 8 horizons
+    # Results for each of the 8 horizons
     horizon_metrics = {}
     print("=" * 70)
     print("VALIDATION PERFORMANCE BY FORECAST HORIZON:")

@@ -16,7 +16,7 @@ class EnsurePasswordChanged
         $user = $request->user();
 
         if ($user && $user->must_change_password) {
-            // Allow access to password force change routes and logout
+            // Allow the change password page and logout
             if (!$request->routeIs('password.force_change', 'password.force_change.update', 'logout')) {
                 return redirect()->route('password.force_change')
                     ->with('warning', 'Please change your temporary password before accessing your dashboard.');

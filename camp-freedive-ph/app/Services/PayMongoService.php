@@ -8,20 +8,13 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * PayMongo Payment Gateway Service.
+ * PayMongo payments (QR Ph, GCash, Maya, cards, BPI).
  *
- * Domain & Payment Lifecycle Context:
- * Orchestrates payment intent creation, checkout session lifecycle, automated refunds,
- * and cryptographic webhook verification for Philippine payment methods (QR Ph, GCash,
- * Maya, Credit/Debit cards, BPI Direct).
- *
- * Reliability & Security:
- * - Dual verification: Synchronous redirect callback verification paired with asynchronous
- *   HMAC-SHA256 signed webhooks (`Paymongo-Signature`).
- * - Outbound Rate-Limiting & Backoff: Routes requests through ExternalApiClient to prevent
- *   provider 429 errors and handle transient gateway hiccups with exponential backoff.
- * - Simulated fallback mode: Gracefully creates local test mock sessions if API keys are not
- *   configured in staging/local development, preventing broken checkout flows.
+ * - creates checkout sessions and payment intents
+ * - refunds
+ * - checks the webhook signature (Paymongo-Signature)
+ * - calls go through ExternalApiClient so we get the limits and retries
+ * - if there are no API keys (local/testing) it makes a fake session so checkout still works
  */
 class PayMongoService
 {
@@ -43,7 +36,7 @@ class PayMongoService
     }
 
     /**
-     * Helper to execute outbound PayMongo API request through ExternalApiClient.
+     * Send a request to PayMongo through ExternalApiClient.
      */
     protected function request(string $method, string $url, array $payload = [], int $timeout = 15)
     {
@@ -56,10 +49,10 @@ class PayMongoService
     }
 
     /**
-     * Create a PayMongo Checkout Session for hosted checkout (QR Ph, GCash, BPI, Cards, Maya).
+     * Create a PayMongo checkout session (QR Ph, GCash, BPI, cards, Maya).
      *
-     * @param array $lineItems Array of items [['name' => ..., 'amount' => in centavos, 'quantity' => ..., 'currency' => 'PHP']]
-     * @param array $options Description, success_url, cancel_url, payment_method_types, metadata, billing, reference_number
+     * @param array $lineItems [['name' => ..., 'amount' => in centavos, 'quantity' => ..., 'currency' => 'PHP']]
+     * @param array $options description, success_url, cancel_url, payment_method_types, metadata, billing, reference_number
      * @return array
      */
     public function createCheckoutSession(array $lineItems, array $options = []): array
@@ -116,7 +109,7 @@ class PayMongoService
                 ],
             ];
 
-            // Use PayMongo v2 checkout_sessions endpoint for deferred payment intent and modern payment channels
+            // Use the v2 checkout_sessions endpoint
             $response = $this->request('POST', "https://api.paymongo.com/v2/checkout_sessions", $payload);
 
             if ($response->successful()) {
@@ -129,10 +122,10 @@ class PayMongoService
                 ];
             }
 
-            // If v2 returned an error, log details
+            // Log the v2 error
             Log::warning('PayMongo Create v2 Checkout Session Failed: ' . $response->body());
             
-            // Attempt fallback to v1 if necessary
+            // Try v1 instead
             $responseV1 = $this->request('POST', "https://api.paymongo.com/v1/checkout_sessions", $payload);
             if ($responseV1->successful()) {
                 $dataV1 = $responseV1->json();
@@ -158,7 +151,7 @@ class PayMongoService
     }
 
     /**
-     * Create a PayMongo Payment Intent for custom API-driven checkout.
+     * Create a payment intent (for our own checkout page).
      *
      * @param float $amountInPesos
      * @param array $paymentMethods
@@ -223,7 +216,7 @@ class PayMongoService
     }
 
     /**
-     * Create a PayMongo Payment Method (e.g. Card).
+     * Create a payment method (e.g. card).
      */
     public function createPaymentMethod(string $type, array $details, array $billing = []): array
     {
@@ -271,7 +264,7 @@ class PayMongoService
     }
 
     /**
-     * Attach a Payment Method to a Payment Intent.
+     * Attach a payment method to a payment intent.
      */
     public function attachPaymentIntent(string $paymentIntentId, string $paymentMethodId, ?string $returnUrl = null, ?string $clientKey = null): array
     {
@@ -331,19 +324,19 @@ class PayMongoService
     }
 
     /**
-     * Issue a refund for a PayMongo payment.
+     * Refund a PayMongo payment.
      *
-     * @param string $paymentId PayMongo payment identifier (pay_xxx)
-     * @param float $amountInPesos Amount in PHP
-     * @param string $reason standard PayMongo reason (requested_by_customer, duplicate, fraudulent, others)
-     * @param string|null $notes Descriptive note for audit trail
+     * @param string $paymentId PayMongo payment id (pay_xxx)
+     * @param float $amountInPesos
+     * @param string $reason requested_by_customer, duplicate, fraudulent or others
+     * @param string|null $notes
      * @return array
      */
     public function refund(string $paymentId, float $amountInPesos, string $reason = 'requested_by_customer', ?string $notes = null): array
     {
         $amountInCentavos = (int) round($amountInPesos * 100);
 
-        // If secret key is provided and this is a real PayMongo payment identifier
+        // We have a secret key and it's a real PayMongo payment id
         if (!empty($this->secretKey) && !str_contains($this->secretKey, 'your_secret_key') && str_starts_with($paymentId, 'pay_')) {
             try {
                 $response = $this->request('POST', "{$this->baseUrl}/refunds", [
@@ -373,7 +366,7 @@ class PayMongoService
 
                 Log::warning("PayMongo Refund API Error for payment {$paymentId}: {$errorDetail} (Code: {$errorCode})");
 
-                // If already refunded on PayMongo, retrieve existing refund reference
+                // Already refunded on PayMongo, get the existing refund
                 if (str_contains(strtolower($errorDetail), 'refundable') || str_contains(strtolower($errorDetail), 'refunded') || $errorCode === 'parameter_above_maximum') {
                     $paymentData = $this->getPayment($paymentId);
                     $existingRefunds = $paymentData['data']['attributes']['refunds'] ?? [];
@@ -390,7 +383,7 @@ class PayMongoService
                     }
                 }
 
-                // If payment was not found on PayMongo (e.g. test seeder ID), allow graceful offline refund
+                // Payment not found on PayMongo (e.g. seeder data), do an offline refund
                 if ($errorCode === 'resource_not_found' || str_contains(strtolower($errorDetail), 'not found')) {
                     $simulatedRefundId = 'ref_offline_' . strtolower(bin2hex(random_bytes(8)));
                     return [
@@ -416,7 +409,7 @@ class PayMongoService
             }
         }
 
-        // Fallback for offline transactions or test simulation
+        // Offline or test payment
         $simulatedRefundId = 'ref_offline_' . strtolower(bin2hex(random_bytes(8)));
         return [
             'success' => true,
@@ -428,7 +421,7 @@ class PayMongoService
     }
 
     /**
-     * Retrieve payment information from PayMongo (with caching).
+     * Get a payment from PayMongo (cached).
      */
     public function getPayment(string $paymentId): ?array
     {
@@ -451,7 +444,7 @@ class PayMongoService
     }
 
     /**
-     * Retrieve a Checkout Session by ID (with caching).
+     * Get a checkout session by id (cached).
      */
     public function getCheckoutSession(string $checkoutId): ?array
     {
@@ -474,16 +467,16 @@ class PayMongoService
     }
 
     /**
-     * Verify incoming PayMongo Webhook Signature header.
+     * Check the PayMongo webhook signature.
      *
-     * @param string $payload Raw JSON payload from request()->getContent()
-     * @param string $signatureHeader Header value (Paymongo-Signature: t=timestamp,te=test_sig,li=live_sig)
+     * @param string $payload raw JSON body
+     * @param string $signatureHeader Paymongo-Signature header (t=timestamp,te=test_sig,li=live_sig)
      * @return bool
      */
     public function verifyWebhookSignature(string $payload, string $signatureHeader): bool
     {
         if (empty($this->webhookSecret)) {
-            return true; // Bypassed if webhook secret is not configured
+            return true; // no webhook secret set, skip the check
         }
 
         $parts = explode(',', $signatureHeader);

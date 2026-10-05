@@ -1,21 +1,20 @@
 """
 retrain_pipeline.py
 
-Continuous Retraining and 90-Day Demand Forecasting Pipeline for Camp Freedive PH.
+Retrains the demand models and makes the 90-day demand forecast for Camp Freedive PH.
 
-Pipeline Steps:
-1. Data Ingestion: Loads the ACTUAL historical batches built from the 553 Google Form registration
-   records (data/demand_ml_batch_training_history.csv). No synthetic/simulated history is generated.
-   Laravel completed batches are only merged in when explicitly enabled (--include-laravel).
-2. Feature Engineering: Computes temporal indicators, seasonal classifications, booking lead times,
-   and chronological lag/rolling features.
-3. Model Retraining: Fits regression models for participant count and class revenue using XGBoost
-   (with hyperparameter grid search and PredefinedSplit).
-4. Validation Gate: Evaluates model performance against held-out test metrics (MAE, RMSE, WAPE, R²).
-5. Artifact Export: Overwrites model artifacts (.joblib) in outputs/models/.
-6. 90-Day Recursive Forecast: The trained ML models predict 13 weekly batches over the 90-day horizon (outputs/forecast.csv).
-   These rows are FORECASTS only and are never written back to the actual/historical data.
-7. Dynamic Horizon Push: Computes 7d, 30d, 60d, 90d summaries and posts the forecast payload to Laravel.
+Steps:
+1. Load data: the real past batches made from the 553 Google Form registrations
+   (data/demand_ml_batch_training_history.csv). No fake data is made.
+   Completed Laravel batches are only added with --include-laravel.
+2. Features: date features, season, booking lead time, lag and rolling features.
+3. Train: XGBoost models for participant count and class income
+   (grid search with PredefinedSplit).
+4. Check: compare the test results (MAE, RMSE, WAPE, R2) against the limits.
+5. Save: overwrite the model files (.joblib) in outputs/models/.
+6. Forecast: predict 13 weekly batches for the next 90 days (outputs/forecast.csv).
+   These are only forecasts, they are never saved as real data.
+7. Send: compute the 7, 30, 60 and 90 day summaries and send the forecast to Laravel.
 """
 
 import json
@@ -30,10 +29,10 @@ from sklearn.model_selection import GridSearchCV, PredefinedSplit
 from xgboost import XGBRegressor
 
 # ==============================================================================
-# CONFIGURATION & ENVIRONMENT
+# Settings
 # ==============================================================================
 def _load_env_file():
-    """Load environment variables from .env file if present."""
+    """Load the .env file if there is one."""
     try:
         from dotenv import load_dotenv
         dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
@@ -122,25 +121,25 @@ HORIZONS = [7, 30, 60, 90]
 
 
 def get_season(month: int) -> str:
-    """Classifies month into Philippines dive seasons: dry (Nov-Apr) and wet (May-Oct)."""
+    """Season for a month: dry (Nov-Apr) or wet (May-Oct)."""
     return "dry" if month in (11, 12, 1, 2, 3, 4) else "wet"
 
 
 # ------------------------------------------------------------------------------
-# SINGLE SOURCE OF TRUTH: demand_thresholds.json
-# Written by this pipeline from the ACTUAL 553-record history and read by Laravel
-# (config/demand.php) so High/Medium/Low and Peak/Shoulder/Off-Peak are defined once.
+# demand_thresholds.json
+# This script writes it from the real 553-record history and Laravel reads it
+# (config/demand.php), so High/Medium/Low and Peak/Shoulder/Off-Peak are only defined here.
 # ------------------------------------------------------------------------------
 DEMAND_CONFIG_PATH = os.path.join(BASE_DIR, "demand_thresholds.json")
 ACTUAL_HISTORY_PATH = os.path.join(DATA_DIR, "demand_ml_batch_training_history.csv")
 REQUIRED_HISTORY_COLS = ["batch_id", "batch_date", "participant_count", "booking_count", "class_revenue"]
-PEAK_INDEX_CUTOFF = 1.15      # month avg >= 115% of the all-month average  -> Peak
-OFFPEAK_INDEX_CUTOFF = 0.90   # month avg <=  90% of the all-month average  -> Off-Peak
+PEAK_INDEX_CUTOFF = 1.15      # month avg >= 115% of the overall average -> Peak
+OFFPEAK_INDEX_CUTOFF = 0.90   # month avg <= 90% of the overall average -> Off-Peak
 INCLUDE_LARAVEL = os.getenv("INCLUDE_LARAVEL_BATCHES", "0") == "1" or "--include-laravel" in sys.argv
 
 
 def load_actual_history(path: str = ACTUAL_HISTORY_PATH) -> pd.DataFrame:
-    """Load the ACTUAL batch history derived from the 553 Google Form records."""
+    """Load the real batch history (from the 553 Google Form records)."""
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"Actual history not found: {path}. The pipeline will NOT generate synthetic history."
@@ -157,7 +156,7 @@ def load_actual_history(path: str = ACTUAL_HISTORY_PATH) -> pd.DataFrame:
 
 
 def derive_demand_config(df: pd.DataFrame) -> dict:
-    """Derive High/Medium/Low and Peak/Shoulder/Off-Peak rules from ACTUAL history only."""
+    """Make the High/Medium/Low and Peak/Shoulder/Off-Peak rules from the real history only."""
     pax = df["participant_count"].astype(float)
     low_max = round(float(pax.quantile(0.33)), 1)
     medium_max = round(float(pax.quantile(0.67)), 1)
@@ -225,14 +224,14 @@ def season_for_month(month: int, cfg: dict) -> str:
 
 
 def compute_metrics(y_true, y_pred) -> dict:
-    """Computes MAE, RMSE, MAPE, WAPE, and R² metrics."""
+    """MAE, RMSE, MAPE, WAPE and R2."""
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     errors = y_pred - y_true
     mae = float(np.mean(np.abs(errors)))
     rmse = float(np.sqrt(np.mean(errors ** 2)))
 
-    # MAPE (ignoring zero actuals to prevent division by zero)
+    # MAPE (skip zero actuals so we don't divide by zero)
     nonzero = y_true != 0
     mape = float(np.mean(np.abs(errors[nonzero] / y_true[nonzero])) * 100) if nonzero.any() else float("nan")
     wape = float(np.sum(np.abs(errors)) / np.sum(y_true) * 100) if np.sum(y_true) != 0 else float("nan")
@@ -253,18 +252,18 @@ def compute_metrics(y_true, y_pred) -> dict:
 
 
 # ------------------------------------------------------------------------------
-# PER-BATCH FORECAST HELPERS (forecast every real scheduled batch)
+# Batch forecast helpers (one forecast for each scheduled batch)
 # ------------------------------------------------------------------------------
 INTERVAL_Z_80 = 1.2816                 # 80% prediction interval
 DEFAULT_BATCH_CAPACITY = 45
 COACH_RATIO = 4                        # one coach per four participants
 REAL_HISTORY_MIN_BATCHES = 104         # about two years of weekly batches
-REAL_HISTORY_MAX_STALE_DAYS = 90       # newest actual batch must be this recent
-# NOTE: these two numbers are placeholders for Ari/stakeholders to confirm.
+REAL_HISTORY_MAX_STALE_DAYS = 90       # newest real batch must be at most this old
+# TODO: confirm these two numbers with the camp
 
 
 def make_feature_row(current_date, history, avg_lead, median_lead) -> dict:
-    """Feature row for ONE batch date, built from the rolling history of previous batches."""
+    """Features for one batch date, from the rolling history of the batches before it."""
     recent_pax = history["participant_count"].tolist()
     recent_bkg = history["booking_count"].tolist()
     recent_rev = history["class_revenue"].tolist()
@@ -293,7 +292,7 @@ def make_feature_row(current_date, history, avg_lead, median_lead) -> dict:
 
 
 def fetch_scheduled_batches() -> list:
-    """Real upcoming batches from Laravel (GET /scheduled-batches). Never invents batches."""
+    """Upcoming batches from Laravel (GET /scheduled-batches). We don't make up batches."""
     try:
         resp = requests.get(f"{LARAVEL_API_URL}/scheduled-batches", headers=HEADERS, timeout=15)
         resp.raise_for_status()
@@ -304,7 +303,7 @@ def fetch_scheduled_batches() -> list:
 
 
 def compute_baselines(train_val_df: pd.DataFrame, test_df: pd.DataFrame, models: dict, feature_cols: list) -> dict:
-    """Compare the ML model with two naive baselines on the held-out (latest) batches."""
+    """Compare the ML model with two simple baselines on the latest (held-out) batches."""
     out = {}
     for target in ("participant_count", "booking_count"):
         y_true = test_df[target].astype(float).values
@@ -339,11 +338,11 @@ def determine_data_basis(n_batches: int, last_actual_date, today) -> str:
 def build_batch_forecasts(batches, models, actual_df, avg_lead, median_lead, demand_cfg,
                           rmse_by_target, model_version, data_basis, generated_at, today) -> list:
     """
-    One forecast row per REAL scheduled batch.
+    One forecast row for each scheduled batch.
 
-    Each batch is forecast INDEPENDENTLY: its starting point is the usual level of its own calendar
-    month in the ACTUAL history, never the forecast of another batch. So adding, moving or cancelling
-    one batch cannot change the forecast of the others.
+    Each batch is forecast on its own: it starts from the normal level of its month
+    in the real history, not from another batch's forecast. So adding, moving or
+    cancelling one batch doesn't change the others.
     """
     rows = []
     cols = ["participant_count", "booking_count", "class_revenue"]
@@ -370,7 +369,7 @@ def build_batch_forecasts(batches, models, actual_df, avg_lead, median_lead, dem
         pax = max(0.0, float(models["participant_count"].predict(X)[0]))
         bkg = max(0.0, float(models["booking_count"].predict(X)[0]))
 
-        # A forecast can never be lower than what is already booked (booked_so_far is real data).
+        # The forecast can't be lower than what is already booked (booked_so_far is real data)
         adjusted = booked > pax
         pax_final = max(pax, float(booked))
         rpp = float(rev_per_pax_by_month.get(batch_date.month, overall_rev_per_pax))
@@ -406,7 +405,7 @@ def build_batch_forecasts(batches, models, actual_df, avg_lead, median_lead, dem
 
 
 def monthly_rollup(batch_rows: list, demand_cfg: dict) -> list:
-    """Per-month totals = sum of the per-batch forecasts of that month (never a separate guess)."""
+    """Monthly totals = sum of the batch forecasts in that month."""
     if not batch_rows:
         return []
     df = pd.DataFrame(batch_rows)
@@ -428,7 +427,7 @@ def monthly_rollup(batch_rows: list, demand_cfg: dict) -> list:
 
 def run_pipeline():
     # ==============================================================================
-    # STEP 1: FETCH FRESH DATA FROM LARAVEL & COMBINE
+    # STEP 1: get the data (and Laravel batches if enabled)
     # ==============================================================================
     print("======================================================================")
     print("STEP 1: DATA INGESTION (LARAVEL API & HISTORICAL ACTUALS)")
@@ -476,7 +475,7 @@ def run_pipeline():
     print(f"-> Unified ACTUAL dataset ready: {len(combined)} chronological batches.")
     print(f"   Date range: {combined['batch_date'].min().date()} to {combined['batch_date'].max().date()}")
 
-    # Single source of truth for High/Medium/Low + Peak/Shoulder/Off-Peak (from ACTUAL data only)
+    # High/Medium/Low and Peak/Shoulder/Off-Peak rules (from real data only)
     demand_cfg = derive_demand_config(combined)
     save_demand_config(demand_cfg)
     print(f"-> Saved demand rules -> {DEMAND_CONFIG_PATH}")
@@ -485,7 +484,7 @@ def run_pipeline():
 
 
     # ==============================================================================
-    # STEP 2: FEATURE PIPELINE
+    # STEP 2: features
     # ==============================================================================
     print("\n======================================================================")
     print("STEP 2: FEATURE ENGINEERING & LAG COMPUTATION")
@@ -495,23 +494,23 @@ def run_pipeline():
     batch["batch_date"] = pd.to_datetime(batch["batch_date"])
     batch = batch.sort_values("batch_date").reset_index(drop=True)
 
-    # 1. Calendar & Temporal features
+    # 1. Date features
     batch["day_of_week"] = batch["batch_date"].dt.dayofweek
     batch["week_of_year"] = batch["batch_date"].dt.isocalendar().week.astype(int)
     batch["month"] = batch["batch_date"].dt.month
     batch["day_of_year"] = batch["batch_date"].dt.dayofyear
     batch["is_weekend"] = batch["day_of_week"].isin([5, 6]).astype(int)
 
-    # 2. Season indicators
+    # 2. Season
     batch["season"] = batch["month"].apply(get_season)
     batch["season_is_dry"] = (batch["season"] == "dry").astype(int)
 
-    # 3. Lead time defaults
+    # 3. Default lead time
     default_lead = 14.5
     batch["avg_lead_time"] = batch["avg_lead_time"].fillna(default_lead)
     batch["median_lead_time"] = batch["median_lead_time"].fillna(default_lead)
 
-    # 4. Lag & Rolling features
+    # 4. Lag and rolling features
     for target in TARGETS:
         batch[f"{target}_lag_1"] = batch[target].shift(1)
         batch[f"{target}_lag_2"] = batch[target].shift(2)
@@ -524,7 +523,7 @@ def run_pipeline():
 
 
     # ==============================================================================
-    # STEP 3: TIME-SERIES SPLIT & MODEL RETRAINING
+    # STEP 3: split by time and train
     # ==============================================================================
     print("\n======================================================================")
     print("STEP 3: TIME-SERIES SPLIT & MODEL RETRAINING (XGBOOST)")
@@ -549,7 +548,7 @@ def run_pipeline():
           f"Validation={len(train_val_df[train_val_df['split']=='validation'])}, "
           f"Test={len(test_df)}")
 
-    # PredefinedSplit for validation fold tuning
+    # PredefinedSplit for the validation fold
     test_fold = train_val_df["split"].map({"train": -1, "validation": 0}).values
     ps = PredefinedSplit(test_fold)
 
@@ -563,10 +562,10 @@ def run_pipeline():
     }
 
     retrained_models = {}
-    # Conceptual 3-Model Regression Architecture:
-    # Model 1 -> participant_count (XGBoost Regressor)
-    # Model 2 -> booking_count (XGBoost Regressor)
-    # Model 3 -> class_revenue (XGBoost Regressor)
+    # 3 models:
+    # 1 -> participant_count (XGBoost)
+    # 2 -> booking_count (XGBoost)
+    # 3 -> class_revenue (XGBoost)
     for idx, target in enumerate(TARGETS, 1):
         print(f"Training Model {idx} [XGBoost Regressor] for '{target}'...")
         y_train_val = train_val_df[target]
@@ -586,7 +585,7 @@ def run_pipeline():
 
 
     # ==============================================================================
-    # STEP 4: VALIDATION GATE
+    # STEP 4: check the results
     # ==============================================================================
     print("\n======================================================================")
     print("STEP 4: ERROR-LIMIT GATE (absolute MAE limits only)")
@@ -595,7 +594,7 @@ def run_pipeline():
     eval_results = {}
     validation_passed = True
 
-    # Safety thresholds for regression models
+    # Limits for the models
     MAX_ACCEPTABLE_PARTICIPANT_MAE = 20.0
     MAX_ACCEPTABLE_BOOKING_MAE = 10.0
     MAX_ACCEPTABLE_REVENUE_MAE = 80000.0
@@ -642,7 +641,7 @@ def run_pipeline():
             print(f"  -> Exported model artifact: {model_path}")
     else:
         print("\n-> Error-limit gate FAILED: MAE is above the maximum acceptable limits. Retaining existing model artifacts.")
-        # Attempt to load existing models if present
+        # Try to load the old models if they exist
         for target in TARGETS:
             model_path = os.path.join(MODEL_DIR, f"{target}_model.joblib")
             if os.path.exists(model_path):
@@ -650,7 +649,7 @@ def run_pipeline():
 
 
     # ==============================================================================
-    # STEP 5: 90-DAY RECURSIVE FORECAST GENERATION
+    # STEP 5: 90-day forecast (step by step)
     # ==============================================================================
     print("\n======================================================================")
     print("STEP 5: 90-DAY RECURSIVE FORECAST GENERATION")
@@ -659,7 +658,7 @@ def run_pipeline():
     last_known_date = pd.to_datetime(datetime.now().date())
     print(f"Forecasting from current anchor date: {last_known_date.date()} forward for 90 days...")
 
-    # Demand level + season come from the single source of truth (demand_cfg), derived from ACTUAL data.
+    # Demand level and season come from demand_cfg (made from real data)
     def classify_demand(pax: float) -> str:
         return classify_demand_level(pax, demand_cfg)
 
@@ -668,12 +667,12 @@ def run_pipeline():
     booking_model = retrained_models["booking_count"]
     revenue_model = retrained_models["class_revenue"]
 
-    # Seed the rolling lag window with the last 4 batches
+    # Start the lag window with the last 4 batches
     history = batch[["batch_date", "participant_count", "booking_count", "class_revenue"]].tail(4).copy()
     gap_days = int((last_known_date - history["batch_date"].max()).days)
     if gap_days > 28:
-        # The actual history ends long before today. Seeding the lag window with stale batches would
-        # make every forecast depend on old months, so seed with the actual average of the anchor month.
+        # The real history ends long before today. Using those old batches for the lags would
+        # make every forecast depend on old months, so use the real average of the starting month.
         m_anchor = last_known_date.month
         by_month = batch.groupby("month")[["participant_count", "booking_count", "class_revenue"]].mean()
         seed_vals = by_month.loc[m_anchor] if m_anchor in by_month.index else batch[["participant_count", "booking_count", "class_revenue"]].mean()
@@ -688,7 +687,7 @@ def run_pipeline():
     avg_lead = float(batch["avg_lead_time"].mean())
     median_lead = float(batch["median_lead_time"].mean())
 
-    history_seed = history.copy()          # untouched copy for the per-batch forecast
+    history_seed = history.copy()          # copy for the batch forecast
     forecast_rows = []
     current_date = last_known_date
     n_steps = (max(HORIZONS) // BATCH_CADENCE_DAYS) + 1  # 13 steps
@@ -714,7 +713,7 @@ def run_pipeline():
             "instructors_needed": int(np.ceil(pred_participants / 4.0)),
         })
 
-        # Recursive step: Append forecast to history
+        # Add this forecast to the history for the next step
         history = pd.concat([
             history,
             pd.DataFrame([{
@@ -729,7 +728,7 @@ def run_pipeline():
     forecast_csv_path = os.path.join(OUTPUT_DIR, "forecast.csv")
 
     # ==============================================================================
-    # DEMAND / SEASON INTERPRETATION (rules come from the ACTUAL 553-record history)
+    # Demand level and season (rules from the real 553-record history)
     # ==============================================================================
     df_forecast["_month"] = pd.to_datetime(df_forecast["forecast_date"]).dt.to_period("M")
     monthly_avg_participants = df_forecast.groupby("_month")["predicted_participants"].mean().round(1)
@@ -791,8 +790,8 @@ def run_pipeline():
 
     df_forecast_monthly = pd.DataFrame(monthly_rows)
 
-    # Remove the temporary grouping column so the original df_forecast
-    # remains unchanged for the rest of the pipeline.
+    # Remove the temporary group column so df_forecast
+    # stays the same for the rest of the script.
     df_forecast = df_forecast.drop(columns=["_month"])
 
     forecast_monthly_path = os.path.join(
@@ -818,7 +817,7 @@ def run_pipeline():
 
 
     # ==============================================================================
-    # STEP 6: COMPUTE DYNAMIC HORIZONS & SYNC TO LARAVEL
+    # STEP 6: summaries and send to Laravel
     # ==============================================================================
     print("\n======================================================================")
     print("STEP 6: COMPUTE HORIZONS & PUSH TO LARAVEL")
@@ -853,7 +852,7 @@ def run_pipeline():
               f"Peak Coaches: {summary['peak_instructors']}")
 
     # ==============================================================================
-    # PER-BATCH FORECAST (every REAL scheduled batch) + MONTHLY ROLLUP + BASELINES
+    # Batch forecast (each scheduled batch) + monthly totals + baselines
     # ==============================================================================
     print("\n======================================================================")
     print("PER-BATCH FORECAST (REAL SCHEDULED BATCHES)")

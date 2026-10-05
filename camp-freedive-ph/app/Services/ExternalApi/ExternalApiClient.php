@@ -10,35 +10,31 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * Resilient Client for Outbound Third-Party API Calls.
+ * Wrapper for calling outside APIs (PayMongo, Open-Meteo, ML service).
  *
- * Responsibilities:
- * 1. Proactive Rate Limiting & Quota Throttling: Enforces local per-minute and per-day caps
- *    before dispatching network requests to prevent third-party provider 429s and surprise billing.
- * 2. Exponential Backoff with Jitter: Automatically catches transient network errors and provider 429s,
- *    respecting Retry-After headers with bounded backoff.
- * 3. Sanitized Lightweight Telemetry: Logs request latency, status, and retry metrics while stripping
- *    credentials, authorization headers, tokens, and PII.
+ * - checks our own per-minute/hour/day/month limits before sending, so we don't hit the provider limit
+ * - retries on 429 and 5xx errors with backoff (uses Retry-After if given)
+ * - logs time, status and retries, without tokens or personal info
  */
 class ExternalApiClient
 {
     /**
-     * Execute an outbound HTTP request with rate-limiting, retries, backoff, and logging.
+     * Send an HTTP request with limits, retries and logging.
      *
-     * @param string $provider Identifier ('paymongo', 'open_meteo', 'ml_service')
+     * @param string $provider 'paymongo', 'open_meteo' or 'ml_service'
      * @param string $method 'GET', 'POST', 'PUT', etc.
-     * @param string $url Full target URL
-     * @param array $options Query params, headers, payload, auth, timeout
+     * @param string $url full URL
+     * @param array $options query, headers, payload, auth, timeout
      * @return Response
-     * @throws ExternalApiRateLimitException If local outbound quota is exceeded
-     * @throws Exception On persistent failure after max retries
+     * @throws ExternalApiRateLimitException if our own limit is reached
+     * @throws Exception if it still fails after all retries
      */
     public function execute(string $provider, string $method, string $url, array $options = []): Response
     {
         $config = config("external_apis.{$provider}", []);
         $providerName = $config['name'] ?? ucfirst($provider);
 
-        // 1. Enforce outbound rate limit quotas and budget thresholds (minute, hour, day, month)
+        // 1. Check our request limits (minute, hour, day, month)
         $this->enforceRateLimits($provider, $config);
 
         $maxRetries = (int) ($options['max_retries'] ?? $config['max_retries'] ?? 2);
@@ -55,7 +51,7 @@ class ExternalApiClient
             $attemptStartTime = microtime(true);
 
             try {
-                // Build HTTP request
+                // Build the request
                 $pendingRequest = Http::timeout($timeout)->acceptJson();
 
                 if (!empty($options['without_verifying'])) {
@@ -74,7 +70,7 @@ class ExternalApiClient
                     $pendingRequest->withHeaders($options['headers']);
                 }
 
-                // Dispatch HTTP request
+                // Send it
                 $methodUpper = strtoupper($method);
                 if ($methodUpper === 'GET') {
                     $response = $pendingRequest->get($url, $options['query'] ?? []);
@@ -90,7 +86,7 @@ class ExternalApiClient
 
                 $attemptDurationMs = round((microtime(true) - $attemptStartTime) * 1000, 2);
 
-                // Permanent client errors (400, 401, 403, 404, 422) should NEVER be retried
+                // Don't retry client errors (400, 401, 403, 404, 422)
                 $status = $response->status();
                 if ($status >= 400 && $status < 500 && $status !== 429) {
                     $totalDurationMs = round((microtime(true) - $startTime) * 1000, 2);
@@ -98,7 +94,7 @@ class ExternalApiClient
                     return $response;
                 }
 
-                // Check for provider rate limit (429) or transient 5xx server errors
+                // Retry on 429 or 5xx
                 if ($status === 429 || $response->serverError()) {
                     if ($attempt <= $maxRetries) {
                         $retryAfter = (int) ($response->header('Retry-After') ?: 0);
@@ -117,7 +113,7 @@ class ExternalApiClient
                     }
                 }
 
-                // Log successful completion or final response
+                // Log the result
                 $totalDurationMs = round((microtime(true) - $startTime) * 1000, 2);
                 $this->logMetric($provider, $methodUpper, $url, $status, $totalDurationMs, $attempt - 1, $response->successful());
 
@@ -151,7 +147,7 @@ class ExternalApiClient
     }
 
     /**
-     * Enforce outbound quota limits per minute, hour, day, and month with tiered warning thresholds.
+     * Check the request limits per minute, hour, day and month.
      *
      * @param string $provider
      * @param array $config
@@ -163,7 +159,7 @@ class ExternalApiClient
         $warnThresholdPct = (int) ($rateLimits['warning_threshold_pct'] ?? 80);
         $critThresholdPct = (int) ($rateLimits['critical_threshold_pct'] ?? 90);
 
-        // 1. Per-minute rate limit (Sliding token window)
+        // 1. Per minute
         $minuteLimit = (int) ($rateLimits['max_requests_per_minute'] ?? 60);
         $minuteKey = "ext_api_rate:{$provider}:minute";
 
@@ -173,27 +169,27 @@ class ExternalApiClient
             throw new ExternalApiRateLimitException("Outbound quota limit reached for {$provider}. Retry in {$seconds} seconds.", 429, $seconds);
         }
 
-        // 2. Hourly quota tracking & budget enforcement
+        // 2. Per hour
         if (!empty($rateLimits['max_requests_per_hour'])) {
             $this->checkQuotaPeriod($provider, 'hourly', date('Y-m-d-H'), (int) $rateLimits['max_requests_per_hour'], 7200, 3600, $warnThresholdPct, $critThresholdPct);
         }
 
-        // 3. Daily quota tracking & budget enforcement
+        // 3. Per day
         if (!empty($rateLimits['max_requests_per_day'])) {
             $this->checkQuotaPeriod($provider, 'daily', date('Y-m-d'), (int) $rateLimits['max_requests_per_day'], 172800, 86400, $warnThresholdPct, $critThresholdPct);
         }
 
-        // 4. Monthly quota tracking & budget enforcement
+        // 4. Per month
         if (!empty($rateLimits['max_requests_per_month'])) {
             $this->checkQuotaPeriod($provider, 'monthly', date('Y-m'), (int) $rateLimits['max_requests_per_month'], 3024000, 86400 * 30, $warnThresholdPct, $critThresholdPct);
         }
 
-        // Record the minute attempt
+        // Count this minute's request
         RateLimiter::hit($minuteKey, 60);
     }
 
     /**
-     * Check, track, and log warnings for a specific quota time window.
+     * Check and count one time window, and log a warning when we get close to the limit.
      */
     protected function checkQuotaPeriod(
         string $provider,
@@ -208,24 +204,24 @@ class ExternalApiClient
         $cacheKey = "ext_api_{$period}:{$provider}:{$timeKey}";
         $current = (int) Cache::get($cacheKey, 0);
 
-        // Check Hard Stop (100% limit reached)
+        // Limit reached
         if ($current >= $limit) {
             Log::error("[ExternalAPI:{$provider}] API usage limit reached: 100% of configured {$period} limit has been reached ({$current}/{$limit}). Hard stop active.");
             throw new ExternalApiRateLimitException("Configured {$period} quota ceiling reached for {$provider}.", 429, $retryAfterSeconds);
         }
 
-        // Calculate usage percentage after this request
+        // Usage % after this request
         $nextCount = $current + 1;
         $usagePercent = round(($nextCount / $limit) * 100, 1);
 
-        // Warning thresholds evaluation
+        // Warnings
         if ($usagePercent >= $critPct) {
             Log::warning("[ExternalAPI:{$provider}] API usage critical warning: {$usagePercent}% of the configured {$period} limit has been reached ({$nextCount}/{$limit}).");
         } elseif ($usagePercent >= $warnPct) {
             Log::warning("[ExternalAPI:{$provider}] API usage warning: {$usagePercent}% of the configured {$period} limit has been reached ({$nextCount}/{$limit}).");
         }
 
-        // Increment count and maintain TTL
+        // Add 1 and keep the expiry
         if ($current === 0) {
             Cache::put($cacheKey, 1, $ttlSeconds);
         } else {
@@ -234,7 +230,7 @@ class ExternalApiClient
     }
 
     /**
-     * Get sanitized URL removing sensitive query params and tokens.
+     * URL without tokens or secret query params.
      */
     protected function sanitizeUrl(string $url): string
     {
@@ -244,7 +240,7 @@ class ExternalApiClient
     }
 
     /**
-     * Log request performance metric without sensitive payload information.
+     * Log the request info (no payload).
      */
     protected function logMetric(string $provider, string $method, string $url, int $status, float $durationMs, int $retries, bool $success): void
     {

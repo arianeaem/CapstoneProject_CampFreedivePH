@@ -1,13 +1,12 @@
 """
-3-Way Model Execution Router for Multi-Horizon Marine Physics Forecasting.
+Picks which model to use for each variable and horizon.
 
-Dispatches forecasting requests across the 3 production execution branches defined
-in production_model_selection.json:
-  1. "onnx": Ultra-fast C++ ONNX Runtime session (<0.1ms CPU latency)
-  2. "python_native": Native AutoGluon TimeSeriesPredictor in Python
-  3. "climatology_fallback": Batangas Seasonal Climatology & Persistence fallback
+There are 3 options (set in production_model_selection.json):
+  1. "onnx": ONNX Runtime model (fast)
+  2. "python_native": AutoGluon TimeSeriesPredictor in Python
+  3. "climatology_fallback": Batangas seasonal climatology / persistence
 
-Run from project root for self-verification:
+To test it, run from the project root:
     python src/serve/model_router.py
 """
 
@@ -59,7 +58,7 @@ FEATURE_MANIFEST_PATH = Path(__file__).resolve().parent / "feature_manifest.json
 
 
 def get_expected_feature_count() -> int:
-    """Dynamically reads expected feature count from feature_manifest.json."""
+    """Read the number of features from feature_manifest.json."""
     if FEATURE_MANIFEST_PATH.exists():
         try:
             with open(FEATURE_MANIFEST_PATH, "r", encoding="utf-8") as f:
@@ -81,13 +80,13 @@ def get_cached_onnx_session(path: Path) -> ort.InferenceSession:
 
 
 def clear_router_caches() -> None:
-    """Clears global cached ONNX inference sessions and native predictors."""
+    """Clear the cached ONNX sessions and native models."""
     global _SESSION_CACHE
     _SESSION_CACHE.clear()
 
 
 class BaseForecaster:
-    """Base forecaster interface providing unified metadata and prediction contracts."""
+    """Base class for the forecasters (info + predict)."""
     def __init__(self, variable: str, horizon: int, config: Dict[str, Any]):
         self.variable = variable
         self.horizon = horizon
@@ -102,7 +101,7 @@ class BaseForecaster:
 
 
 class OnnxForecaster(BaseForecaster):
-    """Executes tree-based multi-horizon forecasters via C++ ONNX Runtime."""
+    """Runs tree models with ONNX Runtime."""
     def __init__(self, variable: str, horizon: int, config: Dict[str, Any]):
         super().__init__(variable, horizon, config)
         self.is_wind_dir = (variable == "wind_dir")
@@ -147,7 +146,7 @@ class OnnxForecaster(BaseForecaster):
                 self.input_name = self.session.get_inputs()[0].name
                 self.fallback_forecaster = None
             else:
-                # Quarantined legacy model; delegate to physical climatology fallback
+                # Old model that we don't use anymore, use climatology instead
                 self.session = None
                 self.input_name = None
                 self.fallback_forecaster = ClimatologyFallbackForecaster(variable, horizon, config)
@@ -182,7 +181,7 @@ class OnnxForecaster(BaseForecaster):
 
 
 class NativeAutoGluonForecaster(BaseForecaster):
-    """Executes native WeightedEnsemble / Chronos2 models via Python runtime."""
+    """Runs the native WeightedEnsemble / Chronos2 models in Python."""
     def __init__(self, variable: str, horizon: int, config: Dict[str, Any]):
         super().__init__(variable, horizon, config)
         self.model_artifact_path = PROJECT_ROOT / config.get("model_artifact_path", "")
@@ -199,17 +198,17 @@ class NativeAutoGluonForecaster(BaseForecaster):
         return self._predictor
 
     def predict(self, feature_vector: np.ndarray, target_timestamp: Optional[pd.Timestamp] = None) -> float:
-        # If native AutoGluon model artifact is present on disk, predict via TimeSeriesPredictor
+        # If the AutoGluon model file exists, predict with TimeSeriesPredictor
         predictor = self._get_predictor()
         if predictor is not None:
             pass
 
-        # Robust fast GBDT/XGB fallback
+        # Otherwise use the GBDT/XGB model
         return self._onnx_fallback.predict(feature_vector, target_timestamp)
 
 
 class ClimatologyFallbackForecaster(BaseForecaster):
-    """Evaluates historical Batangas Seasonal Climatology envelope for currents beyond 72h."""
+    """Batangas seasonal climatology for currents after 72h."""
     _climatology_df: Optional[pd.DataFrame] = None
     _climatology_map: Dict[str, Dict[Tuple[int, int], float]] = {}
 
@@ -225,11 +224,11 @@ class ClimatologyFallbackForecaster(BaseForecaster):
             if parquet_file.exists():
                 cls._climatology_df = pd.read_parquet(parquet_file)
             else:
-                # Fallback synthetic climatology envelope if file missing
+                # No file, use a default table
                 idx = pd.MultiIndex.from_product([range(1, 367), range(24)], names=["doy", "hour"])
                 cls._climatology_df = pd.DataFrame({"current_u": 0.05, "current_v": 0.02}, index=idx)
 
-            # Build fast O(1) dictionary cache for lookups
+            # Dictionary for fast lookups
             for col in ["current_u", "current_v"]:
                 if col in cls._climatology_df.columns:
                     cls._climatology_map[col] = cls._climatology_df[col].to_dict()
@@ -270,8 +269,8 @@ def get_worst_tier(tiers: List[str]) -> str:
 
 class ModelRouter:
     """
-    Production Model Serving Router that indexes the 99-cell benchmark registry and
-    dispatches requests to the appropriate serving engine (ONNX / Native AutoGluon / Climatology).
+    Router that reads the 99-cell model list and sends each request
+    to the right model type (ONNX / AutoGluon / climatology).
     """
     def __init__(self, registry_path: Path = REGISTRY_PATH):
         self.registry_path = registry_path
@@ -292,7 +291,7 @@ class ModelRouter:
         return get_expected_feature_count()
 
     def validate_feature_vector(self, features: np.ndarray) -> np.ndarray:
-        """Validates feature vector against manifest feature count."""
+        """Check that the input has the number of features in the manifest."""
         expected_len = get_expected_feature_count()
         actual_len = features.shape[0] if features.ndim == 1 else features.shape[1]
         assert actual_len in (expected_len, 133), (
@@ -301,7 +300,7 @@ class ModelRouter:
         return features
 
     def warmup(self):
-        """Pre-loads all registered models and performs warm-up inference to eliminate runtime cold starts."""
+        """Load all models and run one prediction each so the first real request isn't slow."""
         n_features = get_expected_feature_count()
         dummy = np.ones((n_features,), dtype=np.float32)
         for (var, h) in self.registry.keys():
@@ -316,22 +315,21 @@ class ModelRouter:
     @classmethod
     def snap_to_closest_horizon(cls, horizon: int) -> int:
         """
-        Routes continuous lead time H = (target dive timestamp - current timestamp)
-        to whichever of the 9 trained horizon buckets is closest to that H:
-        [1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h, 168h].
+        Round the lead time (dive time - now) to the closest trained horizon:
+        1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h or 168h.
         """
         h_int = max(1, int(horizon))
         return min(cls.TRAINED_HORIZONS, key=lambda x: abs(x - h_int))
 
     def get_forecaster(self, variable: str, horizon: int) -> BaseForecaster:
-        """Instantiates or returns cached forecaster for given (variable, horizon) pair."""
+        """Get (or create and cache) the forecaster for a (variable, horizon)."""
         snapped_h = int(horizon) if int(horizon) in self.TRAINED_HORIZONS else self.snap_to_closest_horizon(horizon)
         key = (variable, snapped_h)
         if key in self._cache:
             return self._cache[key]
 
         if key not in self.registry:
-            # Fallback to climatology envelope beyond the 7-day (168h) trained boundary
+            # After 168h (7 days) we have no trained model, use climatology
             if int(horizon) > 168:
                 climatology_cfg = {
                     "serving_type": "climatology_fallback",
@@ -367,7 +365,7 @@ class ModelRouter:
         target_timestamp: Optional[pd.Timestamp] = None,
     ) -> Dict[str, Any]:
         """
-        Executes end-to-end routed prediction and attaches provenance and confidence metadata.
+        Run the prediction and add where it came from and how confident it is.
         """
         forecaster = self.get_forecaster(variable, horizon)
         value = forecaster.predict(feature_vector, target_timestamp)
@@ -390,12 +388,12 @@ class ModelRouter:
         target_timestamp: Optional[pd.Timestamp] = None,
     ) -> Tuple[QuantileValue, Dict[str, Any]]:
         """
-        Executes prediction and computes calibrated p10, p50, and p90 quantiles.
+        Run the prediction and compute p10, p50 and p90.
         """
         forecaster = self.get_forecaster(variable, horizon)
         point_val = forecaster.predict(feature_vector, target_timestamp)
 
-        # Case 1: Long-Range Horizon (Days 3-10, h > 72h) -> Seasonal Climatology Estimate
+        # Case 1: far ahead (h > 72h) -> seasonal climatology
         if horizon > 72 or getattr(forecaster, "serving_type", "") == "climatology_fallback":
             clim_lookup = SeasonalClimatologyLookup()
             clim_stats = clim_lookup.get_percentiles(variable, target_timestamp or pd.Timestamp.now(tz="UTC"))
@@ -414,7 +412,7 @@ class ModelRouter:
             }
             return quantile_obj, metadata
 
-        # Case 2: Short-Range Forecast (Days 1-3, h <= 72h) -> Model point forecast + Conformal Residuals
+        # Case 2: up to 72h -> model forecast + conformal errors
         p10, p50, p90 = ConformalIntervalCalibrator.get_instance().get_quantiles(variable, horizon, point_val)
         quantile_obj = QuantileValue(p10=round(p10, 4), p50=round(p50, 4), p90=round(p90, 4))
 
@@ -436,17 +434,17 @@ class ModelRouter:
         target_timestamp: Optional[pd.Timestamp] = None,
     ) -> Tuple[PhysicsForecast, Dict[str, Any]]:
         """
-        Two-Stage Physical Execution Pipeline (PRD Section 5.3 & 6.2):
-          - STAGE 1 (Wave Dynamics): Predict Hs, Tp, swell_height, wind_wave_height
-          - DERIVATION: Compute non-linear wave steepness and swell ratio
-          - STAGE 2 (Atmospheric & Currents): Predict wind speed/gust/dir, SLP, current u/v
-          - METADATA ROLLUP: Package sources, confidence tiers, uncertainty spreads, and advisories
+        Two steps (PRD 5.3 and 6.2):
+          - step 1 (waves): predict Hs, Tp, swell_height, wind_wave_height
+          - then compute wave steepness and swell ratio
+          - step 2 (wind and current): predict wind speed/gust/dir, SLP, current u/v
+          - add the sources, confidence, spread and advisories
         """
         snapped_h = self.snap_to_closest_horizon(horizon)
         vec = self.validate_feature_vector(feature_vector)
 
         # -------------------------------------------------------------------
-        # STAGE 1: Wave Dynamics Sub-Models (routed via registry)
+        # Step 1: waves
         # -------------------------------------------------------------------
         hs_q, hs_meta = self.route_quantile_forecast("hs", snapped_h, vec, target_timestamp)
         tp_q, tp_meta = self.route_quantile_forecast("tp", snapped_h, vec, target_timestamp)
@@ -454,7 +452,7 @@ class ModelRouter:
         wind_wave_q, wind_wave_meta = self.route_quantile_forecast("wind_wave_height", snapped_h, vec, target_timestamp)
 
         # -------------------------------------------------------------------
-        # INTERMEDIATE DERIVATIONS (Satisfying Hydrodynamic Equations)
+        # Values computed from the waves
         # -------------------------------------------------------------------
         tp_safe = max(tp_q.p50, 1.0)
         hs_safe = max(hs_q.p50, 0.05)
@@ -462,7 +460,7 @@ class ModelRouter:
         swell_ratio = round(min(1.0, max(0.0, swell_q.p50 / hs_safe)), 4)
 
         # -------------------------------------------------------------------
-        # STAGE 2: Atmospheric & Ocean Currents Sub-Models (routed via registry)
+        # Step 2: wind and current
         # -------------------------------------------------------------------
         ws_q, ws_meta = self.route_quantile_forecast("wind_speed", snapped_h, vec, target_timestamp)
         wg_q, wg_meta = self.route_quantile_forecast("wind_gust", snapped_h, vec, target_timestamp)
@@ -472,7 +470,7 @@ class ModelRouter:
         cu_q, cu_meta = self.route_quantile_forecast("current_u", snapped_h, vec, target_timestamp)
         cv_q, cv_meta = self.route_quantile_forecast("current_v", snapped_h, vec, target_timestamp)
 
-        # Resolve current vector to polar speed and direction quantiles
+        # Turn the current u/v into speed and direction
         curr_speed_p50 = float(np.sqrt(cu_q.p50 ** 2 + cv_q.p50 ** 2))
         curr_speed_p10 = max(0.0, float(np.sqrt(cu_q.p10 ** 2 + cv_q.p10 ** 2)))
         curr_speed_p90 = float(np.sqrt(cu_q.p90 ** 2 + cv_q.p90 ** 2))
@@ -482,7 +480,7 @@ class ModelRouter:
         curr_dir_q = QuantileValue(p10=round((curr_dir_p50 - 15) % 360, 1), p50=round(curr_dir_p50, 1), p90=round((curr_dir_p50 + 15) % 360, 1))
 
         # -------------------------------------------------------------------
-        # ASSEMBLE STRUCTURED PHYSICS FORECAST SCHEMA
+        # Build the forecast result
         # -------------------------------------------------------------------
         forecast = PhysicsForecast(
             significant_wave_height_m=hs_q,
@@ -502,7 +500,7 @@ class ModelRouter:
         )
 
         # -------------------------------------------------------------------
-        # METADATA, CONFIDENCE ROLLUPS & UI ADVISORIES
+        # Info, confidence and advisories
         # -------------------------------------------------------------------
         wave_tiers = [hs_meta["confidence_tier"], tp_meta["confidence_tier"], swell_meta["confidence_tier"], wind_wave_meta["confidence_tier"]]
         wind_tiers = [ws_meta["confidence_tier"], wg_meta["confidence_tier"], wind_dir_meta["confidence_tier"], slp_meta["confidence_tier"]]
@@ -513,7 +511,7 @@ class ModelRouter:
         currents_rollup = get_worst_tier(current_tiers)
         overall_confidence = get_worst_tier([waves_rollup, wind_rollup, currents_rollup])
 
-        # Aggregate non-empty advisories
+        # Keep only the advisories that aren't empty
         advisories = []
         for meta in [hs_meta, tp_meta, ws_meta, slp_meta, cu_meta, cv_meta]:
             adv = meta.get("ui_advisory")
@@ -570,7 +568,7 @@ class ModelRouter:
         return forecast, metadata
 
 
-# Singleton router instance for import in FastAPI service
+# One router used by the FastAPI service
 router = ModelRouter()
 
 
@@ -583,13 +581,13 @@ def main():
     test_router = ModelRouter()
     print(f"Total Registry Cells: {len(test_router.registry)} / 99\n")
 
-    # Generate verified 38-dimensional feature vector matching feature_manifest.json
+    # 38-feature input that matches feature_manifest.json
     feat_dim = get_expected_feature_count()
     np.random.seed(42)
     sample_features = np.random.uniform(low=0.1, high=5.0, size=(feat_dim,)).astype(np.float32)
     sample_time = pd.Timestamp("2026-09-22 08:00:00", tz="UTC")
 
-    # Test cases covering all 3 branches
+    # Test cases for all 3 options
     test_cases = [
         ("wind_speed", 24, "Branch 1: ONNX DirectTabular Runtime"),
         ("current_u", 6, "Branch 2: Python Native WeightedEnsemble Runtime"),

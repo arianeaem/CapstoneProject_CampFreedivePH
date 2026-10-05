@@ -17,7 +17,7 @@ use App\Http\Requests\Auth\LoginRequest;
 class LoginController extends Controller
 {
     /**
-     * Show the internal back-office login page.
+     * Staff login page.
      */
     public function showLoginForm(Request $request): View|RedirectResponse
     {
@@ -40,7 +40,7 @@ class LoginController extends Controller
     }
 
     /**
-     * Handle internal login attempt.
+     * Handle the login.
      */
     public function login(LoginRequest $request): RedirectResponse
     {
@@ -58,7 +58,7 @@ class LoginController extends Controller
             ]);
         }
 
-        // Check if user exists and is inactive before authenticating
+        // If the user exists but is inactive, stop here
         $user = User::where('email', $request->input('email'))->first();
 
         if ($user && !$user->isActive()) {
@@ -69,7 +69,7 @@ class LoginController extends Controller
                 ->with('error', 'This account has been deactivated. Please contact the camp owner.');
         }
 
-        // Attempt login
+        // Try to log in
         $remember = $request->boolean('remember');
 
         if (Auth::attempt($credentials, $remember)) {
@@ -78,8 +78,8 @@ class LoginController extends Controller
 
             $authenticatedUser = Auth::user();
             
-            // The explicit flag is the source of truth. Accounts seeded with a
-            // permanent password may legitimately have no recorded login yet.
+            // Use the flag to decide. Seeded accounts with a permanent password
+            // may not have a login recorded yet.
             $needsPasswordChange = (bool) $authenticatedUser->must_change_password;
 
             if ($needsPasswordChange) {
@@ -102,7 +102,7 @@ class LoginController extends Controller
             return $this->authenticatedRedirect($authenticatedUser);
         }
 
-        // Failed credentials
+        // Wrong email or password
         RateLimiter::hit($throttleKey);
         AuditLogger::log('LOGIN_FAILED', "Failed login attempt for email: {$request->input('email')}", $user, $request->input('email'), $request);
 
@@ -120,7 +120,7 @@ class LoginController extends Controller
     }
 
     /**
-     * Log out the current user.
+     * Log out.
      */
     public function logout(Request $request): RedirectResponse
     {
@@ -137,7 +137,7 @@ class LoginController extends Controller
     }
 
     /**
-     * Determine redirect route based on role and password change status.
+     * Where to go after login, based on role and if the password needs changing.
      */
     protected function authenticatedRedirect(User $user): RedirectResponse
     {

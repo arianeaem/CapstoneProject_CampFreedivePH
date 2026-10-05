@@ -1,12 +1,10 @@
 """
-Feature Parity Test for Camp FreedivePH.
-Compares features extracted by ServingFeatureExtractor against the exact training features
-from train_short_range_models.py on historical test origins.
+Checks that ServingFeatureExtractor gives the same features as training
+(train_short_range_models.py) on past test origins.
 
-Requirements:
-- Error difference between serving features and training features must be < 1e-4
-  (far smaller than model MAE of ~0.1m).
-- Validates both 'hs' and 'current_speed' across multiple horizons and seasons.
+- difference between serving and training features must be < 1e-4
+  (much smaller than the model MAE of ~0.1 m)
+- tests 'hs' and 'current_speed' for several horizons and seasons
 """
 
 import sys
@@ -52,7 +50,7 @@ def train_df():
 
 
 def compute_training_features_at_origin(df, target, o_idx, H):
-    """Exact feature extraction logic from train_short_range_models.py lines 422-433."""
+    """Same feature code as train_short_range_models.py lines 422-433."""
     import json
     with open(CLIM_PARAMS_PATH, "r") as f:
         params = json.load(f)
@@ -88,7 +86,7 @@ def compute_training_features_at_origin(df, target, o_idx, H):
 
 
 def test_feature_parity_hs(extractor, train_df):
-    """Tests feature parity for 'hs' across multiple origins and horizons."""
+    """Test 'hs' for several origins and horizons."""
     test_origins = [
         "2024-01-15 12:00:00+08:00",  # Amihan
         "2024-07-20 08:00:00+08:00",  # Habagat
@@ -112,7 +110,7 @@ def test_feature_parity_hs(extractor, train_df):
             max_diff = float(np.max(diff))
             mean_diff = float(np.mean(diff))
 
-            # Must be far below the model MAE of ~0.1m
+            # Must be much smaller than the model MAE of ~0.1 m
             assert max_diff < 1e-4, (
                 f"Feature parity failed for hs at {origin_str} H={H}! "
                 f"Max diff={max_diff:.6e}, Mean diff={mean_diff:.6e}"
@@ -120,7 +118,7 @@ def test_feature_parity_hs(extractor, train_df):
 
 
 def test_feature_parity_current_speed(extractor, train_df):
-    """Tests feature parity for 'current_speed' across multiple origins and horizons."""
+    """Test 'current_speed' for several origins and horizons."""
     test_origins = [
         "2024-02-15 12:00:00+08:00",
         "2024-08-20 08:00:00+08:00",

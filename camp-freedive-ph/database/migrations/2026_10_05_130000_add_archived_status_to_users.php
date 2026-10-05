@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Accounts are never deleted: "removing" a user sets status = 'archived' so all history stays.
+     * Accounts are not deleted: "removing" a user sets status = 'archived' so the history stays.
      */
     public function up(): void
     {

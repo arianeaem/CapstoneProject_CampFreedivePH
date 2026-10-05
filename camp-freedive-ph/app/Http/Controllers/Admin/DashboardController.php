@@ -23,7 +23,7 @@ use Illuminate\View\View;
 class DashboardController extends Controller
 {
     /**
-     * Show the Admin & Owner persona-driven operational and executive dashboard.
+     * Dashboard for admin and owner.
      */
     public function index(Request $request): View
     {
@@ -34,9 +34,9 @@ class DashboardController extends Controller
         $now = Carbon::now('Asia/Manila');
         $today = $now->copy()->startOfDay();
 
-        // =========================================================================
-        // 1. ACTION REQUIRED INBOX (OPERATIONAL BOTTLE-NECK PREVENTION)
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 1. Things that need action
+        // ---------------------------------------------------------------
         $pendingReschedules = RescheduleRequest::where('status', 'pending')
             ->with(['booking.participants'])
             ->latest()
@@ -59,7 +59,7 @@ class DashboardController extends Controller
 
         $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
 
-        // Upcoming active batches: loaded once, reused by the inbox, runway and occupancy stats
+        // Upcoming active batches (loaded once and reused below)
         $allUpcomingBatches = Batch::where('start_date', '>=', $today)
             ->whereIn('status', ['confirmed', 'open'])
             ->orderBy('start_date', 'asc')
@@ -97,14 +97,14 @@ class DashboardController extends Controller
             'total_count' => $totalActionCount,
         ];
 
-        // =========================================================================
-        // 2. BATCH RUNWAY (NEXT 4 UPCOMING TRIPS)
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 2. Next 4 batches
+        // ---------------------------------------------------------------
         $upcomingBatches = $allUpcomingBatches->take(4)->values();
 
-        // =========================================================================
-        // 3. OPERATIONAL HEALTH STATS
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 3. Stats
+        // ---------------------------------------------------------------
         $activeDiversMonth = BookingParticipant::whereHas('booking', function ($q) use ($today) {
             $q->where('status', '!=', 'pending_downpayment')
               ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled'])
@@ -129,16 +129,16 @@ class DashboardController extends Controller
             'total_active_batches' => $allUpcomingBatches->count(),
         ];
 
-        // Recent Confirmed Bookings Feed
+        // Latest confirmed bookings
         $recentBookings = Booking::where('status', '!=', 'pending_downpayment')
             ->with(['participants', 'payments', 'batch'])
             ->latest()
             ->take(6)
             ->get();
 
-        // =========================================================================
-        // 4. OWNER EXECUTIVE & FINANCIAL ANALYTICS
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 4. Owner numbers (money)
+        // ---------------------------------------------------------------
         $paymentTotals = Payment::query()->selectRaw("
                 COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') THEN amount END), 0) AS gross,
                 COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') AND payment_type = 'downpayment' THEN amount END), 0) AS downpayment,
@@ -164,7 +164,7 @@ class DashboardController extends Controller
             'net_revenue' => $netRevenue,
         ];
 
-        // Class Package Mix & Revenue Breakdown (Cohesive shades of #780000)
+        // Bookings and income per class (shades of #780000)
         $packages = [
             'discovery' => [
                 'name' => 'Discovery',
@@ -223,7 +223,7 @@ class DashboardController extends Controller
             ];
         }
 
-        // Dynamic Pricing Analytics
+        // Pricing rule numbers
         $activeRulesCount = PricingRule::where('status', 'active')->count();
         $adjustmentTotals = BookingPriceAdjustment::query()->selectRaw('
                 COUNT(*) AS total,
@@ -244,10 +244,10 @@ class DashboardController extends Controller
             'recent_adjustments' => BookingPriceAdjustment::with('booking')->latest()->take(4)->get(),
         ];
 
-        // Governance & Audit Logs
+        // Audit logs
         $recentAuditLogs = AuditLog::with('user')->latest('created_at')->take(6)->get();
 
-        // AI Demand & Revenue Forecast
+        // Demand and income forecast
         $forecastData = app(\App\Services\DemandForecastService::class)->getForecastData();
 
         return view('admin.dashboard', compact(

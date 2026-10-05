@@ -1,22 +1,21 @@
 """
-Data Homogeneity and Changepoint Scan for CMEMS Waves and SMOC Currents.
+Checks if the CMEMS waves and SMOC currents changed suddenly (e.g. after a system upgrade).
 
-Methodology & Scientific Integrity:
-1. Clarification of Previous Aggregate t-test:
-   - The reported t <= 2.4 was computed across MONTHLY AGGREGATIONS (N = 24 to 35 months),
-     NOT raw hourly rows. On raw hourly series (N > 40,000), naive t-statistics explode due to
-     heavy temporal autocorrelation (r_1 > 0.95), yielding artificially small, anti-conservative p-values.
-2. Deseasonalized Monthly Anomaly Changepoint Test:
-   - Removes natural monsoon transitions (Amihan vs Habagat) by computing calendar-month climatology:
+1. About the old t-test:
+   - the t <= 2.4 we reported was on MONTHLY averages (N = 24 to 35 months),
+     not on the hourly rows. On hourly data (N > 40,000) the t value is way too big
+     because the values are strongly related hour to hour (r_1 > 0.95), so the p-values are wrong.
+2. Test on monthly anomalies (season removed):
+   - remove the normal Amihan / Habagat change using the monthly climatology:
      a(y, m) = mean(y, m) - clim_mean(m)
-   - Evaluates step-change across system upgrade dates:
-     * SMOC Currents: November 2022 upgrade (2022-11-01). Tests 24 months before vs 35 months after.
-     * CMEMS Waves: November 2024 upgrade (2024-11-01). Tests 24 months before vs 11 months after.
-       (Note: Waves analysis begins 2022-11-01, so zero pre-2022 data exists to test the 2022 upgrade on waves).
-3. Statistical Caveats:
-   - Fail-to-reject cannot be interpreted as absolute proof of stationarity.
-   - Preserves documented quirks: Tp < 2.0s count (41 rows, 0.12%) and Hs max 2.69m pending independent buoy/altimeter validation.
-   - Tidal origin notation: utide/vtide is numerical model output at 6.86 km offshore cell, not in-situ tide gauge.
+   - check for a jump at the upgrade dates:
+     * SMOC currents: November 2022 upgrade (2022-11-01). 24 months before vs 35 months after.
+     * CMEMS waves: November 2024 upgrade (2024-11-01). 24 months before vs 11 months after.
+       (Wave data starts 2022-11-01, so we can't test the 2022 upgrade for waves.)
+3. Notes:
+   - not finding a change doesn't prove there is none.
+   - known odd values: Tp < 2.0s (41 rows, 0.12%) and Hs max 2.69 m, not yet checked with a buoy/altimeter.
+   - utide/vtide is model output at the cell 6.86 km offshore, not a real tide gauge.
 """
 
 import json
@@ -35,14 +34,14 @@ OUT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 def compute_deseasonalized_monthly_anomalies(series: pd.Series) -> pd.DataFrame:
     """
-    Computes monthly means and subtracts long-term calendar-month climatological mean.
-    Returns DataFrame with columns: ['month_str', 'year', 'month', 'raw_mean', 'clim_mean', 'anomaly', 'count'].
+    Monthly averages minus the long-term average for that month.
+    Returns columns: ['month_str', 'year', 'month', 'raw_mean', 'clim_mean', 'anomaly', 'count'].
     """
-    # Ensure tz-aware UTC
+    # Use UTC
     idx_utc = series.index.tz_convert("UTC") if series.index.tz is not None else series.index.tz_localize("UTC")
     df_s = pd.DataFrame({"val": series.values}, index=idx_utc)
     
-    # Resample to monthly mean
+    # Monthly average
     monthly = df_s.resample("ME").agg(["mean", "count"])
     monthly.columns = ["raw_mean", "count"]
     monthly = monthly[monthly["count"] >= 100].copy()  # drop partial start/end chunks
@@ -51,7 +50,7 @@ def compute_deseasonalized_monthly_anomalies(series: pd.Series) -> pd.DataFrame:
     monthly["month"] = monthly.index.month
     monthly["month_str"] = monthly.index.strftime("%Y-%m")
 
-    # Calendar month climatological mean
+    # Average for each calendar month
     month_clim = monthly.groupby("month")["raw_mean"].mean().to_dict()
     monthly["clim_mean"] = monthly["month"].map(month_clim)
     monthly["anomaly"] = monthly["raw_mean"] - monthly["clim_mean"]
@@ -61,7 +60,7 @@ def compute_deseasonalized_monthly_anomalies(series: pd.Series) -> pd.DataFrame:
 
 def test_upgrade_step_on_anomalies(monthly_df: pd.DataFrame, upgrade_date_str: str, var_name: str) -> Dict[str, Any]:
     """
-    Tests whether deseasonalized monthly anomalies show a significant step across an upgrade date.
+    Check if the monthly anomalies jump at an upgrade date.
     """
     up_dt = pd.Timestamp(upgrade_date_str, tz="UTC")
     
@@ -85,7 +84,7 @@ def test_upgrade_step_on_anomalies(monthly_df: pd.DataFrame, upgrade_date_str: s
     # Welch's t-test on anomalies
     t_stat, p_val = stats.ttest_ind(before_anom, after_anom, equal_var=False)
     
-    # Mann-Whitney U test (non-parametric rank-sum)
+    # Mann-Whitney U test
     u_stat, p_val_mw = stats.mannwhitneyu(before_anom, after_anom, alternative="two-sided")
 
     # Variance ratio
@@ -120,7 +119,7 @@ def evaluate_homogeneity():
     print("DESEASONALIZED MONTHLY ANOMALY HOMOGENEITY & SYSTEM UPGRADE AUDIT")
     print("=" * 80)
 
-    # 1. Currents (Nov 2022 Upgrade)
+    # 1. Currents (Nov 2022 upgrade)
     df_curr = load_snapshot_dataset("currents")
     curr_monthly = compute_deseasonalized_monthly_anomalies(df_curr["current_speed"])
     curr_step_2022 = test_upgrade_step_on_anomalies(curr_monthly, "2022-11-01", "Current Speed (m/s)")
@@ -131,12 +130,12 @@ def evaluate_homogeneity():
     print(f"   Anomaly Step Diff: {curr_step_2022['anomaly_step_diff']:+.4f} m/s | t={curr_step_2022['t_statistic']:.3f} | p={curr_step_2022['p_value_welch']:.4f}")
     print(f"   Significant at alpha=0.05: {curr_step_2022['is_significant_shift_p05']}")
 
-    # Also test Eulerian and Tide components
+    # Also test the Eulerian and tide parts
     curr_eul_monthly = compute_deseasonalized_monthly_anomalies(df_curr["eulerian_speed"])
     curr_eul_step = test_upgrade_step_on_anomalies(curr_eul_monthly, "2022-11-01", "Eulerian Speed (m/s)")
     print(f"   Eulerian Speed Anomaly Step: {curr_eul_step['anomaly_step_diff']:+.4f} m/s (p={curr_eul_step['p_value_welch']:.4f})")
 
-    # 2. Waves (Nov 2024 Upgrade)
+    # 2. Waves (Nov 2024 upgrade)
     df_waves = load_snapshot_dataset("waves")
     waves_monthly = compute_deseasonalized_monthly_anomalies(df_waves["hs"])
     waves_step_2024 = test_upgrade_step_on_anomalies(waves_monthly, "2024-11-01", "Wave Hs (m)")
@@ -148,7 +147,7 @@ def evaluate_homogeneity():
     print(f"   Significant at alpha=0.05: {waves_step_2024['is_significant_shift_p05']}")
     print("   [NOTE]: CMEMS Waves dataset begins 2022-11-01; no pre-2022 data exists to test the 2022-11 upgrade.")
 
-    # Catalog physical quirks
+    # List the odd values
     tp_short = int((df_waves["tp"] < 2.0).sum())
     hs_max_val = float(df_waves["hs"].max())
     hs_max_time = str(df_waves["hs"].idxmax().tz_convert("UTC"))

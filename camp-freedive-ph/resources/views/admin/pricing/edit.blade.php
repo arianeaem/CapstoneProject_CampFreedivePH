@@ -66,7 +66,7 @@
     </div>
     @endif
 
-    <!-- Main Rule Builder Form (Single Card) -->
+    <!-- Rule form -->
     <form action="{{ route('admin.pricing.update', $rule) }}" method="POST">
         @csrf
         @method('PUT')
@@ -262,7 +262,7 @@
                 </div>
             </div>
 
-            <!-- 4. Rule Status (Toggle Switch) -->
+            <!-- 4. Status (on/off) -->
             <div class="space-y-4">
                 <h2 class="text-base font-extrabold text-[#1D1D1F]">4. Rule Status</h2>
 

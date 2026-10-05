@@ -5,14 +5,13 @@ namespace App\ViewModels;
 use App\Enums\RiskClassification;
 
 /**
- * Display-ready values for the Safety Monitoring batch page (admin.weather.show).
- * Holds the small decisions the view used to make in @php blocks: which verdict to show,
- * badge colours, model-comparison notes, the Day 1 / Day 2 panels with their hourly rows,
- * the run history and the numbers for the cancel-batch panel.
+ * Ready-to-show values for the Safety Monitoring batch page (admin.weather.show).
+ * Moved here from the @php blocks in the view: which result to show, badge colors,
+ * model comparison notes, the Day 1 / Day 2 panels, the history and the cancel panel numbers.
  */
 class BatchSafetyViewModel
 {
-    /** Five score segments, worst (red) to best (green). */
+    /** Five score parts, from worst (red) to best (green). */
     public const SEGMENT_COLORS = ['bg-[#EF4444]', 'bg-[#F97316]', 'bg-[#F59E0B]', 'bg-[#84CC16]', 'bg-[#10B981]'];
 
     public const CANCEL_REASON_PRESETS = [
@@ -43,7 +42,7 @@ class BatchSafetyViewModel
         $this->verdict = ($this->isPrimaryActive || $this->isConcluded) ? $mlRec : ($data['overallClassification'] ?? 'Safe');
     }
 
-    // ------------------------------------------------------------ shared styling
+    // --- styling
 
     public static function score(?string $classification, int $default = 0): int
     {
@@ -82,7 +81,7 @@ class BatchSafetyViewModel
         };
     }
 
-    // ------------------------------------------------------------ overall verdict
+    // --- overall result
 
     public function verdictBadgeClass(): string
     {
@@ -109,7 +108,7 @@ class BatchSafetyViewModel
         };
     }
 
-    // ------------------------------------------------------------ model comparison
+    // --- model comparison
 
     /** @return array<int, array{name: string, about: string, available: bool, seasonal: bool, overall: ?string, score: int, days: array, note: ?string}> */
     public function models(): array
@@ -164,7 +163,7 @@ class BatchSafetyViewModel
             && ($e['historical']['day2']['classification'] ?? null) === ($e['legacy']['day2']['classification'] ?? null);
     }
 
-    // ------------------------------------------------------------ Day 1 / Day 2 panels
+    // --- Day 1 / Day 2 panels
 
     public function day(int $number): array
     {
@@ -189,7 +188,7 @@ class BatchSafetyViewModel
         ];
     }
 
-    /** One hourly table row with display defaults for any value the forecast left out. */
+    /** One hourly row, with default values for anything missing. */
     protected function hourRow(array $h): array
     {
         $hour = (int) ($h['hour'] ?? 0);
@@ -216,7 +215,7 @@ class BatchSafetyViewModel
         ];
     }
 
-    // ------------------------------------------------------------ history
+    // --- history
 
     /** @return array<int, array{time: string, assessor: string, day1: mixed, day2: mixed, overridden: bool}> */
     public function runs(): array
@@ -239,7 +238,7 @@ class BatchSafetyViewModel
         return $runs;
     }
 
-    // ------------------------------------------------------------ cancel panel
+    // --- cancel panel
 
     /** @return array{bookings: int, divers: int, refunds: int} */
     public function cancelImpact(): array

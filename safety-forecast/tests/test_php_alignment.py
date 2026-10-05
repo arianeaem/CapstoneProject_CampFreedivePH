@@ -1,10 +1,9 @@
 """
-Unit tests comparing the pandas/vectorized label generation functions in
-src/labels/build_safety_labels.py against a literal, unoptimized ground-truth
-reimplementation of PHP's WeatherForecastService.php methods.
+Tests that the pandas label functions in src/labels/build_safety_labels.py give the
+same results as a simple line-by-line copy of the WeatherForecastService.php methods.
 
-Tests boundary conditions, inclusive vs exclusive edges, descending bin orders,
-joint wind conditions, and wind direction sequential matching.
+Checks the band edges (< vs <=), the order of the bands, the wind + gust rule
+and the wind direction rule.
 """
 
 import sys
@@ -33,7 +32,7 @@ from src.labels.build_safety_labels import (
 
 
 # ===========================================================================
-# 1. Literal, unoptimized PHP ground-truth reference functions
+# 1. Simple copies of the PHP functions
 # ===========================================================================
 
 def php_score_wave_height(v: float) -> int:
@@ -157,7 +156,7 @@ def php_score_wind_direction(deg: float) -> int:
 
 
 # ===========================================================================
-# 2. Test Execution
+# 2. Tests
 # ===========================================================================
 
 def test_wave_height():
@@ -257,7 +256,7 @@ def test_wind_direction():
 
 
 def test_synergy_and_weights():
-    # Ensure weights sum to 1.000
+    # Weights must add up to 1.000
     assert abs(sum(WEIGHTS.values()) - 1.0) < 1e-9, "Weights must sum to 1.000"
     assert len(SYNERGY_HAZARD_FEATURES) == 5, "Synergy hazards must be exactly the 5-feature subset"
     print("[PASS] WEIGHTS sum to 1.000 and SYNERGY_HAZARD_FEATURES is 5-feature subset.")

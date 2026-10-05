@@ -1,26 +1,25 @@
 """
-Rigorous 4-Candidate Baseline Comparison and Out-of-Fold CV Selection for CMEMS Currents.
+Compares 4 baselines for the CMEMS current and picks the best one with CV.
 
-Methodology & Protocol:
-1. Evaluates all 4 Candidate Baselines:
-   - Candidate 1: Direct Speed Climatology (Smooth DOY +/- 15d + diurnal hour)
-   - Candidate 2: Decomposed Climatology (Harmonic Tide + Eulerian Clim + Stokes Clim)
-   - Candidate 3: Total Speed Persistence (lag = 24h)
-   - Candidate 4: Decomposed Eulerian Persistence (Harmonic Tide + Eulerian Persist + Stokes Persist, lag = 24h)
+1. The 4 baselines:
+   - 1: speed climatology (day of year +/- 15 days + hour of day)
+   - 2: split climatology (harmonic tide + Eulerian clim + Stokes clim)
+   - 3: speed persistence (lag = 24h)
+   - 4: split persistence (harmonic tide + Eulerian persistence + Stokes persistence, lag = 24h)
 
-2. Strict No-Data-Leakage CV Selection:
-   - 6 Canonical Walk-Forward Expanding Folds.
-   - Tide models & Climatologies fit strictly on fold training data.
-   - Out-of-fold validation on purged val splits (>= 240h purge gap).
-   - Selection of optimal baseline per horizon based SOLELY on mean CV validation MAE.
+2. CV selection (no data leakage):
+   - 6 walk-forward folds
+   - tide models and climatologies are fit on the fold's training data only
+   - validation uses the split after the 240h gap
+   - the best baseline per horizon is picked using the mean CV MAE only
 
-3. Single-Shot Holdout Benchmark:
-   - Evaluated strictly ONCE on untouched Holdout (2025-10-01 to 2026-10-02, N=8,785).
-   - Reference for skill: Direct Speed Climatology (Holdout MAE = 0.1455 m/s).
-   - Paired Moving Block-Bootstrap with block_length = 168 hours (7 days, synoptic atmospheric timescale)
-     and 1,000 resamples to account for temporal autocorrelation.
-   - Delta MAE = MAE_model - MAE_reference (m/s).
-   - Transition boundary reported as ~5 days (approximate synoptic memory limit).
+3. Holdout test (run once):
+   - holdout = 2025-10-01 to 2026-10-02 (N = 8,785), not used before this
+   - reference: speed climatology (holdout MAE = 0.1455 m/s)
+   - block bootstrap with 168h blocks (7 days) and 1,000 samples, because
+     the errors are correlated in time
+   - Delta MAE = MAE_model - MAE_reference (m/s)
+   - persistence stops helping after about 5 days
 """
 
 import sys
@@ -36,7 +35,7 @@ from climatology_baseline import SmoothClimatologyModel, paired_block_bootstrap_
 
 HORIZONS = [1, 3, 6, 12, 24, 48, 72, 120, 168, 192, 240]
 LAG_HOURS = 24
-BLOCK_SIZE_HOURS = 168  # 7 days (synoptic block bootstrap)
+BLOCK_SIZE_HOURS = 168  # 7 days
 N_BOOT = 1000
 
 def calc_mae(pred: np.ndarray, obs: np.ndarray) -> float:
@@ -52,12 +51,12 @@ def run_four_candidate_baseline_benchmark():
     currents_path = "safety-forecast/data/snapshots/2026-10-04_rev2/cmems_currents.parquet"
     df = pd.read_parquet(currents_path)
 
-    # Dictionary to collect fold validation MAEs:
+    # Fold validation MAEs:
     # cv_maes[candidate_id][horizon] = list of 6 fold MAEs
     cand_ids = ["direct_clim", "decomp_clim", "total_persist", "decomp_persist"]
     cv_maes = {c: {h: [] for h in HORIZONS} for c in cand_ids}
 
-    # 1. RUN CROSS-VALIDATION ACROSS 6 FOLDS
+    # 1. Run CV over the 6 folds
     for f in CURRENTS_WALK_FORWARD_FOLDS:
         fold_num = f["fold"]
         t_start = pd.Timestamp(f["train_start"], tz="UTC")
@@ -69,7 +68,7 @@ def run_four_candidate_baseline_benchmark():
         val_f = df.loc[(df.index >= v_start) & (df.index <= v_end) & (~df["is_provisional"])].copy()
         val_obs = val_f["current_speed"].values
 
-        # Fit models on fold training data
+        # Fit on the fold's training data
         tide_f = HarmonicTideModel()
         tide_f.fit(train_f)
         tide_u_val, tide_v_val = tide_f.predict(val_f)
@@ -78,11 +77,11 @@ def run_four_candidate_baseline_benchmark():
         clim_f.fit(train_f, ["eulerian_u", "eulerian_v", "stokes_u", "stokes_v", "current_speed"])
         clim_val_preds = clim_f.predict(val_f)
 
-        # Candidate 1: Direct Speed Climatology (horizon-independent)
+        # Baseline 1: speed climatology (same for every horizon)
         cand1_pred = clim_val_preds["current_speed"].values
         mae_cand1 = calc_mae(cand1_pred, val_obs)
 
-        # Candidate 2: Decomposed Climatology (horizon-independent)
+        # Baseline 2: split climatology (same for every horizon)
         cand2_u = tide_u_val + clim_val_preds["eulerian_u"].values + clim_val_preds["stokes_u"].values
         cand2_v = tide_v_val + clim_val_preds["eulerian_v"].values + clim_val_preds["stokes_v"].values
         cand2_pred = np.sqrt(cand2_u**2 + cand2_v**2)
@@ -95,11 +94,11 @@ def run_four_candidate_baseline_benchmark():
             total_lead = LAG_HOURS + h
             lb_times = val_f.index - pd.Timedelta(hours=total_lead)
 
-            # Candidate 3: Total Speed Persistence
+            # Baseline 3: speed persistence
             cand3_pred = df["current_speed"].reindex(lb_times).values
             cv_maes["total_persist"][h].append(calc_mae(cand3_pred, val_obs))
 
-            # Candidate 4: Decomposed Eulerian Persistence
+            # Baseline 4: split persistence
             past_eul_u = df["eulerian_u"].reindex(lb_times).values
             past_eul_v = df["eulerian_v"].reindex(lb_times).values
             past_stk_u = df["stokes_u"].reindex(lb_times).values
@@ -111,10 +110,10 @@ def run_four_candidate_baseline_benchmark():
 
         print(f"Fold {fold_num} complete.")
 
-    # Compute CV mean MAE
+    # Mean CV MAE
     cv_mean = {c: {h: float(np.mean(cv_maes[c][h])) for h in HORIZONS} for c in cand_ids}
 
-    # CV SELECTION
+    # Pick the best per horizon
     cv_selected = {}
     for h in HORIZONS:
         scores = {c: cv_mean[c][h] for c in cand_ids}
@@ -133,7 +132,7 @@ def run_four_candidate_baseline_benchmark():
         w = cv_selected[h]["winner"]
         print(f"h={h:3d}h (lead {LAG_HOURS+h:3d}h) | Direct Clim: {s['direct_clim']:.4f} | Decomp Clim: {s['decomp_clim']:.4f} | Total Persist: {s['total_persist']:.4f} | Decomp Persist: {s['decomp_persist']:.4f} -> WINNER: {w.upper()}")
 
-    # 2. EVALUATE ALL 4 ON UNTOUCHED HOLDOUT (SINGLE-SHOT)
+    # 2. Test all 4 on the holdout (once)
     print("\n" + "=" * 85)
     print("HOLDOUT EVALUATION (UNTOUCHED HOLDOUT, N = 8,785)")
     print("=" * 85)
@@ -149,12 +148,12 @@ def run_four_candidate_baseline_benchmark():
     clim_full.fit(train_full, ["eulerian_u", "eulerian_v", "stokes_u", "stokes_v", "current_speed"])
     clim_hold_preds = clim_full.predict(holdout_full)
 
-    # Reference: Candidate 1 (Direct Speed Climatology)
+    # Reference: baseline 1 (speed climatology)
     cand1_hold_pred = clim_hold_preds["current_speed"].values
     holdout_ref_mae = calc_mae(cand1_hold_pred, holdout_obs)
     print(f"PRIMARY REFERENCE: Direct Speed Climatology Holdout MAE = {holdout_ref_mae:.4f} m/s ({holdout_ref_mae*1.94384:.3f} kt)")
 
-    # Candidate 2: Decomposed Climatology
+    # Baseline 2: split climatology
     cand2_hold_u = tide_u_hold + clim_hold_preds["eulerian_u"].values + clim_hold_preds["stokes_u"].values
     cand2_hold_v = tide_v_hold + clim_hold_preds["eulerian_v"].values + clim_hold_preds["stokes_v"].values
     cand2_hold_pred = np.sqrt(cand2_hold_u**2 + cand2_hold_v**2)
@@ -167,11 +166,11 @@ def run_four_candidate_baseline_benchmark():
         total_lead = LAG_HOURS + h
         lb_times = holdout_full.index - pd.Timedelta(hours=total_lead)
 
-        # Candidate 3
+        # Baseline 3
         cand3_hold_pred = df["current_speed"].reindex(lb_times).values
         holdout_cand3_mae = calc_mae(cand3_hold_pred, holdout_obs)
 
-        # Candidate 4
+        # Baseline 4
         past_eul_u = df["eulerian_u"].reindex(lb_times).values
         past_eul_v = df["eulerian_v"].reindex(lb_times).values
         past_stk_u = df["stokes_u"].reindex(lb_times).values
@@ -181,7 +180,7 @@ def run_four_candidate_baseline_benchmark():
         cand4_hold_pred = np.sqrt(cand4_hold_u**2 + cand4_hold_v**2)
         holdout_cand4_mae = calc_mae(cand4_hold_pred, holdout_obs)
 
-        # Which candidate was selected by CV?
+        # Which one did CV pick?
         winner_id = cv_selected[h]["winner"]
         cand_preds_dict = {
             "direct_clim": cand1_hold_pred,
@@ -192,7 +191,7 @@ def run_four_candidate_baseline_benchmark():
         win_pred = cand_preds_dict[winner_id]
         win_holdout_mae = calc_mae(win_pred, holdout_obs)
 
-        # Paired Moving Block Bootstrap against Primary Reference (Direct Speed Climatology)
+        # Block bootstrap against the reference (speed climatology)
         valid = ~np.isnan(win_pred) & ~np.isnan(cand1_hold_pred) & ~np.isnan(holdout_obs)
         err_win = np.abs(win_pred[valid] - holdout_obs[valid])
         err_ref = np.abs(cand1_hold_pred[valid] - holdout_obs[valid])

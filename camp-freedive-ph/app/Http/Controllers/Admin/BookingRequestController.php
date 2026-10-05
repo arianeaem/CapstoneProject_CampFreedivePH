@@ -25,7 +25,7 @@ class BookingRequestController extends Controller
     ) {}
 
     /**
-     * Display the dedicated Pending Requests queue.
+     * Pending requests page.
      */
     public function index(Request $request): View
     {
@@ -74,7 +74,7 @@ class BookingRequestController extends Controller
     }
 
     /**
-     * Approve customer reschedule request.
+     * Approve a reschedule request.
      */
     public function approveReschedule(ApproveRescheduleRequest $request, RescheduleRequest $rescheduleRequest): RedirectResponse
     {
@@ -87,7 +87,7 @@ class BookingRequestController extends Controller
     }
 
     /**
-     * Reject customer reschedule request.
+     * Reject a reschedule request.
      */
     public function rejectReschedule(RejectRescheduleRequest $request, RescheduleRequest $rescheduleRequest): RedirectResponse
     {
@@ -101,7 +101,7 @@ class BookingRequestController extends Controller
     }
 
     /**
-     * Approve customer cancellation request with policy choices.
+     * Approve a cancellation request (staff picks the refund option).
      */
     public function approveCancellation(ApproveCancellationRequest $request, CancellationRequest $cancellationRequest): RedirectResponse
     {
@@ -128,7 +128,7 @@ class BookingRequestController extends Controller
     }
 
     /**
-     * Reject customer cancellation request.
+     * Reject a cancellation request.
      */
     public function rejectCancellation(RejectCancellationRequest $request, CancellationRequest $cancellationRequest): RedirectResponse
     {

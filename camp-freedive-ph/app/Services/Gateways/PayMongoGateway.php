@@ -17,7 +17,7 @@ class PayMongoGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Create a secure checkout session for a Camp FreedivePH booking.
+     * Create a checkout session for a booking.
      */
     public function createCheckoutSession(Booking $booking, float $amount, array $options = []): array
     {
@@ -68,7 +68,7 @@ class PayMongoGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Verify payment status directly with PayMongo.
+     * Check the payment status with PayMongo.
      */
     public function verifyPayment(string $paymentId): ?array
     {
@@ -76,7 +76,7 @@ class PayMongoGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Execute a refund against a previous PayMongo payment.
+     * Refund a PayMongo payment.
      */
     public function refundPayment(string $paymentId, float $amount, string $reason = 'requested_by_customer', ?string $notes = null): array
     {
@@ -84,7 +84,7 @@ class PayMongoGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Process and verify an incoming webhook from PayMongo.
+     * Check and read a PayMongo webhook.
      */
     public function processWebhook(string $payload, string $signatureHeader): array
     {

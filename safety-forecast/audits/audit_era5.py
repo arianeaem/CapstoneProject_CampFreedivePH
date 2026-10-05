@@ -1,20 +1,19 @@
 """
-Reproducible ERA5 Wind & Pressure Integrity Audit Script.
+Checks the ERA5 wind and pressure data.
 
-Audits:
-1. 72 raw NetCDF monthly files (2020-10 to 2026-09):
-   - Variable completeness (u10, v10, msl, i10fg)
-   - expver coordinate inspection (ensuring no NaN slices)
-   - Detailed inspection of patched era5_2026_08.nc (July vs August vs September statistics)
-2. Processed Parquet dataset:
-   - 46-hour unreleased cutoff check against theoretical 2026-09-30 23:00 UTC window
-   - Gap continuity across realized hourly span
-   - Missing values (NaNs) across all columns
-   - Physical meteorological ranges (speed, gust, direction, SLP)
-   - Gust >= speed physical consistency
-   - Peak pressure and wind gust timestamps (coincidence with historic tropical cyclones)
-   - Spatial grid interpolation metadata (~31 km 4-corner bilinear representation)
-   - Dual-quarantine audit: 120h operational availability lag vs ~90d ERA5T revision risk
+1. The 72 monthly NetCDF files (2020-10 to 2026-09):
+   - all variables are there (u10, v10, msl, i10fg)
+   - expver has no NaN slices
+   - compares the patched era5_2026_08.nc with July and September
+2. The parquet file:
+   - checks the 46 missing hours at the end (should end 2026-09-30 23:00 UTC)
+   - no gaps in the hourly data
+   - NaNs per column
+   - values are in a normal range (speed, gust, direction, SLP)
+   - gust >= speed
+   - times of the highest gust and lowest pressure (should match past typhoons)
+   - interpolation info (~31 km, 4-corner bilinear)
+   - the 120h delay vs the ~90 day ERA5T revision window
 """
 
 import sys
@@ -38,7 +37,7 @@ def run_audit(raw_dir: str = "safety-forecast/data/raw/era5_wind_pressure",
     }
 
     # -------------------------------------------------------------------------
-    # 1. RAW NETCDF AUDIT (72 FILES)
+    # 1. NetCDF files (72)
     # -------------------------------------------------------------------------
     files = sorted(raw_path.glob("era5_*.nc"))
     nc_count = len(files)
@@ -69,7 +68,7 @@ def run_audit(raw_dir: str = "safety-forecast/data/raw/era5_wind_pressure",
             raw_nans += n_nan
             all_i10fg_vals.append(vals)
 
-        # Inspect expver structure
+        # Check expver
         if "expver" in ds.coords or "expver" in ds.dims:
             ev = ds["expver"].values
             expver_types[fname] = str(np.unique(ev).tolist())
@@ -85,7 +84,7 @@ def run_audit(raw_dir: str = "safety-forecast/data/raw/era5_wind_pressure",
         "expver_distinct_types": expver_types
     }
 
-    # Comparison across 2026-07, 2026-08 (patched), and 2026-09
+    # Compare 2026-07, 2026-08 (patched) and 2026-09
     late_2026_stats = {}
     for ym in ["2026_07", "2026_08", "2026_09"]:
         f = raw_path / f"era5_{ym}.nc"
@@ -111,7 +110,7 @@ def run_audit(raw_dir: str = "safety-forecast/data/raw/era5_wind_pressure",
             print(f"  {ym}: mean={s['mean_gust_ms']:.2f} m/s, std={s['std_gust_ms']:.2f}, min={s['min_gust_ms']:.2f}, max={s['max_gust_ms']:.2f} (NaNs={s['nans']})")
 
     # -------------------------------------------------------------------------
-    # 2. PARQUET DATASET AUDIT
+    # 2. Parquet file
     # -------------------------------------------------------------------------
     if verbose:
         print("\n" + "=" * 80)
@@ -130,12 +129,12 @@ def run_audit(raw_dir: str = "safety-forecast/data/raw/era5_wind_pressure",
     start_utc = start_pht.tz_convert("UTC")
     end_utc = end_pht.tz_convert("UTC")
 
-    # Measure theoretical vs realized window
+    # Expected vs actual range
     nominal_end_utc = pd.Timestamp("2026-09-30 23:00:00+00:00")
     nominal_total_hours = len(pd.date_range("2020-10-01 00:00:00+00:00", nominal_end_utc, freq="1h"))
     unreleased_cutoff_hours = int((nominal_end_utc - end_utc).total_seconds() / 3600)
 
-    # Continuity on realized span
+    # Gaps
     realized_idx = pd.date_range(start=start_pht, end=end_pht, freq="1h")
     missing_realized = len(realized_idx.difference(df.index))
 
@@ -143,21 +142,21 @@ def run_audit(raw_dir: str = "safety-forecast/data/raw/era5_wind_pressure",
     nan_counts = df.isna().sum().to_dict()
     total_parquet_nans = int(df.isna().sum().sum())
 
-    # Physical ranges
+    # Value ranges
     ws = df["wind_speed"]
     wg = df["wind_gust"]
     wdir = df["wind_dir"]
     slp = df["slp"]
 
-    # Gust >= Speed consistency check
+    # Gust >= speed
     gust_speed_diff = wg - ws
     violations = int((gust_speed_diff < -1e-5).sum())
 
-    # Extreme weather timestamps
+    # Times of extreme weather
     min_slp_idx = slp.idxmin()
     max_gust_idx = wg.idxmax()
 
-    # Quarantine counts
+    # Provisional counts
     provisional_count = int(df["is_provisional"].sum()) if "is_provisional" in df else 0
     revision_risk_count = int(df["era5t_revision_risk"].sum()) if "era5t_revision_risk" in df else 0
 

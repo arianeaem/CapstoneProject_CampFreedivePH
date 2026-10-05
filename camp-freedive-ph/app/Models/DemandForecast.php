@@ -39,7 +39,7 @@ class DemandForecast extends Model
     ];
 
     /**
-     * Scope for future forecast records.
+     * Only future forecasts.
      */
     public function scopeUpcoming($query)
     {
@@ -48,7 +48,7 @@ class DemandForecast extends Model
     }
 
     /**
-     * Scope to get the latest synced batch run.
+     * Only the latest sync run.
      */
     public function scopeLatestSync($query)
     {

@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Schema;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Fixed Carpool Pickup Points strictly matching the booking form process.
+     * Carpool pickup points (same as the booking form).
      */
     public const PICKUP_MONUMENTO = 'Monumento Hypermarket - 2:30 AM';
     public const PICKUP_TIENDESITAS = 'Shell Tiendesitas - 3:00 AM';
@@ -36,13 +36,13 @@ class DatabaseSeeder extends Seeder
     public const PICKUP_STO_TOMAS = 'Sto Tomas Exit - 5:30 AM';
 
     /**
-     * Seed the application's database with authentic Camp Freedive PH operational data.
+     * Fill the database with sample data.
      */
     public function run(): void
     {
-        // =========================================================================
-        // 0. CLEAN RESET OF ALL PRODUCTION & OPERATIONAL TABLES
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 0. Clear the tables
+        // ---------------------------------------------------------------
         if (DB::getDriverName() === 'mysql') {
             DB::statement('SET FOREIGN_KEY_CHECKS=0;');
         }
@@ -85,11 +85,11 @@ class DatabaseSeeder extends Seeder
             DB::statement('SET FOREIGN_KEY_CHECKS=1;');
         }
 
-        // =========================================================================
-        // 1. SEED AUTHENTIC STAFF & COACH USERS
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 1. Staff and coach accounts
+        // ---------------------------------------------------------------
         
-        // 1. Camp Owner & Founder (Antonio Mercado)
+        // 1. Owner (Antonio Mercado)
         $owner = User::create([
             'name' => 'Antonio Mercado',
             'email' => 'owner@campfreedive.ph',
@@ -102,7 +102,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // 2. Lead Camp Admin & Operations Coordinator (Maria Santos)
+        // 2. Admin (Maria Santos)
         $admin = User::create([
             'name' => 'Maria Santos',
             'email' => 'admin@campfreedive.ph',
@@ -116,7 +116,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
 
-        // 3. Senior Freediving Coach (Jose Reyes - AIDA 4 / Molchanovs W2)
+        // 3. Senior coach (Jose Reyes - AIDA 4 / Molchanovs W2)
         $coachJose = User::create([
             'name' => 'Jose Reyes',
             'email' => 'coach.jose@campfreedive.ph',
@@ -129,7 +129,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // 4. Freediving Coach (Mary Grace Bautista - Wave 2 Coach)
+        // 4. Coach (Mary Grace Bautista - Wave 2)
         $coachMary = User::create([
             'name' => 'Mary Grace Bautista',
             'email' => 'coach.mary@campfreedive.ph',
@@ -142,7 +142,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // 5. Freediving Coach & Safety Diver (Michael Cruz - AIDA 3)
+        // 5. Coach and safety diver (Michael Cruz - AIDA 3)
         $coachMichael = User::create([
             'name' => 'Michael Cruz',
             'email' => 'coach.michael@campfreedive.ph',
@@ -155,7 +155,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // 6. Freediving Coach (Christine Villamayor - Equalization Coach)
+        // 6. Coach (Christine Villamayor - equalization)
         $coachChristine = User::create([
             'name' => 'Christine Villamayor',
             'email' => 'coach.christine@campfreedive.ph',
@@ -168,7 +168,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // 7. Freediving Coach (Mark Garcia - Wave 1 Coach)
+        // 7. Coach (Mark Garcia - Wave 1)
         $coachMark = User::create([
             'name' => 'Mark Garcia',
             'email' => 'coach.mark@campfreedive.ph',
@@ -181,7 +181,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // 8. Inactive Coach (Angelo Fernandez - Leave of Absence)
+        // 8. Inactive coach (Angelo Fernandez - on leave)
         $coachAngelo = User::create([
             'name' => 'Angelo Fernandez',
             'email' => 'coach.angelo@campfreedive.ph',
@@ -194,7 +194,7 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        // Log Initial Account Provisioning Audits
+        // Audit logs for the new accounts
         AuditLogger::log('USER_CREATED', 'Founder & Owner account initialized: Antonio Mercado (owner@campfreedive.ph)', $owner, 'System Seeder');
         AuditLogger::log('USER_CREATED', 'Admin Coordinator provisioned: Maria Santos (admin@campfreedive.ph)', $admin, 'Antonio Mercado');
         AuditLogger::log('USER_CREATED', 'Coach provisioned: Jose Reyes (coach.jose@campfreedive.ph)', $coachJose, 'Maria Santos');
@@ -204,14 +204,14 @@ class DatabaseSeeder extends Seeder
         AuditLogger::log('USER_CREATED', 'Coach provisioned: Mark Garcia (coach.mark@campfreedive.ph)', $coachMark, 'Maria Santos');
         AuditLogger::log('USER_STATUS_TOGGLED', 'Staff account marked inactive (Leave of Absence): Angelo Fernandez', $coachAngelo, 'Antonio Mercado');
 
-        // =========================================================================
-        // 2. SEED REALISTIC 2D1N DIVE BATCHES IN STRICT CHRONOLOGICAL ORDER
-        // Batch 1 is strictly the earliest date, progressing sequentially to future batches.
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 2. Batches (2D1N), in date order
+        // Batch 1 is the earliest.
+        // ---------------------------------------------------------------
         $upcomingSat = Carbon::now()->next(Carbon::SATURDAY)->startOfDay();
 
         // -------------------------------------------------------------------------
-        // BATCH 1: Earliest Past Batch (-28 Days / 4 Weeks Ago) -> Completed
+        // BATCH 1: 4 weeks ago -> completed
         // -------------------------------------------------------------------------
         $batch1Start = $upcomingSat->copy()->subDays(28);
         $batch1End = $batch1Start->copy()->addDay();
@@ -238,7 +238,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 2: Past Batch (-21 Days / 3 Weeks Ago) -> Completed
+        // BATCH 2: 3 weeks ago -> completed
         // -------------------------------------------------------------------------
         $batch2Start = $upcomingSat->copy()->subDays(21);
         $batch2End = $batch2Start->copy()->addDay();
@@ -265,7 +265,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 3: Past Batch (-14 Days / 2 Weeks Ago) -> Cancelled by Camp (Storm Advisory)
+        // BATCH 3: 2 weeks ago -> cancelled by camp (storm)
         // -------------------------------------------------------------------------
         $batch3Start = $upcomingSat->copy()->subDays(14);
         $batch3End = $batch3Start->copy()->addDay();
@@ -293,7 +293,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 4: Past Batch (-7 Days / 1 Week Ago) -> Completed
+        // BATCH 4: 1 week ago -> completed
         // -------------------------------------------------------------------------
         $batch4Start = $upcomingSat->copy()->subDays(7);
         $batch4End = $batch4Start->copy()->addDay();
@@ -320,7 +320,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 5: Upcoming Weekend (Current Active Departure) -> Confirmed
+        // BATCH 5: this weekend -> confirmed
         // -------------------------------------------------------------------------
         $batch5Start = $upcomingSat->copy();
         $batch5End = $batch5Start->copy()->addDay();
@@ -346,7 +346,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 6: Next Weekend (+7 Days) -> Confirmed, Open for Matching
+        // BATCH 6: next weekend (+7 days) -> confirmed, open for coach matching
         // -------------------------------------------------------------------------
         $batch6Start = $upcomingSat->copy()->addDays(7);
         $batch6End = $batch6Start->copy()->addDay();
@@ -372,7 +372,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 7: Future Weekend (+14 Days) -> Confirmed
+        // BATCH 7: +14 days -> confirmed
         // -------------------------------------------------------------------------
         $batch7Start = $upcomingSat->copy()->addDays(14);
         $batch7End = $batch7Start->copy()->addDay();
@@ -398,7 +398,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 8: Future Weekend (+21 Days) -> Rescheduled
+        // BATCH 8: +21 days -> rescheduled
         // -------------------------------------------------------------------------
         $batch8Start = $upcomingSat->copy()->addDays(21);
         $batch8End = $batch8Start->copy()->addDay();
@@ -424,7 +424,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BATCH 9: Future Weekend (+28 Days) -> Open for Booking
+        // BATCH 9: +28 days -> open for booking
         // -------------------------------------------------------------------------
         $batch9Start = $upcomingSat->copy()->addDays(28);
         $batch9End = $batch9Start->copy()->addDay();
@@ -449,9 +449,9 @@ class DatabaseSeeder extends Seeder
             'created_at' => now()->subDay(),
         ]);
 
-        // =========================================================================
-        // 3. SEED COACH AVAILABILITIES (COACH PORTAL CALENDAR)
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 3. Coach availability (coach calendar)
+        // ---------------------------------------------------------------
 
         // Jose Reyes: Assigned on Batch 5 (Sept 12 & 13), Available on Batch 6 (Sept 19 & 20)
         foreach ([$batch5Start, $batch5End] as $d) {
@@ -543,10 +543,10 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        // =========================================================================
-        // 4. SEED AUTHENTIC CUSTOMER BOOKINGS & PARTICIPANTS
-        // Strictly using the 5 exact fixed pickup points from the booking form!
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 4. Customer bookings and participants
+        // Uses the 5 pickup points from the booking form
+        // ---------------------------------------------------------------
 
         // -------------------------------------------------------------------------
         // BOOKING 1: Discovery Class (3 Pax) - Lead: Juan Dela Cruz -> Batch 5
@@ -965,10 +965,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BOOKING 6: Discovery Class (1 Pax) - Lead: Sarah Aquino -> Cancellation & 100% Policy Refund
+        // BOOKING 6: Discovery Class (1 Pax) - Lead: Sarah Aquino -> cancelled, 100% refund
         // Pickup: Sto Tomas Exit - 5:30 AM
         // -------------------------------------------------------------------------
-        $b6Start = Carbon::now()->addDays(18)->startOfDay(); // > 14 days out -> 100% Eligible
+        $b6Start = Carbon::now()->addDays(18)->startOfDay(); // more than 14 days out -> 100% refund
         $b6 = Booking::create([
             'batch_id' => null,
             'booking_number' => 'CFP-2026-1006',
@@ -1050,7 +1050,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BOOKING 7: Discovery Class (2 Pax) - Lead: Angelo Fernandez -> Cancelled by Guest (< 7 Days, Forfeited)
+        // BOOKING 7: Discovery Class (2 Pax) - Lead: Angelo Fernandez -> cancelled by guest (< 7 days, forfeited)
         // Pickup: Own Transportation
         // -------------------------------------------------------------------------
         $b7Start = Carbon::now()->addDays(4)->startOfDay();
@@ -1146,7 +1146,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // -------------------------------------------------------------------------
-        // BOOKING 8: Discovery Class (2 Pax) - Lead: Christian Santiago -> Attached to Completed Batch 4
+        // BOOKING 8: Discovery Class (2 Pax) - Lead: Christian Santiago -> in completed Batch 4
         // Pickup: Shell Tiendesitas - 3:00 AM
         // -------------------------------------------------------------------------
         $b8 = Booking::create([
@@ -1218,9 +1218,9 @@ class DatabaseSeeder extends Seeder
             'paid_at' => $batch4Start->copy()->subDays(4),
         ]);
 
-        // =========================================================================
-        // 5. SEED COACH BROADCAST OPENING & APPLICATIONS FOR BATCH 6
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 5. Open coach slot and requests for Batch 6
+        // ---------------------------------------------------------------
 
         $opening = CoachOpening::create([
             'batch_id' => $batch6->id,
@@ -1249,9 +1249,9 @@ class DatabaseSeeder extends Seeder
             'created_at' => now()->subHour(),
         ]);
 
-        // =========================================================================
-        // 6. SEED REALISTIC DYNAMIC PRICING RULES
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 6. Pricing rules
+        // ---------------------------------------------------------------
 
         $pricingRules = [
             [
@@ -1330,9 +1330,9 @@ class DatabaseSeeder extends Seeder
             PricingRule::create($r);
         }
 
-        // =========================================================================
-        // 8. SEED SYSTEM SETTINGS
-        // =========================================================================
+        // ---------------------------------------------------------------
+        // 8. System settings
+        // ---------------------------------------------------------------
         $this->call(SystemSettingsSeeder::class);
     }
 }

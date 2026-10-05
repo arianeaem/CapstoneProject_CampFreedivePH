@@ -223,7 +223,7 @@
         </div>
     </div>
 
-    <!-- Bottom: Bookings & Guest List Table (Collapsible) -->
+    <!-- Bookings and guest list (can be collapsed) -->
     <div x-data="{ showBookingsList: false }" class="bg-white rounded-2xl border border-[#E5E5EA] overflow-hidden">
         
         <!-- Toggle Header -->

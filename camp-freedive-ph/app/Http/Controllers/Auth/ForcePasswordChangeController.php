@@ -13,7 +13,7 @@ use App\Http\Requests\Auth\ChangePasswordRequest;
 class ForcePasswordChangeController extends Controller
 {
     /**
-     * Show the mandatory password change form.
+     * Change password form (required on first login).
      */
     public function show(): View|RedirectResponse
     {
@@ -32,7 +32,7 @@ class ForcePasswordChangeController extends Controller
     }
 
     /**
-     * Update temporary password to a new secure password.
+     * Save the new password.
      */
     public function update(ChangePasswordRequest $request): RedirectResponse
     {

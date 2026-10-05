@@ -1,9 +1,9 @@
 """
-Automated End-to-End Parity Verification Script for Multi-Horizon ONNX Forecasters.
+Checks that the ONNX models give the same results as the XGBoost models.
 
-Tests 1,000 synthetic test points across all 11 multi-horizon XGBoost forecaster models,
-asserting that the ONNX Runtime prediction strictly matches the original XGBoost JSON model (< 1e-4 max absolute delta).
-Also verifies that all non-XGBoost winners are properly mapped to native Python/climatology serving paths.
+Tests 1,000 random points on all 11 XGBoost forecasters and checks that the ONNX
+prediction matches the original XGBoost JSON model (max difference < 1e-4).
+Also checks that the non-XGBoost models point to a Python or climatology path.
 
 Run from project root:
     python src/serve/verify_onnx_parity.py
@@ -37,7 +37,7 @@ FORECASTER_MODELS = [
 
 
 def test_model_parity(model_name: str, n_samples: int = 1000, n_features: int = 133) -> dict:
-    """Verifies parity between raw XGBoost JSON model and exported ONNX model across n_samples."""
+    """Compare the XGBoost JSON model and the ONNX model on n_samples points."""
     json_path = MODELS_DIR / f"{model_name}.json"
     onnx_path = ONNX_DIR / f"{model_name}.onnx"
 
@@ -46,29 +46,29 @@ def test_model_parity(model_name: str, n_samples: int = 1000, n_features: int = 
     if not onnx_path.exists():
         return {"model": model_name, "status": "FAIL", "reason": f"Missing ONNX: {onnx_path}"}
 
-    # Load XGBoost model
+    # Load the XGBoost model
     xgb_model = xgb.XGBRegressor()
     xgb_model.load_model(str(json_path))
     xgb_model.get_booster().feature_names = None
 
-    # Load ONNX Session
+    # Load the ONNX session
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     input_name = session.get_inputs()[0].name
 
-    # Generate 1,000 test points
+    # Make 1,000 test points
     np.random.seed(42)
     test_points = np.random.uniform(low=0.0, high=10.0, size=(n_samples, n_features)).astype(np.float32)
-    # Set the horizon column (index 132) to valid realistic horizons [1..168]
+    # Set the horizon column (index 132) to real horizons [1..168]
     test_points[:, 132] = np.random.choice([1, 6, 12, 24, 48, 72, 96, 144, 168], size=n_samples).astype(np.float32)
 
-    # Predict with XGBoost
+    # XGBoost prediction
     xgb_preds = xgb_model.predict(test_points)
 
-    # Predict with ONNX
+    # ONNX prediction
     onnx_raw = session.run(None, {input_name: test_points})[0]
     onnx_preds = np.asarray(onnx_raw, dtype=np.float32).flatten()
 
-    # Calculate absolute error delta
+    # Absolute difference
     abs_errors = np.abs(onnx_preds - xgb_preds)
     max_error = float(np.max(abs_errors))
     mean_error = float(np.mean(abs_errors))
@@ -87,7 +87,7 @@ def test_model_parity(model_name: str, n_samples: int = 1000, n_features: int = 
 
 
 def verify_registry_mapping():
-    """Verifies that every cell in production_model_selection.json has a valid serving path."""
+    """Check that every cell in production_model_selection.json has a serving path."""
     registry_path = PROJECT_ROOT / "reports" / "autogluon_benchmarks" / "production_model_selection.json"
     with open(registry_path, "r") as f:
         registry = json.load(f)
@@ -149,7 +149,7 @@ def main():
     print(f"Parity Test Summary: {passed}/{total} models passed 1,000-sample parity check.")
     print("-" * 80)
 
-    # Verify registry mappings
+    # Check the model list
     verify_registry_mapping()
 
     if passed == total:

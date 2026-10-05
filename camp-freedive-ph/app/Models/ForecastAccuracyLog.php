@@ -57,14 +57,14 @@ class ForecastAccuracyLog extends Model
     ];
 
     /**
-     * Compute composite accuracy score from error metrics.
-     * 
+     * Overall accuracy score from the errors.
+     *
      * Weights:
-     * - Classification Match: 40%
-     * - Wave Height Accuracy: 20% (MAE <= 0.15m = 100%, MAE >= 0.80m = 0%)
-     * - Wind Speed Accuracy: 20% (MAE <= 3.0 km/h = 100%, MAE >= 20.0 km/h = 0%)
-     * - Ocean Current Accuracy: 10% (MAE <= 0.10 m/s = 100%, MAE >= 0.50 m/s = 0%)
-     * - Rain Rate Accuracy: 10% (MAE <= 0.5 mm = 100%, MAE >= 10.0 mm = 0%)
+     * - same safety level: 40%
+     * - waves: 20% (error <= 0.15 m = 100%, >= 0.80 m = 0%)
+     * - wind: 20% (error <= 3 km/h = 100%, >= 20 km/h = 0%)
+     * - current: 10% (error <= 0.10 m/s = 100%, >= 0.50 m/s = 0%)
+     * - rain: 10% (error <= 0.5 mm = 100%, >= 10 mm = 0%)
      */
     public static function calculateAccuracyScore(
         bool $classificationMatched,

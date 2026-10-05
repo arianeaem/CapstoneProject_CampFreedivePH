@@ -227,7 +227,7 @@ class PayMongoIntegrationTest extends TestCase
         $paymentCount = Payment::where('booking_id', $booking->id)->count();
         $this->assertEquals(1, $paymentCount);
 
-        // Second delivery (duplicate retry with same event ID): gracefully discarded
+        // Same event sent again: ignored
         $secondResponse = $this->postJson(route('paymongo.webhook.api'), $payload);
         $secondResponse->assertStatus(200);
         $secondResponse->assertJson([

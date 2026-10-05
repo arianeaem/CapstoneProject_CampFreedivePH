@@ -37,7 +37,7 @@ class RebenchmarkMLCommandTest extends TestCase
     }
 
     /**
-     * Test that ml:rebenchmark fails gracefully when given an invalid script path.
+     * ml:rebenchmark should fail cleanly when the script path is wrong.
      */
     public function test_ml_rebenchmark_handles_invalid_script_path(): void
     {

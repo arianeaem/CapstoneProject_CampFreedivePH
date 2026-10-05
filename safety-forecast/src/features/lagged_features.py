@@ -1,11 +1,11 @@
 """
-Builds lagged and rolling historical features for multi-step-ahead forecasting.
+Builds the lag and rolling features.
 
 Features:
 - RAW_VARS at LAG_HOURS [0, 1, 3, 6, 12, 24, 48]
-  (0 = current observed value at time t; 1..48 = historical lags)
-- Trailing 24h rolling statistics (mean, std, min, max) computed on .shift(1)
-  so that rolling stats cover t-1 back to t-24 without touching t itself.
+  (0 = value at time t, 1..48 = past values)
+- 24h rolling mean, std, min and max, computed after .shift(1)
+  so they cover t-1 back to t-24 and don't include t.
 """
 
 import pandas as pd
@@ -15,13 +15,10 @@ RAW_VARS = [
     "wind_u", "wind_v", "wind_speed", "wind_gust", "slp", "rain_rate_mm_hr",
 ]
 
-LAG_HOURS = [0, 1, 3, 6, 12, 24, 48]  # 0 = the current/most-recent observed value.
-# Including lag=0 is deliberate, not an oversight to avoid: it's fully valid,
-# non-leaking information (it's KNOWN at time t, same as any other lag) when
-# forecasting t+H for any H >= 1. Omitting it would handicap the model
-# relative to the persistence baseline it's required to beat in Step 4 —
-# persistence IS essentially "just use lag=0," so the model needs access to
-# that same information at minimum to have a fair chance of doing better.
+LAG_HOURS = [0, 1, 3, 6, 12, 24, 48]  # 0 = the latest value
+# lag 0 is on purpose. We already know it at time t, so it's not leakage when
+# we predict t+H for H >= 1. Persistence is basically "use lag 0", so the
+# model needs it too to have a fair chance of beating persistence.
 ROLLING_WINDOW = 24
 
 
@@ -39,12 +36,9 @@ def build_lagged_features(df: pd.DataFrame) -> pd.DataFrame:
         for lag in LAG_HOURS:
             cols[f"{var}_lag{lag}h"] = df_in[var].shift(lag)
 
-        # .shift(1) BEFORE .rolling() is deliberate: a rolling window computed
-        # directly on df[var] would include the CURRENT hour in its own "history"
-        # — shifting first means the window covers t-1 back to t-ROLLING_WINDOW,
-        # never touching t itself. This is the exact leakage mistake this whole
-        # project has already caught and fixed once (the original random-split
-        # bug); don't reintroduce a subtler version of it here.
+        # .shift(1) before .rolling() on purpose: without it the window would
+        # include the current hour. With the shift it covers t-1 back to
+        # t-ROLLING_WINDOW. (We already had a leakage bug once, don't bring it back.)
         shifted = df_in[var].shift(1)
         cols[f"{var}_roll_mean{ROLLING_WINDOW}h"] = shifted.rolling(ROLLING_WINDOW).mean()
         cols[f"{var}_roll_std{ROLLING_WINDOW}h"] = shifted.rolling(ROLLING_WINDOW).std()

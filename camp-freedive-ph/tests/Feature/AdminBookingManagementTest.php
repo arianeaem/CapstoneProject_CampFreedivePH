@@ -198,7 +198,7 @@ class AdminBookingManagementTest extends TestCase
             'Editing a booking must retain the original pricing snapshot after pricing rules change.'
         );
 
-        // Verify immutable system audit log
+        // Check the audit log
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'BOOKING_DATA_MODIFIED',
         ]);

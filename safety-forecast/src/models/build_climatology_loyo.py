@@ -1,17 +1,17 @@
 """
-Builds the canonical 366 x 24 seasonal climatology table for Batangas
-on the clean multi-source training window (2022-11-01 to 2025-09-30).
+Builds the 366 x 24 seasonal climatology table for Batangas
+from the training data (2022-11-01 to 2025-09-30).
 
-Features:
-1. Asymmetric tail calibration:
-   - k_lo targets <= 10.0% breach rate below p10'
-   - k_hi targets <= 10.0% breach rate above p90' (conservative safety for upper tails)
-2. Rigorous Holdout Climatology Evaluation:
-   - Fits on pre-holdout (2022-11-01 to 2025-03-31)
-   - Evaluates on unseen 6-month holdout (2025-04-01 to 2025-09-30)
-3. P(wet day) per DOY with Wilson score 95% confidence intervals.
-4. P(high-gust day) per DOY with Wilson score 95% confidence intervals.
-5. Wind direction circular mean, resultant length R, and probabilities per PHP scoring band.
+What it does:
+1. Tail calibration:
+   - k_lo so that at most 10% of values are below p10'
+   - k_hi so that at most 10% of values are above p90'
+2. Holdout check:
+   - fit on 2022-11-01 to 2025-03-31
+   - test on the 6 months after (2025-04-01 to 2025-09-30)
+3. P(wet day) per day of year with Wilson 95% intervals.
+4. P(high-gust day) per day of year with Wilson 95% intervals.
+5. Wind direction: circular mean, resultant length R, and chance of each PHP score band.
 6. Saves climatology.parquet and climatology_meta.json.
 """
 
@@ -47,7 +47,7 @@ VARIABLES = [
 
 
 def wilson_interval(k: int, n: int, confidence: float = 0.95):
-    """Computes Wilson score interval for binomial proportion."""
+    """Wilson interval for a proportion."""
     if n == 0:
         return 0.0, 0.0, 0.0
     z = 1.959963984540054
@@ -146,7 +146,7 @@ def compute_raw_grid(df: pd.DataFrame, var: str) -> np.ndarray:
 
 
 def apply_asymmetric_k(clim_grid: np.ndarray, k_lo: float, k_hi: float, var: str) -> np.ndarray:
-    """Scales p10 and p90 independently around p50 to enforce <=10% breach on both tails."""
+    """Stretch p10 and p90 around p50 separately so each tail has at most 10% outside."""
     scaled = clim_grid.copy()
     p10 = scaled[:, :, 0]
     p50 = scaled[:, :, 1]
@@ -167,7 +167,7 @@ def apply_asymmetric_k(clim_grid: np.ndarray, k_lo: float, k_hi: float, var: str
 
 
 def calibrate_asymmetric_k_factors(df: pd.DataFrame):
-    """Calibrates k_lo and k_hi independently via LOYO so that tail breach rates are <= 10.0%."""
+    """Find k_lo and k_hi with leave-one-year-out so each tail has at most 10% outside."""
     years = [2023, 2024, "boundary"]
     k_factors = {}
     loyo_results = {}
@@ -193,7 +193,7 @@ def calibrate_asymmetric_k_factors(df: pd.DataFrame):
 
             fold_data.append((base_grid, t_doy[valid], t_hour[valid], y_test[valid]))
 
-        # Calibrate k_lo targeting mean(y < p10') <= 10.0%
+        # k_lo: share of y < p10' should be <= 10%
         best_k_lo = 1.0
         best_err_lo = 999.0
         for k_cand in np.arange(0.95, 1.80, 0.02):
@@ -207,7 +207,7 @@ def calibrate_asymmetric_k_factors(df: pd.DataFrame):
             if rate_lo <= 10.0:
                 break
 
-        # Calibrate k_hi targeting mean(y > p90') <= 10.0%
+        # k_hi: share of y > p90' should be <= 10%
         best_k_hi = 1.0
         best_err_hi = 999.0
         for k_cand in np.arange(0.95, 1.80, 0.02):
@@ -223,7 +223,7 @@ def calibrate_asymmetric_k_factors(df: pd.DataFrame):
 
         k_factors[var] = {"k_lo": best_k_lo, "k_hi": best_k_hi}
 
-        # Compute full pooled LOYO metrics
+        # Leave-one-year-out results for all years together
         all_y, all_lo, all_hi = [], [], []
         for base_grid, t_doy, t_hour, y_v in fold_data:
             cal_grid = apply_asymmetric_k(base_grid, best_k_lo, best_k_hi, var)
@@ -249,8 +249,8 @@ def calibrate_asymmetric_k_factors(df: pd.DataFrame):
 
 def evaluate_climatology_on_holdout(df: pd.DataFrame, k_factors: dict) -> dict:
     """
-    Evaluates calibrated climatology on unseen Holdout (2025-04-01 to 2025-09-30)
-    using table fit strictly on pre-holdout (2022-11-01 to 2025-03-31).
+    Test the calibrated climatology on the holdout (2025-04-01 to 2025-09-30)
+    using a table fit only on 2022-11-01 to 2025-03-31.
     """
     dev_df = df.loc[:HOLDOUT_START - pd.Timedelta(seconds=1)]
     ho_df = df.loc[HOLDOUT_START:]
@@ -395,7 +395,7 @@ def main():
     print("\nASYMMETRICALLY CALIBRATED LOYO COVERAGE SUMMARY:")
     print(pd.DataFrame(calib_rows).to_string(index=False))
 
-    # Evaluate on Holdout
+    # Test on the holdout
     print("\n" + "=" * 80)
     print("HOLDOUT EVALUATION OF CLIMATOLOGY (Fit on Dev, Tested on 2025-04 to 2025-09)")
     print("=" * 80)

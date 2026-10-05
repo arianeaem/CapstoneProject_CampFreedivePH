@@ -1,34 +1,26 @@
 """
-Trains xgb_current_regressor: predicts current_u and current_v (zonal/meridional
-surface current velocity) as direct vector regression to guarantee physical mass-conservation.
+Trains xgb_current_regressor: predicts current_u and current_v (east/north
+surface current) directly as a vector.
 
-Design decisions specific to current (different from train_wave.py / train_wind.py):
+Differences from train_wave.py / train_wind.py:
 
-1. current_speed / current_dir excluded from inputs. Since current_u and
-   current_v ARE the training targets, the raw current_speed/current_dir
-   columns are deterministic trig functions of them (speed = sqrt(u^2+v^2),
-   dir = atan2(v,u)) — leaving them in would leak the targets, same failure
-   mode as wind_u/wind_v in train_wind.py, just mirrored.
+1. current_speed / current_dir are not inputs. They come straight from current_u
+   and current_v (speed = sqrt(u^2+v^2), dir = atan2(v,u)), which are the targets,
+   so using them would leak the answer (same problem as wind_u/wind_v in train_wind.py).
 
-2. wind_current_alignment excluded. It's computed from current_dir, which is
-   itself derived from current_u/current_v — leaks for the same reason as #1.
+2. wind_current_alignment is not an input either, because it uses current_dir.
 
-3. Wind features (wind_u, wind_v, wind_speed, wind_gust, wind_dir) are KEPT
-   as inputs, unlike the wave regressor's exclusion of wind->wave causality
-   concerns being irrelevant here. Wind-driven surface currents (Ekman
-   transport) are a real, physically legitimate predictive relationship.
+3. Wind features (wind_u, wind_v, wind_speed, wind_gust, wind_dir) ARE inputs.
+   Wind really does push the surface current (Ekman transport).
 
-4. hs, tp, swell_height, wind_wave_height (wave outputs) excluded — same
-   parallel Stage-1 architecture reasoning as train_wind.py.
+4. Wave outputs (hs, tp, swell_height, wind_wave_height) are not inputs, same
+   reason as in train_wind.py (the models run side by side).
 
-5. No separate current_speed/current_dir models are trained. Instead,
-   current_speed and current_dir are DERIVED from the current_u/current_v
-   predictions at evaluation time (sqrt and atan2), then scored — current_dir
-   with the same circular distance handling used for wind_dir. This provides
-   clean vector regression without training two redundant extra models.
+5. We don't train separate speed/direction models. current_speed and current_dir
+   are computed from the u/v predictions (sqrt and atan2) and then scored.
+   current_dir uses the same circular distance as wind_dir.
 
-6. Evaluation metrics for current_u, current_v, derived speed (m/s), and circular direction
-   are reported with full empirical statistics (RMSE, MAE, bias).
+6. We report RMSE, MAE and bias for current_u, current_v, speed (m/s) and direction.
 
 Run from the project root: python src\\models\\train_current.py
 """
@@ -64,8 +56,8 @@ PRIMARY_TARGET = "current_u"
 WAVE_TARGETS = ["hs", "tp", "swell_height", "wind_wave_height"]
 EXCLUDED_FEATURES = ["current_speed", "current_dir", "wind_current_alignment"] + WAVE_TARGETS
 
-# Same on-demand pattern as train_wave.py / train_wind.py: empty until a
-# target's validation results show it needs independent tuning.
+# Same as train_wave.py / train_wind.py: empty until a target
+# needs its own tuning.
 RETUNE_TARGETS = []
 
 
@@ -126,7 +118,7 @@ def circular_angle_error(y_true_deg, y_pred_deg):
 
 def main():
     df = load_training_features()
-    train, val, test = temporal_split(df)  # test is not touched anywhere below
+    train, val, test = temporal_split(df)  # test is not used below
     features = get_feature_columns(df)
 
     print(f"Training {MODEL_NAME} on {len(features)} features")
@@ -171,7 +163,7 @@ def main():
 
         model.save_model(str(MODELS_DIR / f"{MODEL_NAME}_{target_col}.json"))
 
-    # Derived, not separately trained: current_speed and current_dir from the
+    # Not trained separately: current_speed and current_dir come from the
     # current_u/current_v predictions above.
     pred_u, pred_v = val_preds_by_target["current_u"], val_preds_by_target["current_v"]
     pred_speed = np.sqrt(pred_u ** 2 + pred_v ** 2)

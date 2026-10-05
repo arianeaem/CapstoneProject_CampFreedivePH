@@ -1,9 +1,7 @@
 """
-End-to-end test against the RUNNING FastAPI service (not a mock) — this is
-the first script in the whole project that exercises the actual live
-serving path, rather than historical batch data. Requires the service to
-already be running (uvicorn src.serve.main:app --host 127.0.0.1 --port 8001)
-in another terminal before this is run.
+Test against the real running FastAPI service (not a mock).
+Start the service first in another terminal:
+    uvicorn src.serve.main:app --host 127.0.0.1 --port 8001
 
 Run from the project root: python src\\serve\\test_service.py
 """
@@ -26,9 +24,8 @@ CALM: dict[str, object] = {
 
 
 def make_readings(n_hours: int, overrides: dict | None = None, override_index: int = -1) -> list:
-    """Builds n_hours of consecutive calm readings, one hour apart, optionally
-    applying `overrides` to a single reading at `override_index` (negative
-    indices count from the end, same as normal Python list indexing)."""
+    """Makes n_hours of calm readings, one hour apart. If `overrides` is given,
+    it changes the reading at `override_index` (negative counts from the end)."""
     start = datetime(2026, 9, 1, 0, 0, 0)
     actual_override_idx = override_index if override_index >= 0 else n_hours + override_index
     readings = []
@@ -176,7 +173,7 @@ def test_assess_booking_safety_threshold():
     boundary_weather = []
     for i in range(8):  # 06:00 to 13:00
         hour_ts = start + timedelta(hours=i)
-        rain = 30.0 if hour_ts.hour == 10 else 0.0  # 30.0 mm/hr > 25.0 mm/hr safety threshold
+        rain = 30.0 if hour_ts.hour == 10 else 0.0  # 30 mm/hr, over the 25 mm/hr limit
         boundary_weather.append({
             "timestamp": hour_ts.isoformat(),
             "wind_speed": 3.0,

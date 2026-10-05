@@ -1,7 +1,7 @@
 /**
- * Camp FreedivePH - Dynamic SPA Router & Content Swapper
- * Provides seamless, zero-flicker dynamic content swapping across the portal.
- * Retains sidebar, header, and persistent UI states without full page reloads.
+ * Camp FreedivePH - page switcher for the staff portal.
+ * Loads the next page with fetch and swaps only the main content,
+ * so the sidebar and header stay and the page doesn't fully reload.
  */
 
 class SPARouter {
@@ -77,7 +77,7 @@ class SPARouter {
     }
 
     bindEvents() {
-        // Intercept all link clicks
+        // Catch link clicks
         document.addEventListener('click', (e) => {
             if (e.defaultPrevented) return;
             const link = e.target.closest('a');
@@ -89,7 +89,7 @@ class SPARouter {
             }
         });
 
-        // Intercept standard GET and POST forms
+        // Catch GET and POST forms
         document.addEventListener('submit', (e) => {
             if (e.defaultPrevented) return;
             const form = e.target;
@@ -99,7 +99,7 @@ class SPARouter {
             this.handleFormSubmit(form);
         });
 
-        // Handle Browser History Back / Forward
+        // Browser back / forward
         window.addEventListener('popstate', (e) => {
             this.navigate(window.location.href, false);
         });
@@ -131,7 +131,7 @@ class SPARouter {
     }
 
     shouldInterceptLink(link, event) {
-        // Skip modifier keys or middle clicks
+        // Skip ctrl/shift clicks and middle clicks
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) {
             return false;
         }
@@ -141,22 +141,22 @@ class SPARouter {
             return false;
         }
 
-        // Only intercept if current document is inside an SPA layout container
+        // Only if the page uses the SPA layout
         if (!this.hasSpaContainer(document)) {
             return false;
         }
 
-        // Ignore download links or new tab links
+        // Skip download links and new tab links
         if (link.hasAttribute('download') || link.getAttribute('target') === '_blank') {
             return false;
         }
 
-        // Ignore explicitly marked native / no-spa links
+        // Skip links marked as no-spa
         if (link.hasAttribute('data-native') || link.hasAttribute('data-no-spa')) {
             return false;
         }
 
-        // Ignore auth and logout routes
+        // Skip login and logout links
         if (this.isAuthUrl(link.href) || href.includes('/logout')) {
             return false;
         }
@@ -164,12 +164,12 @@ class SPARouter {
         try {
             const targetUrl = new URL(link.href, window.location.origin);
             
-            // Only intercept same-origin requests
+            // Only same-site links
             if (targetUrl.origin !== window.location.origin) {
                 return false;
             }
 
-            // If same page with hash anchor only, allow browser hash scrolling
+            // Same page with only a #hash, let the browser scroll
             if (targetUrl.pathname === window.location.pathname && targetUrl.search === window.location.search && targetUrl.hash) {
                 return false;
             }
@@ -181,7 +181,7 @@ class SPARouter {
     }
 
     shouldInterceptForm(form) {
-        // Only intercept if current document is inside an SPA layout container
+        // Only if the page uses the SPA layout
         if (!this.hasSpaContainer(document)) {
             return false;
         }
@@ -245,7 +245,7 @@ class SPARouter {
             const htmlText = await response.text();
 
             if (!response.ok) {
-                // If validation failed (422) or error (500), parse and display response HTML
+                // Validation error (422) or server error (500), show the returned page
                 this.renderContent(htmlText, finalUrl, false);
                 this.currentUrl = finalUrl;
                 return;
@@ -278,7 +278,7 @@ class SPARouter {
             });
 
             if (!response.ok && response.status === 401) {
-                // Session expired, redirect to login
+                // Session expired, go to login
                 window.location.href = response.url || '/login';
                 return;
             }
@@ -298,7 +298,7 @@ class SPARouter {
     }
 
     renderContent(htmlText, finalUrl, pushState = true) {
-        // If the destination is an auth page (login, logout, reset, etc.), do full reload
+        // Login/logout/reset pages need a full reload
         if (this.isAuthUrl(finalUrl)) {
             window.location.href = finalUrl;
             return;
@@ -307,22 +307,22 @@ class SPARouter {
         const parser = new DOMParser();
         const newDoc = parser.parseFromString(htmlText, 'text/html');
 
-        // Check if both current and new page are inside the SPA container (#spa-page-content)
+        // Check if both pages use the SPA container (#spa-page-content)
         const isCurrentAdmin = !!document.getElementById('spa-page-content');
         const isNewAdmin = !!newDoc.getElementById('spa-page-content');
 
         if (!isCurrentAdmin || !isNewAdmin) {
-            // Non-SPA destination or exiting admin portal, perform full native navigation
+            // Not an SPA page, do a normal page load
             window.location.href = finalUrl;
             return;
         }
 
-        // 1. Update Document Title
+        // 1. Page title
         if (newDoc.title) {
             document.title = newDoc.title;
         }
 
-        // 2. Swap Main Page Content
+        // 2. Main content
         const targetContainer = document.getElementById('spa-page-content');
         const sourceContainer = newDoc.getElementById('spa-page-content');
 
@@ -331,16 +331,16 @@ class SPARouter {
             return;
         }
 
-        // Destroy existing Alpine components inside the dynamic zone cleanly
+        // Remove the old Alpine components first
         if (window.Alpine && typeof window.Alpine.destroyTree === 'function') {
             window.Alpine.destroyTree(targetContainer);
         }
 
-        // Replace container inner HTML
+        // Put in the new HTML
         targetContainer.innerHTML = sourceContainer.innerHTML;
 
-        // Swap and run the page's pushed scripts (@stack('scripts')) so components they define
-        // (e.g. x-data="coachAvailabilityCalendar(...)") exist before Alpine initializes the new page
+        // Run the page's @stack('scripts') first so the components they define
+        // (e.g. x-data="coachAvailabilityCalendar(...)") exist before Alpine starts
         const targetScripts = document.getElementById('spa-page-scripts');
         const sourceScripts = newDoc.getElementById('spa-page-scripts');
         if (targetScripts) {
@@ -348,49 +348,49 @@ class SPARouter {
             this.executeScripts(targetScripts);
         }
 
-        // Execute any embedded scripts
+        // Run scripts inside the content
         this.executeScripts(targetContainer);
 
-        // Re-initialize Alpine.js on the new DOM tree
+        // Start Alpine on the new content
         if (window.Alpine && typeof window.Alpine.initTree === 'function') {
             window.Alpine.initTree(targetContainer);
         }
 
-        // 3. Update Breadcrumbs in Top Header
+        // 3. Breadcrumbs
         const targetBreadcrumb = document.getElementById('header-breadcrumbs');
         const sourceBreadcrumb = newDoc.getElementById('header-breadcrumbs');
         if (targetBreadcrumb && sourceBreadcrumb) {
             targetBreadcrumb.innerHTML = sourceBreadcrumb.innerHTML;
         }
 
-        // 4. Update Flash Messages
+        // 4. Flash messages
         const targetFlash = document.getElementById('flash-messages-container');
         const sourceFlash = newDoc.getElementById('flash-messages-container');
         if (targetFlash && sourceFlash) {
             targetFlash.innerHTML = sourceFlash.innerHTML;
         }
 
-        // 5. Update Sidebar & Mobile Menu Active Link States
+        // 5. Active link in the sidebar and mobile menu
         this.updateSidebarActiveLinks(finalUrl);
 
-        // 6. Close Mobile Menu if Open
+        // 6. Close the mobile menu
         const mobileDrawer = document.querySelector('[x-data]');
         if (mobileDrawer && window.Alpine) {
             try {
-                // If mobileMenuOpen is in scope, close it
+                // Close it if mobileMenuOpen exists
                 window.dispatchEvent(new CustomEvent('close-mobile-menu'));
             } catch {}
         }
 
-        // 7. Update Browser History State
+        // 7. Browser history
         if (pushState && window.location.href !== finalUrl) {
             window.history.pushState({ spa: true, url: finalUrl }, '', finalUrl);
         }
 
-        // 8. Scroll to Top
+        // 8. Scroll to top
         window.scrollTo({ top: 0, behavior: 'instant' });
 
-        // 9. Dispatch Global SPA Navigated Event
+        // 9. Tell other scripts the page changed
         window.dispatchEvent(new CustomEvent('spa:navigated', { detail: { url: finalUrl } }));
     }
 
@@ -420,7 +420,7 @@ class SPARouter {
                 const linkUrlObj = new URL(linkHref, window.location.origin);
                 const linkPath = linkUrlObj.pathname;
 
-                // Match exact or parent route (e.g. /owner/pricing/create matches /owner/pricing)
+                // Same URL or parent URL (e.g. /owner/pricing/create matches /owner/pricing)
                 const isExact = currentPath === linkPath;
                 const isSubPath = linkPath !== '/' && linkPath !== '/admin' && linkPath !== '/owner' && linkPath !== '/coach' && currentPath.startsWith(linkPath);
                 const isActive = isExact || isSubPath;
@@ -432,7 +432,7 @@ class SPARouter {
                     link.classList.add(...activeClasses);
                     link.classList.remove(...inactiveClasses);
 
-                    // If there's an SVG line/stroke, color it
+                    // Also color the SVG icon
                     const svg = link.querySelector('svg');
                     if (svg) {
                         svg.classList.add('text-[#780000]');
@@ -450,12 +450,12 @@ class SPARouter {
                 }
             });
         } catch (e) {
-            // Ignore URL parsing errors
+            // Ignore bad URLs
         }
     }
 }
 
-// Auto-instantiate when DOM is ready
+// Start when the page is ready
 if (typeof window !== 'undefined') {
     window.SPARouter = new SPARouter();
 }

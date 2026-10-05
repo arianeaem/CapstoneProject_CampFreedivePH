@@ -1,31 +1,24 @@
 """
-Trains xgb_wind_regressor: predicts wind_speed, wind_gust, delta_p_3h (plain
-regression, same pattern as train_wave.py) plus wind_dir (handled specially,
-see below, since it's a circular quantity).
+Trains xgb_wind_regressor: predicts wind_speed, wind_gust, delta_p_3h (normal
+regression, same as train_wave.py) and wind_dir (done differently because it's an angle).
 
-Design decisions specific to wind (different from train_wave.py):
+Differences from train_wave.py:
 
-1. wind_u / wind_v excluded from inputs entirely. Unlike the wave case, these
-   are DETERMINISTIC sources of wind_speed and wind_dir (simple trigonometry:
-   speed = sqrt(u^2+v^2), dir = atan2(v,u)) — leaving them in would let the
-   model just learn that formula instead of anything meteorologically useful,
-   producing a fake perfect score that means nothing.
+1. wind_u / wind_v are not used as inputs. wind_speed and wind_dir come straight
+   from them (speed = sqrt(u^2+v^2), dir = atan2(v,u)), so the model would just
+   learn that formula and get a fake perfect score.
 
-2. hs, tp, swell_height, wind_wave_height (wave outputs) also excluded. In our
-   2-stage stacked architecture, wave/wind/current regressors are parallel Stage-1
-   models feeding into the same Stage-2 safety classifier, not chained to each
-   other. Wind causes waves, not the reverse — using wave state to predict
-   wind would be circular in the pipeline and physically backwards.
+2. Wave outputs (hs, tp, swell_height, wind_wave_height) are not used either.
+   The wave, wind and current models run side by side and all feed the safety
+   classifier. Wind causes waves, not the other way around, so using waves to
+   predict wind would be backwards.
 
-3. wind_dir is circular (0 deg and 359 deg are 1 degree apart, not 359 apart).
-   A plain regression on raw degrees would treat crossing that boundary as a
-   huge error. Standard fix used here: train on sin/cos of the angle as two
-   auxiliary regressions, reconstruct the angle via atan2 at evaluation time,
-   and score with proper circular distance — this satisfies cyclic angular
-   loss requirements without a custom XGBoost objective.
+3. wind_dir is an angle (0 and 359 deg are 1 degree apart, not 359). Normal
+   regression on degrees would see that as a huge error. So we train on sin and cos
+   of the angle, get the angle back with atan2, and score with the circular distance.
 
-4. The target domain acceptance threshold is wind_speed MAE <= 1.2 m/s
-   (note: MAE, not RMSE — different from hs's RMSE threshold in train_wave.py).
+4. Target: wind_speed MAE <= 1.2 m/s
+   (MAE, not RMSE like hs in train_wave.py).
 
 Run from the project root: python src\\models\\train_wind.py
 """
@@ -61,10 +54,8 @@ PRIMARY_TARGET = "wind_speed"
 WAVE_TARGETS = ["hs", "tp", "swell_height", "wind_wave_height"]
 EXCLUDED_FEATURES = ["wind_u", "wind_v", "wind_current_alignment"] + WAVE_TARGETS
 
-# Targets that get their own independent Optuna search instead of reusing
-# PRIMARY_TARGET's hyperparameters. Empty by default — add a target here if
-# its validation results look underfit, same as tp was added in train_wave.py
-# after the first run revealed it needed separate tuning.
+# Targets that get their own Optuna tuning instead of using PRIMARY_TARGET's settings.
+# Empty for now. Add one here if it looks underfit (like tp in train_wave.py).
 RETUNE_TARGETS = []
 
 ACCEPTANCE_THRESHOLDS_MAE = {"wind_speed": 1.2}  # m/s, MAE target threshold
@@ -141,7 +132,7 @@ def evaluate_wind_dir(y_true_deg, pred_sin, pred_cos):
 
 def main():
     df = load_training_features()
-    train, val, test = temporal_split(df)  # test is not touched anywhere below
+    train, val, test = temporal_split(df)  # test is not used below
     features = get_feature_columns(df)
 
     print(f"Training {MODEL_NAME} on {len(features)} features")
@@ -169,7 +160,7 @@ def main():
     print("Final validation metrics (val set, touched once per target):")
     metrics = {}
 
-    # Plain regression targets: wind_speed, wind_gust, delta_p_3h
+    # Normal targets: wind_speed, wind_gust, delta_p_3h
     for target_col in TARGETS:
         params = target_params[target_col]
         model = xgb.XGBRegressor(**params)
@@ -186,7 +177,7 @@ def main():
 
         model.save_model(str(MODELS_DIR / f"{MODEL_NAME}_{target_col}.json"))
 
-    # Circular target: wind_dir, via sin/cos decomposition
+    # Angle target: wind_dir, using sin/cos
     train_dir_sin = np.sin(np.radians(train["wind_dir"]))
     train_dir_cos = np.cos(np.radians(train["wind_dir"]))
     val_dir_sin = np.sin(np.radians(val["wind_dir"]))
@@ -202,10 +193,8 @@ def main():
     pred_deg, dir_metrics = evaluate_wind_dir(val["wind_dir"].values, pred_sin, pred_cos)
     metrics["wind_dir"] = dir_metrics
 
-    # Reuse the pred-vs-actual / overlay plots on the reconstructed angle — note
-    # in the figure that a wraparound (e.g. true 359 -> pred 2) will show as a
-    # visual outlier even though the circular metrics above score it correctly;
-    # that's a plotting artifact, not a real error, and is fine to caveat verbally.
+    # Same plots for the angle. A wraparound (e.g. true 359 -> pred 2) will look
+    # like an outlier on the chart, but the circular metrics above score it correctly.
     plot_pred_vs_actual(val["wind_dir"].values, pred_deg, "wind_dir", MODEL_NAME)
     plot_feature_importance(sin_model, features, "wind_dir_sin", MODEL_NAME)
 

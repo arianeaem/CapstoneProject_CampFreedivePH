@@ -1,12 +1,11 @@
 """
-Trains multi-horizon XGBoost forecaster for ocean current variables:
-(current_u, current_v).
-Takes horizon as an input feature and predicts target at t+H (H in [1, 6, 12, 24, 48, 72, 96, 144] hours).
+Trains the XGBoost forecaster for the current (current_u, current_v).
+Horizon is an input and it predicts the value at t+H (H in [1, 6, 12, 24, 48, 72, 96, 144] hours).
 
-Current speed and direction are derived vectorially from predicted (current_u, current_v):
+Speed and direction are computed from the predicted u and v:
   current_speed = sqrt(u^2 + v^2)
   current_dir = atan2(v, u) in degrees [0, 360)
-and evaluated against ground-truth speed and circular direction.
+and compared with the real speed and direction.
 
 Run from project root: python src/models/train_current_forecaster.py
 """
@@ -42,7 +41,7 @@ def mae_score(y_true, y_pred) -> float:
 
 
 def circular_angular_diff(y_true_deg, y_pred_deg):
-    """Computes shortest angular difference in degrees accounting for 360 wrap-around."""
+    """Shortest angle difference in degrees (handles the 360 wrap)."""
     diff = np.abs(y_true_deg - y_pred_deg) % 360
     return np.minimum(diff, 360 - diff)
 
@@ -64,7 +63,7 @@ def main():
     stacked = build_stacked_dataset(df, lagged)
     print(f"Stacked multi-horizon dataset: {stacked.shape[0]} rows, {stacked.shape[1]} columns\n")
 
-    train, val, test = temporal_split(stacked)  # test untouched
+    train, val, test = temporal_split(stacked)  # test is not used
     print(f"Train split: {len(train)} rows ({train.index.min()} to {train.index.max()})")
     print(f"Val split:   {len(val)} rows ({val.index.min()} to {val.index.max()})")
     print(f"Test split:  {len(test)} rows (held out)\n")
@@ -123,7 +122,7 @@ def main():
         model.save_model(str(model_path))
         print(f"Saved model to {model_path}")
 
-        # Per-horizon validation evaluation
+        # Validation results per horizon
         val_preds = model.predict(val[feature_cols])
         val_predictions[target] = val_preds
         target_metrics = {"hyperparameters": best_params, "horizons": {}}
@@ -142,7 +141,7 @@ def main():
         all_metrics[target] = target_metrics
         print()
 
-    # Derive speed and direction from predicted (u, v)
+    # Speed and direction from the predicted u and v
     pred_u = val_predictions["current_u"]
     pred_v = val_predictions["current_v"]
     pred_speed = np.sqrt(pred_u ** 2 + pred_v ** 2)

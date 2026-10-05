@@ -12,10 +12,10 @@ class UpdateBookingRequest extends FormRequest
         return true; // access is checked by route middleware
     }
 
-    /** Clean up the raw form input before the rules run. */
+    /** Clean up the form input before validation. */
     protected function prepareForValidation(): void
     {
-        // Sanitize phone number spacing/dashes before validation
+        // Remove spaces and dashes from the phone number
         if ($this->has('contact_phone')) {
             $cleanedPhone = preg_replace('/[\s\-]/', '', (string)$this->input('contact_phone'));
             $this->merge(['contact_phone' => $cleanedPhone]);

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Forecast Snapshots: Multi-horizon historical forecast snapshots (T-14, T-7, T-3, T-1)
+        // 1. Forecast snapshots (T-14, T-7, T-3, T-1)
         Schema::create('forecast_snapshots', function (Blueprint $table) {
             $table->id();
             $table->date('target_date'); // Target dive / marine date being forecasted
@@ -33,7 +33,7 @@ return new class extends Migration
             $table->index('target_date');
         });
 
-        // 2. Forecast Accuracy Logs: Realized on-the-water verification logs & scientific error deltas
+        // 2. Accuracy logs (forecast vs actual weather)
         Schema::create('forecast_accuracy_logs', function (Blueprint $table) {
             $table->id();
             $table->date('target_date'); // The dive date being audited (T-0)

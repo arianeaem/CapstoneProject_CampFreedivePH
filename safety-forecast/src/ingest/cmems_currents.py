@@ -1,7 +1,7 @@
 """
 Source: CMEMS Global Ocean Physics Analysis and Forecast (GLOBAL_ANALYSISFORECAST_PHY_001_024)
-Pulls:  zonal (uo) and meridional (vo) surface current velocity, plus utide and vtide (1/12° = 0.083°).
-Auth:   same `copernicusmarine login` session as cmems_waves.py.
+Gets:   east (uo) and north (vo) surface current, plus utide and vtide (1/12 deg = 0.083 deg).
+Login:  same `copernicusmarine login` as cmems_waves.py.
 """
 
 import sys
@@ -54,7 +54,7 @@ def download(start_date: str = CURRENT_SMOC_START_DATE, end_date: str = CURRENT_
         start_dt = f"{year}-{month:02d}-01T00:00:00"
         end_dt = f"{year}-{month:02d}-{days_in_month:02d}T23:59:59"
         
-        # Cap end_dt at end_date if within same month
+        # Stop at end_date if it's in the same month
         if f"{year}-{month:02d}" == end_date[:7]:
             end_dt = f"{end_date}T23:59:59"
 
@@ -85,7 +85,7 @@ def download(start_date: str = CURRENT_SMOC_START_DATE, end_date: str = CURRENT_
 def to_interim(start_date: str = CURRENT_SMOC_START_DATE, end_date: str = CURRENT_SMOC_END_DATE):
     raw_files = sorted(OUT_RAW_DIR.glob("currents_*.nc"))
     if not raw_files:
-        # Fallback to single monolithic file if present
+        # Use the single big file if there is one
         single_raw = RAW_DIR / "cmems_currents.nc"
         if single_raw.exists():
             raw_files = [single_raw]
@@ -138,7 +138,7 @@ def to_interim(start_date: str = CURRENT_SMOC_START_DATE, end_date: str = CURREN
     df = df.set_index("time_pht")[keep_cols]
     df = df[~df.index.duplicated(keep="first")].sort_index()
 
-    # Reindex to canonical target hourly index across full SMOC window (2020-11-01 to 2026-10-03)
+    # Reindex to the full hourly index of the SMOC range (2020-11-01 to 2026-10-03)
     full_idx = target_hourly_index(start_date, end_date)
     df = df.reindex(full_idx)
     is_missing = df["current_u"].isna()
@@ -161,17 +161,17 @@ def to_interim(start_date: str = CURRENT_SMOC_START_DATE, end_date: str = CURREN
         df["stokes_speed"] = np.sqrt(df["stokes_u"] ** 2 + df["stokes_v"] ** 2)
         df["stokes_dir"] = (np.degrees(np.arctan2(df["stokes_v"], df["stokes_u"]))) % 360
 
-    # Closure verification log across full series
+    # Log how well the parts add up
     if all(k in df.columns for k in ["current_u", "eulerian_u", "tide_u", "stokes_u"]):
         u_closure = np.abs(df["current_u"] - (df["eulerian_u"] + df["tide_u"] + df["stokes_u"]))
         v_closure = np.abs(df["current_v"] - (df["eulerian_v"] + df["tide_v"] + df["stokes_v"]))
         print(f"[Closure Test] Max |utotal - (uo+utide+vsdx)|: {u_closure.max():.6f} m/s, Mean: {u_closure.mean():.6f} m/s")
         print(f"[Closure Test] Max |vtotal - (vo+vtide+vsdy)|: {v_closure.max():.6f} m/s, Mean: {v_closure.mean():.6f} m/s")
 
-    # Explicit flag so downstream ML knows if an hour was interpolated or native
+    # Flag so the ML code knows which hours are interpolated
     df["current_is_interpolated"] = [ts not in native_times for ts in df.index]
 
-    # Quarantine provisional rows (last 24 hours of SMOC: operational lag cutoff T-24h)
+    # Mark the last 24 hours as provisional (SMOC is 24h late)
     df["is_provisional"] = False
     if len(df) >= 24:
         df.iloc[-24:, df.columns.get_loc("is_provisional")] = True

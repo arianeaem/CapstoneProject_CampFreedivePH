@@ -123,7 +123,7 @@
                 </div>
             </div>
 
-            <!-- Transportation Hub Selection (Editable only if carpool availed) -->
+            <!-- Carpool pickup (can only change if they have carpool) -->
             <div class="pt-2">
                 @if($booking->pickup_option === 'carpool')
                     <div>
@@ -146,7 +146,7 @@
                 @endif
             </div>
 
-            <!-- Boat Dive Status (Read-Only) -->
+            <!-- Boat dive (read only) -->
             <div class="pt-1 text-sm text-[#6E6E73] flex items-center gap-2">
                 <span>Sanctuary Boat Dive Add-on:</span>
                 <strong class="text-[#1D1D1F]">{{ $booking->boat_dive ? 'Yes (+₱600/person included)' : 'No (Shore Sanctuary Dives Only)' }}</strong>
@@ -340,7 +340,7 @@
             </div>
         </div>
 
-        <!-- SECTION 4: MANDATORY REASON FOR EDIT (RA 10173 AUDIT) -->
+        <!-- 4. Reason for the edit (required, RA 10173 audit) -->
         <div class="bg-white rounded-xl border border-[#E5E5EA] p-6 space-y-3">
             <div class="flex items-center justify-between pb-2">
                 <h3 class="text-base font-bold text-[#1D1D1F]">4. System Audit Log Note</h3>

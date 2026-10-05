@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * ML forecast for ONE real scheduled batch. Never an actual/historical record.
+ * ML forecast for one scheduled batch. Not real booking data.
  */
 class BatchDemandForecast extends Model
 {

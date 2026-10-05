@@ -1,7 +1,6 @@
 """
-Real feature extraction module for Camp FreedivePH.
-Extracts the canonical 38 physical and calendar features declared in feature_manifest.json
-from snapshot datasets, strictly respecting operational lags (Waves 12h, Currents 24h).
+Builds the 38 features listed in feature_manifest.json from the snapshot data,
+using the right delays (waves 12h, currents 24h).
 """
 
 from pathlib import Path
@@ -28,18 +27,17 @@ def extract_features_at_origin(
     df_era5: Optional[pd.DataFrame] = None
 ) -> pd.Series:
     """
-    Constructs the exact 38-feature vector for a forecast issued at origin_time_utc
-    targeting (origin_time_utc + horizon_h).
-    
-    Guarantees:
-    - Wave features look back at least 12h (operational lag).
-    - Current features look back at least 24h (operational lag).
-    - Features and column order match feature_manifest.json exactly.
+    Build the 38 features for a forecast made at origin_time_utc
+    for the time origin_time_utc + horizon_h.
+
+    - wave features look back at least 12h
+    - current features look back at least 24h
+    - names and order are the same as feature_manifest.json
     """
     manifest = load_feature_manifest()
     features_spec = manifest["features"]
 
-    # Align tz to UTC
+    # Use UTC
     t0 = origin_time_utc if origin_time_utc.tzinfo is not None else origin_time_utc.tz_localize("UTC")
     t0_utc = t0.tz_convert("UTC")
     t_target_utc = t0_utc + pd.Timedelta(hours=horizon_h)
@@ -47,16 +45,16 @@ def extract_features_at_origin(
 
     feats = {}
 
-    # Waves lookups
+    # Wave lookups
     w_idx = df_waves.index.tz_convert("UTC") if df_waves.index.tz is not None else df_waves.index.tz_localize("UTC")
     c_idx = df_currents.index.tz_convert("UTC") if df_currents.index.tz is not None else df_currents.index.tz_localize("UTC")
 
-    # Helper for point lookup
+    # Get one value
     def get_wave_val(col: str, lag_h: int) -> float:
         ts = t0_utc - pd.Timedelta(hours=lag_h)
         if ts in w_idx:
             return float(df_waves.loc[ts, col])
-        # Fallback to nearest prior observation within 3h
+        # Use the closest earlier value within 3h
         prior = df_waves.loc[w_idx <= ts, col]
         return float(prior.iloc[-1]) if len(prior) > 0 else np.nan
 
@@ -67,7 +65,7 @@ def extract_features_at_origin(
         prior = df_currents.loc[c_idx <= ts, col]
         return float(prior.iloc[-1]) if len(prior) > 0 else np.nan
 
-    # Waves rolling slices (strictly up to t0 - 12h)
+    # Wave rolling windows (up to t0 - 12h)
     w_history = df_waves.loc[w_idx <= (t0_utc - pd.Timedelta(hours=12))]
     c_history = df_currents.loc[c_idx <= (t0_utc - pd.Timedelta(hours=24))]
 
@@ -97,14 +95,14 @@ def extract_features_at_origin(
     feats["wind_wave_height_lag_12h"] = get_wave_val("wind_wave_height", 12)
     feats["wind_wave_height_lag_24h"] = get_wave_val("wind_wave_height", 24)
 
-    # Derived wave physics
+    # Wave values computed from other values
     hs12 = feats["hs_lag_12h"]
     tp12 = feats["tp_lag_12h"]
     sw12 = feats["swell_height_lag_12h"]
     feats["wave_steepness_lag_12h"] = float(hs12 / (1.56 * (tp12 ** 2))) if tp12 > 0 else 0.0
     feats["swell_ratio_lag_12h"] = float(sw12 / hs12) if hs12 > 0 else 0.0
 
-    # 2. Currents features
+    # 2. Current features
     feats["current_speed_lag_24h"] = get_curr_val("current_speed", 24)
     feats["current_speed_lag_48h"] = get_curr_val("current_speed", 48)
     feats["current_speed_lag_72h"] = get_curr_val("current_speed", 72)
@@ -126,7 +124,7 @@ def extract_features_at_origin(
     feats["stokes_v_lag_24h"] = get_curr_val("stokes_v", 24)
     feats["stokes_speed_lag_24h"] = get_curr_val("stokes_speed", 24)
 
-    # 3. ERA5 Atmospheric Features (lag >= 120h)
+    # 3. ERA5 features (lag >= 120h)
     if df_era5 is None:
         try:
             from training_eligibility import load_snapshot_dataset
@@ -176,7 +174,7 @@ def extract_features_at_origin(
             if f.get("source") == "era5":
                 feats[f["name"]] = 0.0
 
-    # 4. Calendar features at target time in PHT
+    # 4. Date features at the target time (PHT)
     doy = t_target_pht.dayofyear
     hod = t_target_pht.hour
     feats["doy_sin"] = float(np.sin(2.0 * np.pi * doy / 365.25))
@@ -184,6 +182,6 @@ def extract_features_at_origin(
     feats["hod_sin"] = float(np.sin(2.0 * np.pi * hod / 24.0))
     feats["hod_cos"] = float(np.cos(2.0 * np.pi * hod / 24.0))
 
-    # Build Series in exact manifest order
+    # Same order as the manifest
     ordered_names = [f["name"] for f in features_spec]
     return pd.Series([feats[k] for k in ordered_names], index=ordered_names, name=t0_utc)

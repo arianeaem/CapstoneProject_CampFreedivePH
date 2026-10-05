@@ -1,11 +1,11 @@
 """
-Evaluates seasonal ML skill breakdown (Amihan vs Habagat vs Transition)
-on the Development Cross-Validation partition (2022-11-01 to 2025-03-31).
+ML skill per season (Amihan vs Habagat vs transition)
+on the development CV data (2022-11-01 to 2025-03-31).
 
 Seasons:
-- Amihan (Northeast Monsoon): Dec, Jan, Feb
-- Habagat (Southwest Monsoon): Jun, Jul, Aug, Sep
-- Summer / Transition: Mar, Apr, May, Oct, Nov
+- Amihan (northeast monsoon): Dec, Jan, Feb
+- Habagat (southwest monsoon): Jun, Jul, Aug, Sep
+- Summer / transition: Mar, Apr, May, Oct, Nov
 """
 
 import json
@@ -247,7 +247,7 @@ def main():
                 "skill_ci_hi": round(s_hi, 4)
             })
 
-            # By Season
+            # Per season
             for sname in ["Amihan (NE Monsoon)", "Habagat (SW Monsoon)", "Summer / Transition"]:
                 sub = df_eval[df_eval["season"] == sname]
                 if len(sub) == 0:

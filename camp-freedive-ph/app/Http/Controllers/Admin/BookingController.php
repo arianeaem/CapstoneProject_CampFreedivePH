@@ -34,20 +34,20 @@ class BookingController extends Controller
     ) {}
 
     /**
-     * Display a listing of bookings.
+     * Booking list.
      */
     public function index(Request $request): View
     {
         $query = Booking::with('participants', 'payments', 'batch');
 
-        // By default, exclude unpaid downpayment draft bookings unless explicitly requested
+        // Hide unpaid draft bookings unless asked for
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         } else {
             $query->where('status', '!=', 'pending_downpayment');
         }
 
-        // Search filter (Booking #, Contact Name, Contact Phone, Email)
+        // Search (booking #, name, phone, email)
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
@@ -58,12 +58,12 @@ class BookingController extends Controller
             });
         }
 
-        // Class type filter
+        // Filter by class
         if ($request->filled('class_type')) {
             $query->where('class_type', $request->input('class_type'));
         }
 
-        // Date range filter
+        // Filter by date range
         if ($request->filled('date_from')) {
             $query->whereDate('start_date', '>=', $request->input('date_from'));
         }
@@ -71,7 +71,7 @@ class BookingController extends Controller
             $query->whereDate('start_date', '<=', $request->input('date_to'));
         }
 
-        // Payment status filter
+        // Filter by payment status
         if ($request->filled('payment_status')) {
             $pStatus = $request->input('payment_status');
             if ($pStatus === 'paid') {
@@ -81,7 +81,7 @@ class BookingController extends Controller
             }
         }
 
-        // Batch assignment filter
+        // Filter by batch
         if ($request->filled('batch_status')) {
             if ($request->input('batch_status') === 'unassigned') {
                 $query->whereNull('batch_id');
@@ -90,7 +90,7 @@ class BookingController extends Controller
             }
         }
 
-        // Sorting (Default: Newest to Oldest)
+        // Sorting (newest first by default)
         $sort = $request->input('sort', 'created_desc');
         match ($sort) {
             'created_desc' => $query->latest('created_at'),
@@ -124,7 +124,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Show the manual walk-in / phone booking creation form.
+     * Form for walk-in or phone bookings.
      */
     public function create(): View
     {
@@ -162,7 +162,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Store a manually entered walk-in / phone booking.
+     * Save a walk-in or phone booking.
      */
     public function store(StoreBookingRequest $request): RedirectResponse
     {
@@ -171,7 +171,7 @@ class BookingController extends Controller
 
         $participantCount = count($validated['participants']);
 
-        // Check 45 pax batch capacity ceiling
+        // Check the 45 people limit
         $startDate = $validated['start_date'];
         $existingPax = (int) Booking::whereDate('start_date', $startDate)
             ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest'])
@@ -203,7 +203,7 @@ class BookingController extends Controller
         $environmentalFee = $envRate * $participantCount;
         $totalAmount = $subtotal + $carpoolFee + $boatDiveFee + $lguFee + $environmentalFee;
 
-        // Downpayment rule
+        // Downpayment
         $carpoolDp = (float) ($settingService->get('program_pricing.downpayment_carpool', 3000.00) ?? 3000.00);
         $ownTranspoDp = (float) ($settingService->get('program_pricing.downpayment_own_transpo', 2000.00) ?? 2000.00);
         $downpaymentPerHead = ($validated['pickup_option'] === 'carpool') ? $carpoolDp : $ownTranspoDp;
@@ -212,7 +212,7 @@ class BookingController extends Controller
         $paidAmount = ($validated['payment_stage'] === 'full') ? $totalAmount : $downpaymentAmount;
         $balanceAmount = $totalAmount - $paidAmount;
 
-        // Generate unique Booking Number and 4-digit PIN
+        // Make a unique booking number and 4-digit PIN
         $bookingNumber = 'CFP-' . date('Y') . '-' . str_pad(mt_rand(1000, 9999), 4, '0', STR_PAD_LEFT);
         while (Booking::where('booking_number', $bookingNumber)->exists()) {
             $bookingNumber = 'CFP-' . date('Y') . '-' . str_pad(mt_rand(1000, 9999), 4, '0', STR_PAD_LEFT);
@@ -281,7 +281,7 @@ class BookingController extends Controller
                 ]);
             }
 
-            // Record offline payment
+            // Save the offline payment
             Payment::create([
                 'booking_id' => $booking->id,
                 'payment_method' => $validated['payment_method'],
@@ -292,7 +292,7 @@ class BookingController extends Controller
                 'paid_at' => now(),
             ]);
 
-            // Initial Status Log
+            // First status log
             BookingStatusLog::create([
                 'booking_id' => $booking->id,
                 'old_status' => 'new',
@@ -320,7 +320,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Display full booking detail view.
+     * Booking details page.
      */
     public function show(Booking $booking): View
     {
@@ -332,7 +332,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Show booking edit form (RA 10173 compliant).
+     * Edit booking form.
      */
     public function edit(Booking $booking): View
     {
@@ -350,7 +350,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Update booking and participant details with immutable audit trail.
+     * Update the booking and participants, and log the changes.
      */
     public function update(UpdateBookingRequest $request, Booking $booking): RedirectResponse
     {
@@ -363,13 +363,13 @@ class BookingController extends Controller
             return back()->withInput()->with('error', 'Adding or removing participants is not permitted when editing booking details. Only existing participants can be modified.');
         }
 
-        // Transportation option and boat dive are fixed to preserve pricing & downpayment agreement
+        // Transport and boat dive can't be changed because they affect the price and downpayment
         $pickupOption = $booking->pickup_option;
         $pickupLocation = ($pickupOption === 'carpool') ? ($validated['pickup_location'] ?? $booking->pickup_location) : null;
         $boatDive = (bool)$booking->boat_dive;
 
-        // Pricing is a snapshot taken when the booking is created. Editing guest
-        // details or dates must not re-evaluate current rules for this booking.
+        // Keep the price from when the booking was made.
+        // Editing details or dates shouldn't apply the current pricing rules.
         $carpoolFee = (float) $booking->carpool_fee;
         $boatDiveFee = (float) $booking->boat_dive_fee;
         $lguFee = (float) $booking->lgu_fee;
@@ -379,7 +379,7 @@ class BookingController extends Controller
         $downpaymentAmount = (float) $booking->downpayment_amount;
         $balanceAmount = $totalAmount - $booking->payments()->whereIn('status', ['completed', 'paid'])->sum('amount');
 
-        // Track changes for immutable audit trail (RA 10173)
+        // Track what changed for the audit log (RA 10173)
         $diffs = [];
         if ($booking->start_date->format('Y-m-d') !== $validated['start_date']) {
             $diffs[] = "Dates: {$booking->start_date->format('Y-m-d')} {$validated['start_date']}";
@@ -397,7 +397,7 @@ class BookingController extends Controller
             $diffs[] = "Carpool Hub: " . ($booking->pickup_location ?: 'None') . " " . ($pickupLocation ?: 'None');
         }
 
-        // Captured before the update so the customer email can show old vs new values
+        // Get the changes before saving so the email can show old and new values
         $customerChanges = $this->collectCustomerChanges($booking, $validated, $pickupLocation);
         $previousEmail = $booking->contact_email;
 
@@ -438,7 +438,7 @@ class BookingController extends Controller
                 'contact_facebook' => $validated['contact_facebook'] ?? null,
             ]);
 
-            // Update existing participants
+            // Update the participants
             foreach ($validated['participants'] as $pData) {
                 if (!empty($pData['id'])) {
                     $participant = BookingParticipant::find($pData['id']);
@@ -470,7 +470,7 @@ class BookingController extends Controller
             ]);
         });
 
-        // Immutable Audit Log for Data Privacy Act (RA 10173) compliance
+        // Audit log (Data Privacy Act, RA 10173)
         AuditLogger::log(
             'BOOKING_DATA_MODIFIED',
             "Booking #{$booking->booking_number} modified by {$currentUser->name} ({$currentUser->role}). Reason: {$validated['edit_reason']}. " . (!empty($diffs) ? implode(', ', $diffs) : 'Participant information synced.'),
@@ -487,7 +487,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Customer-facing list of changed fields (label, old, new) for the booking-updated email.
+     * List of changed fields (label, old, new) for the customer email.
      */
     protected function collectCustomerChanges(Booking $booking, array $validated, ?string $pickupLocation): array
     {
@@ -528,7 +528,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Email the customer about an admin edit; the previous address is also notified when the email itself changed.
+     * Email the customer about the changes. If the email address was changed, the old one gets it too.
      */
     protected function notifyCustomerOfEdit(Booking $booking, array $changes, ?string $previousEmail, $currentUser): bool
     {
@@ -560,7 +560,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Update booking lifecycle status.
+     * Change the booking status.
      */
     public function updateStatus(UpdateBookingStatusRequest $request, Booking $booking): RedirectResponse
     {
@@ -577,7 +577,7 @@ class BookingController extends Controller
 
         $note = $validated['note'] ?: "Status updated from {$oldStatus} to {$newStatus} by {$currentUser->name}";
 
-        // Specific handling for No-show forfeiture
+        // No-show
         if ($newStatus === 'no_show') {
             $note .= ' (No-show: Downpayment forfeited per camp policy)';
         }

@@ -1,6 +1,6 @@
 """
-Trains multi-horizon XGBoost forecaster for wave variables (hs, tp, swell_height, wind_wave_height).
-Takes horizon as an input feature and predicts target at t+H (H in [1, 6, 12, 24, 48, 72, 96, 144] hours).
+Trains the XGBoost forecaster for the waves (hs, tp, swell_height, wind_wave_height).
+Horizon is an input and it predicts the value at t+H (H in [1, 6, 12, 24, 48, 72, 96, 144] hours).
 
 Run from project root: python src/models/train_wave_forecaster.py
 """
@@ -52,7 +52,7 @@ def main():
     stacked = build_stacked_dataset(df, lagged)
     print(f"Stacked multi-horizon dataset: {stacked.shape[0]} rows, {stacked.shape[1]} columns\n")
 
-    train, val, test = temporal_split(stacked)  # test untouched
+    train, val, test = temporal_split(stacked)  # test is not used
     print(f"Train split: {len(train)} rows ({train.index.min()} to {train.index.max()})")
     print(f"Val split:   {len(val)} rows ({val.index.min()} to {val.index.max()})")
     print(f"Test split:  {len(test)} rows (held out)\n")
@@ -110,7 +110,7 @@ def main():
         model.save_model(str(model_path))
         print(f"Saved model to {model_path}")
 
-        # Per-horizon validation evaluation
+        # Validation results per horizon
         val_preds = model.predict(val[feature_cols])
         target_metrics = {"hyperparameters": best_params, "horizons": {}}
 

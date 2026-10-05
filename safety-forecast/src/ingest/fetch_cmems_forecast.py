@@ -1,11 +1,11 @@
 """
-Scheduled Daily Ingestion & Archival of CMEMS Operational Forecasts & Analysis.
-Pulls:
-1. Hourly Current Analysis & 10-day Forecast via SMOC (cmems_mod_glo_phy_anfc_merged-uv_PT1H-i).
-2. 3-hourly Wave Analysis & 10-day Forecast (cmems_mod_glo_wav_anfc_0.083deg_PT3H-i).
+Daily download of the CMEMS forecasts and analysis.
+Gets:
+1. hourly current analysis and 10-day forecast from SMOC (cmems_mod_glo_phy_anfc_merged-uv_PT1H-i)
+2. 3-hourly wave analysis and 10-day forecast (cmems_mod_glo_wav_anfc_0.083deg_PT3H-i)
 
-Uses unified spatial extraction (extract_nearest_ocean_cell) and stores continuous
-realized observations + forecasts into the local operational store.
+Uses extract_nearest_ocean_cell and saves the observed values and forecasts
+in the local store.
 """
 
 import os
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-# Ensure project root is in sys.path
+# Add the project root to sys.path
 from config import PROJECT_ROOT, DATA_ROOT, CACHE_DIR, OBSERVED_STORE_DIR, SITE_LAT, SITE_LON, TARGET_TIMEZONE
 from spatial_extraction import extract_nearest_ocean_cell
 
@@ -52,7 +52,7 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
     logger.info("=" * 80)
 
     # -------------------------------------------------------------------------
-    # 1. Currents (SMOC Hourly or 6H fallback)
+    # 1. Currents (SMOC hourly, or 6H if hourly is not available)
     # -------------------------------------------------------------------------
     curr_nc = CACHE_DIR / "live_currents_raw.nc"
     curr_success = False
@@ -74,11 +74,10 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
         except Exception as e:
             logger.warning(f"Failed pulling from {did}: {e}")
 
-    # Local fetch/ingestion timestamp (records when the slice was pulled from upstream,
-    # distinct from the provider's numerical model run cycle issuance timestamp)
+    # When we downloaded it (not the same as when CMEMS ran the model)
     issue_time_str = now_utc.isoformat()
 
-    # Import lag cutoffs from config
+    # Delays from config
     from config import get_serving_cutoff, OPERATIONAL_LAGS
 
     if curr_success and curr_nc.exists():
@@ -86,7 +85,7 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
         extracted_c, meta_c = extract_nearest_ocean_cell(ds_c, primary_var="uo")
         df_c = extracted_c.to_dataframe().reset_index()
         
-        # Include tidal components if available
+        # Add the tide parts if they exist
         cols = {"uo": "current_u", "vo": "current_v"}
         if "utide" in df_c.columns:
             cols["utide"] = "tide_u"
@@ -100,25 +99,25 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
         df_c["current_dir"] = (np.degrees(np.arctan2(df_c["current_v"], df_c["current_u"]))) % 360
         df_c["issue_time_utc"] = issue_time_str
         
-        # True operational lag cutoff (T - 24h for currents)
+        # Delay cutoff (T - 24h for currents)
         curr_cutoff = get_serving_cutoff("currents", now_utc)
         df_c["is_verified"] = df_c["time_utc"] <= curr_cutoff
         df_c["is_provisional"] = (df_c["time_utc"] > curr_cutoff) & (df_c["time_utc"] <= now_utc)
         df_c["is_forecast"] = df_c["time_utc"] > now_utc
         
-        # Save operational forecast cache
+        # Save the forecast cache
         curr_cache_file = CACHE_DIR / "cmems_currents_forecast_cache.parquet"
         df_c.to_parquet(curr_cache_file)
         logger.info(f"Saved {len(df_c)} current rows (cutoff: {curr_cutoff}, verified={df_c['is_verified'].sum()}, provisional={df_c['is_provisional'].sum()}, forecast={df_c['is_forecast'].sum()}) to {curr_cache_file}")
 
-        # Store to observed_store: only realized observations <= now_utc
-        # Provisional rows are marked so feature builder can exclude them and subsequent runs overwrite them
+        # Save to observed_store: only observed values <= now_utc.
+        # Provisional rows are marked so the feature builder can skip them and the next run replaces them.
         obs_c = df_c[df_c["time_utc"] <= now_utc].copy()
         if len(obs_c) > 0:
             obs_file = OBSERVED_STORE_DIR / "cmems_currents_observed_archive.parquet"
             if obs_file.exists():
                 existing_obs = pd.read_parquet(obs_file)
-                # Overwrite provisional rows with latest fetch
+                # Replace the provisional rows with the new download
                 combined_obs = pd.concat([existing_obs, obs_c]).drop_duplicates(subset=["time_utc"], keep="last")
             else:
                 combined_obs = obs_c
@@ -126,7 +125,7 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
             logger.info(f"Appended current observations to {obs_file} (Total: {len(combined_obs)}, Verified: {combined_obs['is_verified'].sum()}, Provisional: {combined_obs['is_provisional'].sum()})")
 
     # -------------------------------------------------------------------------
-    # 2. Waves (1/12° Analysis/Forecast)
+    # 2. Waves (1/12 deg analysis/forecast)
     # -------------------------------------------------------------------------
     wave_nc = CACHE_DIR / "live_waves_raw.nc"
     try:
@@ -155,7 +154,7 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
         df_w["time_pht"] = df_w["time_utc"].dt.tz_convert("Asia/Manila")
         df_w["issue_time_utc"] = issue_time_str
 
-        # True operational lag cutoff (T - 12h for waves)
+        # Delay cutoff (T - 12h for waves)
         wave_cutoff = get_serving_cutoff("waves", now_utc)
         df_w["is_verified"] = df_w["time_utc"] <= wave_cutoff
         df_w["is_provisional"] = (df_w["time_utc"] > wave_cutoff) & (df_w["time_utc"] <= now_utc)
@@ -165,7 +164,7 @@ def fetch_and_archive(lookback_days: int = 3, forecast_days: int = 10) -> bool:
         df_w.to_parquet(wave_cache_file)
         logger.info(f"Saved {len(df_w)} wave rows (cutoff: {wave_cutoff}, verified={df_w['is_verified'].sum()}, provisional={df_w['is_provisional'].sum()}, forecast={df_w['is_forecast'].sum()}) to {wave_cache_file}")
 
-        # Store to observed_store: only realized observations <= now_utc
+        # Save to observed_store: only observed values <= now_utc
         obs_w = df_w[df_w["time_utc"] <= now_utc].copy()
         if len(obs_w) > 0:
             obs_file_w = OBSERVED_STORE_DIR / "cmems_waves_observed_archive.parquet"

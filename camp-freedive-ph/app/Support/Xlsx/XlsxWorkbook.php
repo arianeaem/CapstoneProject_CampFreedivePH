@@ -3,10 +3,10 @@
 namespace App\Support\Xlsx;
 
 /**
- * Minimal, dependency-free .xlsx writer used by the report exports.
- * Every export shares the same look: a branded title block, maroon table headers,
- * peso / percent / number formats, bold total rows, frozen headers and filters on list sheets.
- * Builds the zip by hand (stored entries), so ext-zip is not required.
+ * Simple .xlsx writer for the report exports (no extra library needed).
+ * All exports look the same: title at the top, maroon headers, peso / % / number formats,
+ * bold totals, frozen headers and filters on the list sheets.
+ * The zip is built by hand, so ext-zip is not needed.
  */
 class XlsxWorkbook
 {
@@ -93,7 +93,7 @@ class XlsxWorkbook
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' . $rels . '</Relationships>';
     }
 
-    /** Brand styles: maroon #780000, light maroon #F8EAEA, grey text #6E6E73. */
+    /** Colors: maroon #780000, light maroon #F8EAEA, grey text #6E6E73. */
     protected function styles(): string
     {
         $numFmts = '<numFmts count="3"><numFmt numFmtId="164" formatCode="&quot;₱&quot;#,##0.00"/><numFmt numFmtId="165" formatCode="0.0&quot;%&quot;"/><numFmt numFmtId="166" formatCode="mmm d, yyyy"/></numFmts>';
@@ -138,7 +138,7 @@ class XlsxWorkbook
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
     }
 
-    /** Store-only zip archive (no compression needed for small reports). */
+    /** Zip without compression (reports are small). */
     protected function zip(array $files): string
     {
         $data = '';

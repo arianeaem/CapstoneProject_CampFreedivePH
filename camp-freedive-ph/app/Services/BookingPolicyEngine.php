@@ -6,28 +6,20 @@ use App\Models\Booking;
 use Carbon\Carbon;
 
 /**
- * Booking Policy & Penalty Calculation Engine.
+ * Rules for guest reschedules and cancellations.
  *
- * Operational & Business Context:
- * Evaluates dynamic guest reschedule and cancellation eligibility based on lead time
- * to the dive weekend and active maritime force majeure conditions (e.g., PAGASA Typhoon
- * Signals, PCG Gale Warnings).
- *
- * Financial & Marine Safety Rationale:
- * 1. Force Majeure: 100% full downpayment refund or free reschedule granted immediately
- *    to protect diver safety and comply with Philippine Coast Guard advisory orders.
- * 2. > 14 Days Out: 100% refund or free reschedule allowed as resort slots and outrigger
- *    bancas can still be re-allocated to waitlisted divers.
- * 3. 7 to 14 Days Out: Rescheduling is free, but cancellation is accepted with 0% refund
- *    under the capstone policy.
- * 4. < 7 Days Out: Cancellation and rescheduling are locked out because instructor payroll,
- *    boat fuel, and gear transport are non-refundable and committed.
+ * Based on how many days are left before the dive, and if there is a storm warning
+ * (PAGASA typhoon signal, Coast Guard gale warning):
+ * 1. Storm / weather: full refund or free reschedule.
+ * 2. More than 14 days: full refund or free reschedule (we can still give the slots to others).
+ * 3. 7 to 14 days: free reschedule, but cancelling gives 0% refund.
+ * 4. Less than 7 days: no cancel or reschedule (coaches, boat and gear are already paid for).
  */
 class BookingPolicyEngine
 {
     /**
-     * @param WeatherSafetyService $weatherService Maritime safety evaluation service for storm signal checks
-     * @param SystemSettingService|null $settingService Centralized system settings service
+     * @param WeatherSafetyService $weatherService used to check storm warnings
+     * @param SystemSettingService|null $settingService
      */
     public function __construct(
         protected WeatherSafetyService $weatherService,
@@ -37,9 +29,9 @@ class BookingPolicyEngine
     }
 
     /**
-     * Evaluates live reschedule eligibility, refund percentage, and customer-facing advisories for a booking.
+     * Check what the guest can do with a booking right now.
      *
-     * @param Booking $booking The active booking instance to evaluate
+     * @param Booking $booking
      * @return array{
      *     days_until_dive: int,
      *     is_force_majeure: bool,
@@ -53,7 +45,7 @@ class BookingPolicyEngine
      *     has_pending_reschedule: bool,
      *     has_pending_cancellation: bool,
      *     is_cancelled: bool
-     * } Structured evaluation result
+     * }
      */
     public function evaluate(Booking $booking, \Carbon\Carbon|\DateTimeInterface|string|null $asOfDate = null): array
     {
@@ -64,14 +56,14 @@ class BookingPolicyEngine
         $fullRefundDays = (int) ($this->settingService?->get('booking_cancellation.full_refund_threshold_days', 14) ?? 14);
         $rescheduleOnlyDays = (int) ($this->settingService?->get('booking_cancellation.reschedule_only_threshold_days', 7) ?? 7);
 
-        // Check if there is an active storm / typhoon warning for that dive date in Mabini, Batangas
+        // Is there a storm warning for the dive date?
         $isForceMajeure = $this->weatherService->isStormSignalActive($booking->start_date)
-            // The batch's official safety assessment rating Critical Risk counts too (matches the guest email)
+            // A Critical Risk rating on the batch counts too (same as the guest email)
             || ($booking->batch?->risk_classification === 'critical_risk' && $daysUntilDive >= 0);
 
-        // Base policy tier calculation based on days until dive & force majeure
+        // Pick the policy based on days left and weather
         if ($isForceMajeure) {
-            // Diver safety takes precedence: full downpayment refund on PCG gale / typhoon warnings
+            // Safety first: full refund on gale / typhoon warnings
             $policyTier = 'force_majeure';
             $refundPercentage = 100;
             $calculatedRefund = (float) $booking->downpayment_amount;
@@ -80,7 +72,7 @@ class BookingPolicyEngine
             $rescheduleMessage = 'Storm/Typhoon Warning Active: Free reschedule granted due to marine safety advisory.';
             $cancelMessage = 'Storm/Typhoon Warning Active: 100% full refund available due to force majeure.';
         } elseif ($daysUntilDive > $fullRefundDays) {
-            // Ample notice window: full refund or free reschedule as logistics can be rebooked
+            // Enough time: full refund or free reschedule
             $policyTier = 'more_than_two_weeks';
             $refundPercentage = 100;
             $calculatedRefund = (float) $booking->downpayment_amount;
@@ -89,7 +81,7 @@ class BookingPolicyEngine
             $rescheduleMessage = "Allowed: More than {$fullRefundDays} days before dive date. Free reschedule to any available safe batch.";
             $cancelMessage = 'Eligible for 100% Full Downpayment Refund (₱' . number_format($booking->downpayment_amount, 2) . ') or Free Reschedule.';
         } elseif ($daysUntilDive >= $rescheduleOnlyDays && $daysUntilDive <= $fullRefundDays) {
-            // Mid-range window: free reschedule allowed to retain customer; cancellation forfeits downpayment
+            // Free reschedule, but cancelling loses the downpayment
             $policyTier = 'within_two_weeks';
             $refundPercentage = 0;
             $calculatedRefund = 0.00;
@@ -98,7 +90,7 @@ class BookingPolicyEngine
             $rescheduleMessage = "Allowed: Within {$rescheduleOnlyDays} to {$fullRefundDays} days window. Free reschedule to another available date.";
             $cancelMessage = "0% Refund (Downpayment Forfeited): Cancellations made within {$rescheduleOnlyDays} to {$fullRefundDays} days forfeit downpayment (free reschedule is permitted).";
         } else {
-            // < rescheduleOnlyDays: strict lockout because coach staffing, resort rooms, and boat charter deposits are locked
+            // Too close to the dive: coaches, rooms and boat are already booked
             $policyTier = 'within_one_week';
             $refundPercentage = 0;
             $calculatedRefund = 0.00;
@@ -108,7 +100,7 @@ class BookingPolicyEngine
             $cancelMessage = "Not Allowed: Cancellations within {$rescheduleOnlyDays} days of the dive date are not accepted unless an official Typhoon/Coast Guard Gale warning creates a force-majeure situation.";
         }
 
-        // Status-specific overrides for self-service submission limits to prevent duplicate processing
+        // Block new requests if one is already pending or the booking is cancelled
         $hasPendingReschedule = ($booking->status === 'reschedule_requested');
         $hasPendingCancellation = ($booking->status === 'cancellation_requested');
         $isCancelled = in_array($booking->status, ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest']);

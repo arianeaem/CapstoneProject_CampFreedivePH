@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Batch Risk Assessments (Day 1 and Day 2 independent assessments per run)
+        // 1. Batch risk results (Day 1 and Day 2, one row each per run)
         Schema::create('batch_risk_assessments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('batch_id')->constrained('batches')->onDelete('cascade');
@@ -30,7 +30,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // 2. Hourly Assessments (Per-hour metrics for AM and PM windows)
+        // 2. Hourly results for the AM and PM windows
         Schema::create('hourly_assessments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('risk_assessment_id')->constrained('batch_risk_assessments')->onDelete('cascade');
@@ -55,7 +55,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // 3. Manual Overrides (PAGASA-style advisories)
+        // 3. Admin overrides (like PAGASA advisories)
         Schema::create('manual_overrides', function (Blueprint $table) {
             $table->id();
             $table->foreignId('batch_id')->constrained('batches')->onDelete('cascade');
@@ -70,7 +70,7 @@ return new class extends Migration
             $table->timestamp('created_at')->useCurrent();
         });
 
-        // 4. Notification Logs (Outbound cancellation & weather alert logs)
+        // 4. Sent cancellation and weather emails
         Schema::create('notification_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('batch_id')->nullable()->constrained('batches')->nullOnDelete();

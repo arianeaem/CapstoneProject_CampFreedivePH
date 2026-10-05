@@ -19,23 +19,17 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Core Logistics & Batch Lifecycle Domain Service.
+ * Handles batches (one batch = one 2-day weekend camp).
  *
- * Business Workflow & Domain Rules:
- * 1. Automatic Weekend Batch Grouping: Dynamically resolves or creates sequential 2D1N batch records
- *    when reservations are placed for upcoming weekends.
- * 2. Status Progression & State Machine:
- *    - `open` / `confirmed`: Accepting bookings up to the 45-pax cap.
- *    - `in_progress`: Active training execution in Anilao.
- *    - `completed`: Logged and archived post-trip.
- *    - `cancelled` / `cancelled_by_camp`: Force majeure weather cancellation with automated customer refunds.
- * 3. Immediate Weather Risk Assessment: Triggers WeatherForecastService upon batch creation to establish baseline safety.
+ * - finds or creates the batch when someone books a weekend
+ * - batch status: open/confirmed (taking bookings, max 45), in_progress, completed,
+ *   cancelled/cancelled_by_camp (weather cancellation with refund)
+ * - runs a weather check when a new batch is created
  */
 class BatchManagementService
 {
     /**
-     * Resequences all batches in strictly ascending order by start_date.
-     * Guarantees Batch 1 is earliest, Batch 2 is next, ..., Batch N is latest.
+     * Renumber all batches by start_date so Batch 1 is the earliest.
      */
     public function resequenceBatches(): void
     {
@@ -44,7 +38,7 @@ class BatchManagementService
             return;
         }
 
-        // Pass 1: Set temporary codes to avoid unique constraint collisions
+        // First set temporary codes so we don't hit the unique constraint
         $mapping = [];
         $index = 1;
         foreach ($batches as $batch) {
@@ -64,7 +58,7 @@ class BatchManagementService
             $index++;
         }
 
-        // Pass 2: Assign final chronological batch identifiers
+        // Then set the final batch numbers in date order
         foreach ($mapping as $item) {
             $item['batch']->update([
                 'name' => $item['newIdentifier'],
@@ -85,7 +79,7 @@ class BatchManagementService
     }
 
     /**
-     * Get the next suggested batch number.
+     * Get the next batch number.
      */
     public function getNextBatchNumber(?Carbon $date = null): int
     {
@@ -99,19 +93,19 @@ class BatchManagementService
     }
 
     /**
-     * Finds an active batch covering the dates or automatically creates a new sequential Batch.
+     * Find the batch for these dates, or create a new one.
      *
-     * @param Carbon|string|\DateTimeInterface $startDate Scheduled departure date.
-     * @param Carbon|string|\DateTimeInterface|null $endDate Scheduled return date (defaults to startDate + 1 day).
-     * @param User|null $creator User performing manual creation or null for automatic system creation.
-     * @return Batch Created or existing Batch instance.
+     * @param Carbon|string|\DateTimeInterface $startDate
+     * @param Carbon|string|\DateTimeInterface|null $endDate defaults to start date + 1 day
+     * @param User|null $creator null when the system creates it
+     * @return Batch
      */
     public function findOrCreateBatchForDates(Carbon|string|\DateTimeInterface $startDate, Carbon|string|\DateTimeInterface|null $endDate = null, ?User $creator = null): Batch
     {
         $startDate = Carbon::parse($startDate)->startOfDay();
         $endDate = $endDate ? Carbon::parse($endDate)->startOfDay() : $startDate->copy()->addDay();
 
-        // Check if an open/confirmed batch already exists for this exact start date
+        // Check if there is already an open/confirmed batch for this start date
         $existing = Batch::whereDate('start_date', $startDate->toDateString())
             ->whereIn('status', ['confirmed', 'open'])
             ->first();
@@ -149,14 +143,14 @@ class BatchManagementService
             $weatherService = app(\App\Services\WeatherForecastService::class);
             $weatherService->assessBatch($batch, null, $creator);
         } catch (\Throwable $e) {
-            // Weather service gracefully proceeds if outside 16 days or API is offline
+            // It's fine if the weather check fails (more than 16 days away or API down)
         }
 
         return $batch;
     }
 
     /**
-     * Create a new Batch and attach selected bookings.
+     * Create a batch and add the selected bookings to it.
      */
     public function createBatch(array $data, array $bookingIds, User $creator): Batch
     {
@@ -206,12 +200,12 @@ class BatchManagementService
                     'created_by' => $creator->id,
                 ]);
 
-                // Resequence if standard auto batch numbering is used
+                // Renumber if we use automatic batch numbers
                 $this->resequenceBatches();
                 $batch->refresh();
             }
 
-            // Link selected bookings
+            // Add the selected bookings
             if (!empty($bookingIds)) {
                 Booking::whereIn('id', $bookingIds)->update([
                     'batch_id' => $batch->id,
@@ -234,12 +228,12 @@ class BatchManagementService
                 $creator->name
             );
 
-            // Auto-run initial live weather assessment if within 16-day forecast horizon
+            // Run the first weather check if the batch is within 16 days
             try {
                 $weatherService = app(\App\Services\WeatherForecastService::class);
                 $weatherService->assessBatch($batch, null, $creator);
             } catch (\Exception $e) {
-                // If beyond forecast horizon (>16 days) or service unreachable, proceed gracefully
+                // More than 16 days away or the service is down, skip it
             }
 
             return $batch;
@@ -247,7 +241,7 @@ class BatchManagementService
     }
 
     /**
-     * Update whole-batch status and cascade to connected bookings.
+     * Change the batch status and update its bookings too.
      *
      * @throws Exception
      */
@@ -264,7 +258,7 @@ class BatchManagementService
                 return;
             }
 
-            // 1. Update Batch model
+            // 1. Update the batch
             $updateData = [
                 'status' => $newStatus,
                 'lifecycle_status' => $newStatus,
@@ -279,7 +273,7 @@ class BatchManagementService
 
             $batch->update($updateData);
 
-            // 2. Record in BatchStatusLog
+            // 2. Save the status log
             BatchStatusLog::create([
                 'batch_id' => $batch->id,
                 'old_status' => $oldStatus,
@@ -288,7 +282,7 @@ class BatchManagementService
                 'note' => $note,
             ]);
 
-            // 3. Cascade logic to connected bookings
+            // 3. Update the bookings
             $connectedBookings = $batch->bookings()
                 ->whereNotIn('status', ['cancelled_by_guest', 'no_show'])
                 ->get();
@@ -299,7 +293,7 @@ class BatchManagementService
                 if ($newStatus === 'cancelled_by_camp') {
                     $booking->update(['status' => 'cancelled_by_camp']);
 
-                    // Create auto refund eligibility trigger for paid bookings
+                    // Paid bookings get a refund request
                     $completedPayments = $booking->payments()->where('status', 'completed')->get();
                     foreach ($completedPayments as $payment) {
                         RefundRequest::create([
@@ -419,7 +413,7 @@ class BatchManagementService
     }
 
     /**
-     * Move a booking from its current batch to a new batch (or remove from batch).
+     * Move a booking to another batch (or take it out of its batch).
      */
     public function moveBooking(Booking $booking, ?Batch $targetBatch, User $changer, ?string $reason = null): void
     {
@@ -446,7 +440,7 @@ class BatchManagementService
     }
 
     /**
-     * Get unbatched confirmed bookings for a specific dive date.
+     * Confirmed bookings on a date that aren't in a batch yet.
      */
     public function getUnbatchedBookingsForDate(Carbon $date): Collection
     {

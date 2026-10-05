@@ -63,7 +63,7 @@ class Coach extends Model
     }
 
     /**
-     * Check if certification is expired as of a given date (default today).
+     * Check if the certification is expired on a date (default today).
      */
     public function isExpired(?Carbon $asOfDate = null): bool
     {
@@ -72,7 +72,7 @@ class Coach extends Model
     }
 
     /**
-     * Check if certification is expiring soon (within 30 days).
+     * Check if the certification expires within 30 days.
      */
     public function isExpiringSoon(?Carbon $asOfDate = null): bool
     {

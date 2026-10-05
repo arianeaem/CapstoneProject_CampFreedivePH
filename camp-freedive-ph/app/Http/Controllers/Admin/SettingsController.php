@@ -23,7 +23,7 @@ class SettingsController extends Controller
     ) {}
 
     /**
-     * Display the Central Settings Directory (PayMongo style master hub).
+     * Settings main page.
      */
     public function index(Request $request): View
     {
@@ -40,7 +40,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Edit Programs, Class Rates, Inclusions & Exclusions.
+     * Edit programs, class prices, inclusions and exclusions.
      */
     public function editPrograms(): View
     {
@@ -63,7 +63,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Update Programs, Class Rates, Inclusions & Exclusions.
+     * Save programs, class prices, inclusions and exclusions.
      */
     public function updatePrograms(UpdateProgramsRequest $request): RedirectResponse
     {
@@ -94,7 +94,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Edit Reservation Downpayment Deposits.
+     * Edit downpayment amounts.
      */
     public function editDeposits(): View
     {
@@ -108,7 +108,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Update Reservation Downpayment Deposits.
+     * Save downpayment amounts.
      */
     public function updateDeposits(UpdateDepositsRequest $request): RedirectResponse
     {
@@ -117,7 +117,7 @@ class SettingsController extends Controller
         $settingsToUpdate = [
             'program_pricing.downpayment_carpool' => number_format((float) $validated['downpayment_carpool'], 2, '.', ''),
             'program_pricing.downpayment_own_transpo' => number_format((float) $validated['downpayment_own_transpo'], 2, '.', ''),
-            // Keep legacy single key synced for backwards compatibility
+            // Also update the old single key so older code still works
             'program_pricing.downpayment_amount' => number_format((float) $validated['downpayment_carpool'], 2, '.', ''),
         ];
 
@@ -127,7 +127,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Edit Carpool, Boat Dive, LGU Fees & Pickup Locations.
+     * Edit carpool, boat dive, LGU fees and pickup locations.
      */
     public function editAddons(): View
     {
@@ -144,7 +144,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Update Carpool, Boat Dive, LGU Fees & Pickup Locations.
+     * Save carpool, boat dive, LGU fees and pickup locations.
      */
     public function updateAddons(UpdateAddonsRequest $request): RedirectResponse
     {
@@ -166,7 +166,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Edit Camp Operations & Ratios.
+     * Edit camp operations and ratios.
      */
     public function editOperations(): View
     {
@@ -181,7 +181,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Update Camp Operations & Ratios.
+     * Save camp operations and ratios.
      */
     public function updateOperations(UpdateOperationsRequest $request): RedirectResponse
     {
@@ -199,7 +199,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Edit Booking & Cancellation Policies.
+     * Edit booking and cancellation policies.
      */
     public function editCancellation(): View
     {
@@ -213,7 +213,7 @@ class SettingsController extends Controller
     }
 
     /**
-     * Update Booking & Cancellation Policies.
+     * Save booking and cancellation policies.
      */
     public function updateCancellation(UpdateCancellationPolicyRequest $request): RedirectResponse
     {

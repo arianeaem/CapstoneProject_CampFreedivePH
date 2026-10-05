@@ -24,9 +24,8 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Sends one sample of every system email to a single address so mail delivery
- * (e.g. Brevo SMTP) can be verified end to end. Uses existing records read-only;
- * nothing is created or modified in the database.
+ * Sends one of each email to one address so we can check that emails are working
+ * (e.g. Brevo SMTP). Only reads existing records, doesn't change the database.
  */
 class SendTestEmails extends Command
 {

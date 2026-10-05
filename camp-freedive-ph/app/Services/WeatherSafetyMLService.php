@@ -10,21 +10,15 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Weather Safety Machine Learning Microservice Client.
+ * Client for our Python ML service (FastAPI + ONNX models).
  *
- * Architecture & Dual-Engine Rationale:
- * This service communicates with the standalone Python FastAPI / ONNX inference microservice.
- * Camp FreedivePH uses a dual-engine architecture:
- * 1. Native PHP Heuristic Engine (WeatherForecastService): Evaluates 9 marine variables against Coast Guard safety rules.
- * 2. Predictive ONNX Microservice (WeatherSafetyMLService): Runs 12 multi-horizon regressor and classifier models
- *    predicting wave dynamics, wind speeds, and ocean currents up to 16 days ahead.
- * 3. Redis-Backed Circuit Breaker: Fails fast (<0.1ms) when the microservice is temporarily down, preventing
- *    HTTP connection timeouts from stalling PHP worker threads.
+ * We have two ways to check safety:
+ * 1. WeatherForecastService - PHP rules using 9 weather values
+ * 2. this class - calls the ML models (waves, wind, current, up to 16 days ahead)
  *
- * Fault Tolerance:
- * If the ML microservice is unreachable, times out, or returns a 5xx error, the client catches the exception,
- * trips the circuit breaker after 3 consecutive failures, and gracefully returns `null`. The calling controllers
- * automatically fall back to the native PHP heuristic engine ensuring zero downtime for customers booking sessions.
+ * If the ML service is down, slow or gives a 5xx error, we return null and the
+ * PHP rules are used instead. After 3 failures in a row the circuit breaker opens
+ * and we stop calling the service for a while, so pages don't hang waiting for it.
  */
 class WeatherSafetyMLService
 {
@@ -33,14 +27,14 @@ class WeatherSafetyMLService
     protected bool $enabled;
     protected ExternalApiClient $apiClient;
 
-    // Circuit Breaker State Constants
+    // Circuit breaker states
     public const CIRCUIT_STATE_CLOSED = 'CLOSED';
     public const CIRCUIT_STATE_OPEN = 'OPEN';
     public const CIRCUIT_STATE_HALF_OPEN = 'HALF_OPEN';
 
-    // Circuit Breaker Operational Thresholds
-    public const FAILURE_THRESHOLD = 3; // 3 consecutive failures trip the circuit
-    public const COOLDOWN_SECONDS = 30; // 30 seconds cooldown before trial probe
+    // Circuit breaker settings
+    public const FAILURE_THRESHOLD = 3; // open after 3 failures in a row
+    public const COOLDOWN_SECONDS = 30; // wait 30 seconds before trying again
     public const CACHE_KEY_STATE = 'ml_circuit_breaker:state';
     public const CACHE_KEY_FAILURES = 'ml_circuit_breaker:failures';
     public const CACHE_KEY_TRIPPED_AT = 'ml_circuit_breaker:tripped_at';
@@ -72,9 +66,8 @@ class WeatherSafetyMLService
     public const TRAINED_HORIZONS = [1, 6, 12, 24, 48, 72, 96, 144, 168];
 
     /**
-     * Snap continuous lead time H = (target dive timestamp - current timestamp)
-     * to whichever of the 9 trained horizon buckets is closest to that H:
-     * [1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h, 168h].
+     * Round the lead time (dive time - now) to the closest trained horizon:
+     * 1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h or 168h.
      */
     public static function snapToClosestHorizon(int $hours): int
     {
@@ -94,10 +87,8 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Initializes the ML client from configuration.
-     *
-     * Note: Timeout is deliberately capped at 4s so slow network conditions
-     * never block the customer-facing booking checkout page.
+     * Load the settings from config.
+     * Timeout is only 4 seconds so a slow service doesn't block the booking page.
      */
     public function __construct(?ExternalApiClient $apiClient = null)
     {
@@ -108,9 +99,9 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Check if ML Safety microservice is enabled and configured.
+     * Check if the ML service is turned on and has a URL.
      *
-     * @return bool True if enabled and baseUrl is present.
+     * @return bool
      */
     public function isEnabled(): bool
     {
@@ -118,12 +109,11 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Determine whether the circuit breaker permits outbound requests.
+     * Check if we are allowed to call the service right now.
      *
-     * State Machine:
-     * - CLOSED: Requests pass through normally.
-     * - OPEN: Requests fail fast (<0.1ms) unless cooldown has expired.
-     * - HALF_OPEN: One trial probe request is permitted to test microservice recovery.
+     * - CLOSED: calls go through
+     * - OPEN: calls are skipped until the cooldown is over
+     * - HALF_OPEN: one test call is allowed to see if the service is back
      */
     public function isCircuitAvailable(): bool
     {
@@ -138,13 +128,13 @@ class WeatherSafetyMLService
             $elapsedSeconds = now()->timestamp - $trippedAt;
 
             if ($elapsedSeconds >= self::COOLDOWN_SECONDS) {
-                // Cooldown elapsed -> Transition to HALF_OPEN to probe microservice recovery
+                // Cooldown is over, allow one test call
                 Cache::put(self::CACHE_KEY_STATE, self::CIRCUIT_STATE_HALF_OPEN, now()->addMinutes(5));
                 Log::info('[WeatherSafetyMLService] Circuit breaker transitioning from OPEN to HALF_OPEN (probing recovery).');
                 return true;
             }
 
-            // Circuit remains open -> Fail-fast immediately
+            // Still open, skip the call
             return false;
         }
 
@@ -156,7 +146,7 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Record a successful request, resetting failures and closing the circuit.
+     * Call worked: reset the failures and close the circuit.
      */
     public function recordSuccess(): void
     {
@@ -171,7 +161,7 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Record a request failure (timeout or 5xx), incrementing counters and tripping circuit if threshold reached.
+     * Call failed (timeout or 5xx): count it and open the circuit if we hit the limit.
      */
     public function recordFailure(?string $reason = null): void
     {
@@ -188,7 +178,7 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Retrieve the current circuit breaker status for health monitoring and diagnostics.
+     * Current circuit breaker status (for the health page).
      */
     public function getCircuitStatus(): array
     {
@@ -208,7 +198,7 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Manually reset the circuit breaker state to CLOSED.
+     * Reset the circuit breaker to CLOSED.
      */
     public function resetCircuit(): void
     {
@@ -218,14 +208,14 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Assess a dive booking session through the 12 ONNX ML inference pipeline.
+     * Get the ML safety result for a dive date and time.
      *
      * @param string $date YYYY-MM-DD
      * @param string $startTime HH:MM
      * @param string $endTime HH:MM
-     * @param array $boundaryWeather Array of hourly atmospheric readings
-     * @param array|null $pagasa Optional PAGASA signals
-     * @return array|null Standardized ML assessment result or null on failure/disabled
+     * @param array $boundaryWeather hourly weather readings
+     * @param array|null $pagasa PAGASA signals (optional)
+     * @return array|null result, or null if it failed or is turned off
      */
     public function assessBookingSession(
         string $date,
@@ -238,7 +228,7 @@ class WeatherSafetyMLService
             return null;
         }
 
-        // Fail fast in <0.1ms if the circuit breaker is currently OPEN
+        // Skip the call if the circuit is open
         if (!$this->isCircuitAvailable()) {
             Log::debug("[WeatherSafetyMLService] Circuit is OPEN, skipping HTTP call to {$this->baseUrl} for {$date} (fail-fast active)");
             return null;
@@ -280,7 +270,7 @@ class WeatherSafetyMLService
 
             $data = $response->json();
 
-            // Strict Quantile Integrity: If physics_forecast object is present, validate all quantile bounds
+            // If there is a physics_forecast, check that the quantiles are valid
             if (isset($data['physics_forecast'])) {
                 $this->validateQuantiles($data['physics_forecast']);
             }
@@ -295,8 +285,8 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Fetch multi-horizon physics forecast with quantiles from /forecast endpoint.
-     * Enforces strict validation: malformed or missing quantiles increment the circuit breaker failure counter.
+     * Get the forecast with quantiles from /forecast.
+     * Bad or missing quantiles count as a failure for the circuit breaker.
      *
      * @param int $horizonHours
      * @param array|null $boundaryWeather
@@ -339,7 +329,7 @@ class WeatherSafetyMLService
                 throw new Exception("Missing physics_forecast object in /forecast response");
             }
 
-            // Strictly validate quantile schema — throws Exception on malformed/missing fields
+            // Check the quantiles (throws if something is wrong)
             $this->validateQuantiles($physics);
 
             $this->recordSuccess();
@@ -352,7 +342,7 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Directly query the ONNX raw physics engine without formatting or domain heuristics.
+     * Get the raw model forecast (no formatting).
      */
     public function assessRaw(int $horizonHours, ?array $boundaryWeather = null): ?array
     {
@@ -360,11 +350,11 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Validate that the physics forecast contains valid numeric p10, p50, p90 quantile structures.
+     * Check that the forecast has number values for p10, p50 and p90.
      *
      * @param array $physics
      * @return bool
-     * @throws Exception If any required quantile field is missing or malformed
+     * @throws Exception if a quantile is missing or not a number
      */
     public function validateQuantiles(array $physics): bool
     {
@@ -400,7 +390,7 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Transform raw Open-Meteo hourly readings into the schema required by ML inference.
+     * Convert Open-Meteo hourly data into the format the ML service needs.
      */
     public function formatBoundaryWeather(array $hourlyReadings): array
     {
@@ -443,14 +433,14 @@ class WeatherSafetyMLService
     }
 
     /**
-     * Standardize FastAPI response into uniform 5-tier classification structure.
+     * Convert the ML service response into our 5 safety levels.
      */
     protected function standardizeResponse(array $raw): array
     {
         $worstHour = $raw['worst_hour'] ?? [];
         $rawRec = $raw['overall_recommendation'] ?? $worstHour['final_tier_name'] ?? $raw['displayed_risk_name'] ?? 'Safe';
 
-        // Standardize recommendation to the 5 official safety tiers: Very Safe, Safe, Moderate, High Risk, Critical Risk
+        // Map the recommendation to: Very Safe, Safe, Moderate, High Risk, Critical Risk
         $recommendation = match (trim($rawRec)) {
             'Very Safe', 'GO' => 'Very Safe',
             'Safe', 'PROVISIONAL_GO' => 'Safe',

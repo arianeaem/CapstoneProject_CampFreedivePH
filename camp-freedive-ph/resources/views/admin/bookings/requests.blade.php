@@ -81,7 +81,7 @@
                         </span>
                     </div>
 
-                    <!-- Key Details Grid (2x2) -->
+                    <!-- Details (2x2) -->
                     <div class="mt-3 grid grid-cols-2 gap-3">
                         <div>
                             <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">CURRENT DATES</span>
@@ -131,7 +131,7 @@
         </div>
     </div>
 
-    <!-- Cancellation Requests (Direct 1-Step Cancellation & Refund Execution) -->
+    <!-- Cancellation requests -->
     <div class="space-y-3.5 pt-4">
         <div class="flex items-center justify-between">
             <h2 class="font-bold text-base text-[#1D1D1F] flex items-center gap-2">
@@ -179,7 +179,7 @@
                         </span>
                     </div>
 
-                    <!-- Key Details Grid (2x2) -->
+                    <!-- Details (2x2) -->
                     <div class="mt-3 grid grid-cols-2 gap-3">
                         <div>
                             <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">DIVE DATE</span>
@@ -230,7 +230,7 @@
                     @endif
                 </div>
 
-                <!-- Direct 1-Step Resolution Actions -->
+                <!-- Actions -->
                 <div class="space-y-2">
                     <div class="flex items-center gap-2">
                         <!-- Reject Action -->
@@ -241,7 +241,7 @@
                         </button>
 
                         @if(!$isEligible)
-                            <!-- Forfeit Deposit Action (Direct 1-Step) -->
+                            <!-- Forfeit downpayment -->
                             <form action="{{ route('admin.bookings.requests.cancellation.approve', $req) }}" method="POST" class="flex-1">
                                 @csrf
                                 <input type="hidden" name="action_type" value="forfeit">
@@ -252,7 +252,7 @@
                                 </button>
                             </form>
                         @else
-                            <!-- Approve & Execute Refund Action (Direct 1-Step) -->
+                            <!-- Approve and send refund -->
                             <form action="{{ route('admin.bookings.requests.cancellation.approve', $req) }}" method="POST" class="flex-1">
                                 @csrf
                                 <input type="hidden" name="action_type" value="policy_refund">

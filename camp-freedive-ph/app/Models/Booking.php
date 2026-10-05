@@ -10,18 +10,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * Booking Model representing a guest or group freediving reservation.
+ * A booking (one guest or a group).
  *
- * Domain & Financial Context:
- * - Requires a flat ₱3,000 per participant downpayment upon reservation to guarantee slot allocation.
- * - Supports self-service tracking, rescheduling, and cancellation requests via a unique booking number
- *   and 4-digit PIN authentication.
- * - Manages financial aggregates including base course fees, optional carpool transport, optional boat dive
- *   sessions, and Mabini LGU environmental fees.
+ * - a downpayment per person is needed to keep the slots
+ * - the guest uses the booking number and 4-digit PIN to view, reschedule or cancel
+ * - price = class fee + optional carpool + optional boat dive + LGU/environmental fees
  *
  * @property int $id
- * @property string $booking_number e.g. BK-2026-XXXX
- * @property string $pin 4-digit PIN for guest portal access
+ * @property string $booking_number e.g. CFP-2026-1234
+ * @property string $pin 4-digit PIN for the Manage Booking page
  * @property string $class_type discovery, fundive, refinement
  * @property bool $is_certified_diver
  * @property Carbon $start_date
@@ -29,7 +26,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property float $subtotal
  * @property float $total_amount
  * @property float $downpayment_amount
- * @property float $balance_amount Outstanding balance payable at camp
+ * @property float $balance_amount amount left to pay at the camp
  * @property string $status confirmed, completed, rescheduled, reschedule_requested, cancellation_requested, cancelled_by_camp, cancelled_by_guest, no_show
  */
 class Booking extends Model
@@ -146,7 +143,7 @@ class Booking extends Model
 
     public function getPaymentStatusBadgeAttribute(): array
     {
-        // Use eager-loaded payments when available (list pages) instead of two queries per booking
+        // Use the already loaded payments if we have them (saves two queries per booking)
         if ($this->relationLoaded('payments')) {
             $hasPayment = $this->payments->whereIn('status', ['completed', 'paid'])->isNotEmpty();
             $isRefunded = $this->payments->whereIn('status', ['refunded', 'refund_requested'])->isNotEmpty();
@@ -253,10 +250,10 @@ class Booking extends Model
     }
 
     /**
-     * Standardized date range format:
-     * - Same year: Oct 12 - Oct 13, 2026
-     * - Cross year: Dec 31, 2026 - Jan 1, 2027
-     * - Single date: Oct 12, 2026
+     * Date range text:
+     * - same year: Oct 12 - Oct 13, 2026
+     * - different year: Dec 31, 2026 - Jan 1, 2027
+     * - one day: Oct 12, 2026
      */
     public function getFormattedDateRangeAttribute(): string
     {

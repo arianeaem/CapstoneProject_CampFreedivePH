@@ -1,16 +1,16 @@
 """
-Seasonal Climatology Generator (Days 3-10 Operational Baseline & Prior).
+Seasonal climatology (used for days 3-10).
 
-Computes empirical percentiles (p10, p50, p90) and mean/std grouped by (month, hour)
-on the canonical verified training partition (2022-11-01 to 2025-09-30, no provisional data).
+Computes p10, p50, p90, mean and std per (month, hour) from the training data
+(2022-11-01 to 2025-09-30, no provisional rows).
 
-Adverse Tail Quantiles:
-  - Upper tail (P90): hs, swell_height, wind_wave_height, current_speed, wind_speed, wind_gust, rain_daily_mm
-  - Lower tail (P10): tp (period/chop), slp (cyclone pressure)
+Which tail is the bad one:
+  - high values are bad (P90): hs, swell_height, wind_wave_height, current_speed, wind_speed, wind_gust, rain_daily_mm
+  - low values are bad (P10): tp (short period = chop), slp (low pressure = storm)
 
-Used by the 3-Way Model Execution Router for:
-1. Long-range seasonal forecast envelope for Days 3-10 (where observation-based ML skill decays to prior).
-2. Climatology fallback prior for quarantined or high-uncertainty models.
+The model router uses it for:
+1. the forecast for days 3-10 (where the ML models are no better than the average)
+2. a fallback for models we don't trust or that are too uncertain
 """
 
 import sys
@@ -34,7 +34,7 @@ CORE_VARIABLES = {
     "atmosphere": ["wind_speed", "wind_gust", "slp"],
 }
 
-# Adverse Tail Specifications per PRD & Expert Rules
+# Which tail is the bad one for each variable
 ADVERSE_TAILS = {
     "p90": [
         "hs",
@@ -62,21 +62,21 @@ def generate_seasonal_climatology() -> Dict[str, Any]:
     print(f"Canonical Window: {TRAIN_START_UTC} to {TRAIN_MAX_UTC} (Verified Reanalysis/Final Only)")
     print("=" * 80)
 
-    # 1. Load Waves
+    # 1. Waves
     waves_path = SNAPSHOT_DIR / "cmems_waves.parquet"
     df_waves = pd.read_parquet(waves_path)
     df_waves = df_waves[~df_waves["is_provisional"]]
     idx_w = df_waves.index.tz_convert("UTC")
     df_waves = df_waves[(idx_w >= TRAIN_START_UTC) & (idx_w <= TRAIN_MAX_UTC)]
 
-    # 2. Load Currents
+    # 2. Currents
     curr_path = SNAPSHOT_DIR / "cmems_currents.parquet"
     df_curr = pd.read_parquet(curr_path)
     df_curr = df_curr[~df_curr["is_provisional"]]
     idx_c = df_curr.index.tz_convert("UTC")
     df_curr = df_curr[(idx_c >= TRAIN_START_UTC) & (idx_c <= TRAIN_MAX_UTC)]
 
-    # 3. Load Wind & Pressure
+    # 3. Wind and pressure
     era5_path = SNAPSHOT_DIR / "era5_wind_pressure.parquet"
     df_era5 = pd.read_parquet(era5_path)
     df_era5 = df_era5[~df_era5["is_provisional"]]
@@ -118,7 +118,7 @@ def generate_seasonal_climatology() -> Dict[str, Any]:
             mean_map = grouped.mean().to_dict()
             std_map = grouped.std().to_dict()
 
-            # Ensure all 12x24 = 288 pairs exist
+            # Make sure all 12x24 = 288 pairs exist
             for m in range(1, 13):
                 for h in range(24):
                     pair_key = f"{m:02d}_{h:02d}"
@@ -151,7 +151,7 @@ def generate_seasonal_climatology() -> Dict[str, Any]:
                         "adverse": stats["adverse"],
                     })
 
-    # 4. Daily Precipitation Climatology (IMERG Final Run V07B)
+    # 4. Daily rain climatology (IMERG Final Run V07B)
     gpm_path = INTERIM_DIR / "gpm_daily_precip.parquet"
     if gpm_path.exists():
         df_gpm = pd.read_parquet(gpm_path)
@@ -172,7 +172,7 @@ def generate_seasonal_climatology() -> Dict[str, Any]:
         std_r = grouped_r.std().to_dict()
 
         for m in range(1, 13):
-            # For daily rain, all hours of month m map to the same daily envelope
+            # For daily rain, every hour of the month uses the same daily value
             stats_r = {
                 "p10": round(float(p10_r.get(m, 0.0)), 4),
                 "p50": round(float(p50_r.get(m, 0.0)), 4),
@@ -204,7 +204,7 @@ def generate_seasonal_climatology() -> Dict[str, Any]:
         json.dump(lookup_table, f, indent=2)
     print(f"Exported JSON lookup to: {json_path}")
 
-    # Also save tabular DataFrame
+    # Also save the table
     flat_df = pd.DataFrame(flattened_rows)
     flat_df.to_parquet(OUTPUT_DIR / "seasonal_climatology_p10_p50_p90.parquet", index=False)
     print(f"Exported Parquet table to: {OUTPUT_DIR / 'seasonal_climatology_p10_p50_p90.parquet'}")
@@ -217,7 +217,7 @@ def generate_seasonal_climatology() -> Dict[str, Any]:
 
 
 class SeasonalClimatologyLookup:
-    """Fast in-memory lookup for seasonal estimates (Days 3-10)."""
+    """Fast lookup of the seasonal values (days 3-10)."""
     _instance: Optional["SeasonalClimatologyLookup"] = None
     _data: Dict[str, Any] = {}
 
@@ -228,11 +228,11 @@ class SeasonalClimatologyLookup:
                 generate_seasonal_climatology()
             with open(path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
-                # Support both direct variable keys and nested metadata/variables structure
+                # Works with both the flat keys and the nested metadata/variables format
                 SeasonalClimatologyLookup._data = raw.get("variables", raw)
 
     def get_percentiles(self, variable: str, timestamp: Union[pd.Timestamp, str]) -> Dict[str, float]:
-        """Returns dict with p10, p50, p90, mean, std, adverse for given variable and timestamp."""
+        """Returns p10, p50, p90, mean, std and the bad-tail value for a variable and time."""
         ts = pd.Timestamp(timestamp)
         if ts.tz is None:
             ts = ts.tz_localize("UTC")
@@ -245,7 +245,7 @@ class SeasonalClimatologyLookup:
         if pair_key in var_data:
             return var_data[pair_key]
 
-        # Graceful fallback: month-only average across hours
+        # Not found: use the month average over all hours
         month_entries = [v for k, v in var_data.items() if k.startswith(f"{ts.month:02d}_")]
         if month_entries:
             return {
@@ -260,7 +260,7 @@ class SeasonalClimatologyLookup:
         return {"p10": 0.0, "p50": 0.0, "p90": 0.0, "mean": 0.0, "std": 0.0, "adverse": 0.0}
 
     def get_adverse_bound(self, variable: str, timestamp: Union[pd.Timestamp, str]) -> float:
-        """Returns p10 for lower-tail hazards (tp, slp) and p90 for upper-tail hazards."""
+        """Returns p10 for low-is-bad variables (tp, slp) and p90 for the others."""
         stats = self.get_percentiles(variable, timestamp)
         if variable in ADVERSE_TAILS["p10"]:
             return stats["p10"]

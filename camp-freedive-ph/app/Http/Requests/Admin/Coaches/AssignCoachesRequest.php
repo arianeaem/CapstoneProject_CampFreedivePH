@@ -6,8 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * Validation for CoachMatchingController::assign() and ::batchAssign().
- * The coach-matching screens post three shapes: balanced assignments, a list of
- * students for one coach, or a plain list of coaches for a batch.
+ * The coach pages send 3 kinds of data: balanced assignments, a list of
+ * students for one coach, or just a list of coaches for a batch.
  */
 class AssignCoachesRequest extends FormRequest
 {

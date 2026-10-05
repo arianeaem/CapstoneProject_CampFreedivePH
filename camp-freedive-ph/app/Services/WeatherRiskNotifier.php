@@ -10,10 +10,10 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Weather risk notices sent less than 18 hours before a dive:
- * - Critical Risk: guests may reschedule for free or cancel with a full downpayment refund; owners/admins must decide.
- * - High Risk: everyone is informed; the dive is still planned (no refund offered).
- * Each guest gets each notice once per batch and dive date (tracked in notification_logs).
+ * Weather notices sent less than 18 hours before a dive:
+ * - Critical Risk: guests can reschedule for free or cancel with a full downpayment refund. Owners/admins must decide.
+ * - High Risk: everyone is told, but the dive is still on (no refund).
+ * Each guest only gets each notice once per batch and dive date (saved in notification_logs).
  */
 class WeatherRiskNotifier
 {

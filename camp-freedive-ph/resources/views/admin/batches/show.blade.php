@@ -471,7 +471,7 @@
 
     </div>
 
-    <!-- Batch Status History (Placed at bottom for clean mobile layout) -->
+    <!-- Batch status history -->
     <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 shadow-2xs space-y-4">
         <h3 class="text-base font-bold text-[#1D1D1F] border-b border-[#F2F2F7] pb-3">Batch Status History</h3>
 

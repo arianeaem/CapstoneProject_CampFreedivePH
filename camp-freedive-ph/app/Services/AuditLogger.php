@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 class AuditLogger
 {
     /**
-     * Record an audit log event.
+     * Save an audit log entry.
      */
     public static function log(string $action, string $description, ?User $user = null, ?string $actorName = null, ?Request $request = null): AuditLog
     {

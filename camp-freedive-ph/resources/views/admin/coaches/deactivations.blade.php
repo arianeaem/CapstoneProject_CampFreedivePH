@@ -152,7 +152,7 @@
 
 
     <!-- ========================================================================= -->
-    <!-- MODAL: CONFIRM DEACTIVATION (OWNER ONLY) -->
+    <!-- Confirm deactivation modal (owner only) -->
     <!-- ========================================================================= -->
     <div x-show="openConfirmModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
         <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openConfirmModal = false">

@@ -1,15 +1,14 @@
 """
-Source: ECMWF ERA5 Reanalysis, via the Copernicus Climate Data Store (CDS) API.
-Pulls:  10u, 10v (wind vectors), i10fg (instantaneous 10m gust), msl (sea level pressure).
-Auth:   requires a ~/.cdsapirc file with your CDS API key (from cds.climate.copernicus.eu).
+Source: ECMWF ERA5 reanalysis, from the Copernicus Climate Data Store (CDS) API.
+Gets:   10u, 10v (wind), i10fg (10m gust), msl (sea level pressure).
+Login:  needs a ~/.cdsapirc file with your CDS API key (from cds.climate.copernicus.eu).
 
-Features:
-- Requests one month per CDS call to respect CDS cost limits.
-- Supports concurrent worker threads (default 2) to cut queue wait times.
-- Auto-resume: checks file existence and size (>1000 bytes).
-- Ensures parent directories exist prior to each CDS retrieve call.
-- Spatial extraction via 4-corner bilinear interpolation (u/v/msl) and max-of-4-corners (gust).
-- Reindexes onto full multi-year hourly canonical index localized to Asia/Manila (PHT).
+- one month per CDS request (CDS has cost limits)
+- 2 worker threads by default so we wait less in the queue
+- skips files that are already downloaded (and bigger than 1000 bytes)
+- makes the folders before each download
+- bilinear interpolation from the 4 corners (u/v/msl) and max of the 4 corners (gust)
+- reindexes to the full hourly index in Asia/Manila time (PHT)
 """
 
 import sys
@@ -50,7 +49,7 @@ def _download_single_month(c, year: int, month: int, out_file: Path) -> bool:
         print(f"Skipping ERA5 {year}-{month:02d}, already downloaded ({out_file.stat().st_size} bytes)")
         return True
 
-    # Guarantee parent directory exists right before requesting and saving
+    # Make sure the folder exists before saving
     out_file.parent.mkdir(parents=True, exist_ok=True)
     days_in_month = calendar.monthrange(year, month)[1]
     print(f"Requesting ERA5 {year}-{month:02d} ({days_in_month} days) -> {out_file.name}...")
@@ -117,13 +116,13 @@ def to_interim(start_date: str = ERA5_START_DATE, end_date: str = ERA5_END_DATE)
     print(f"[ERA5] Processing {len(files)} monthly files for interim dataset...")
     ds = xr.open_mfdataset(files, combine="by_coords")
     
-    # 2D Bilinear interpolation across 4 surrounding grid corners (and max corner for gust)
+    # Bilinear interpolation from the 4 grid corners (max corner for gust)
     interp_ds, meta = extract_era5_bilinear(ds)
     print(f"[ERA5] Spatial extraction completed for ({meta['target_lat']}° N, {meta['target_lon']}° E)")
 
     df = interp_ds.to_dataframe().reset_index()
 
-    # ECMWF's newer CDS backend renamed the time coordinate from 'time' to 'valid_time'
+    # The newer CDS renamed 'time' to 'valid_time'
     if "valid_time" in df.columns and "time" not in df.columns:
         df = df.rename(columns={"valid_time": "time"})
 
@@ -131,35 +130,35 @@ def to_interim(start_date: str = ERA5_START_DATE, end_date: str = ERA5_END_DATE)
         "u10": "wind_u", "v10": "wind_v", "i10fg": "wind_gust", "msl": "slp",
     })
 
-    # Calculate wind speed and meteorological direction from interpolated u/v vectors
+    # Wind speed and direction from u/v
     df["wind_speed"] = np.sqrt(df["wind_u"] ** 2 + df["wind_v"] ** 2)
     df["wind_dir"] = (270 - np.degrees(np.arctan2(df["wind_v"], df["wind_u"]))) % 360
     df["slp"] = df["slp"] / 100.0  # Pa -> hPa
 
-    # ERA5 is native hourly reanalysis
+    # ERA5 is already hourly
     df["era5_is_interpolated"] = False
 
-    # Localize UTC timestamps to Asia/Manila (PHT)
+    # Convert UTC to Asia/Manila (PHT)
     df["time_pht"] = pd.to_datetime(df["time"]).dt.tz_localize("UTC").dt.tz_convert(TARGET_TIMEZONE)
     df = df.set_index("time_pht")[["wind_u", "wind_v", "wind_speed", "wind_gust", "wind_dir", "slp", "era5_is_interpolated"]]
     df = df[~df.index.duplicated(keep="first")].sort_index()
 
-    # Physical lower bound: gust is at least sustained wind speed
+    # Gust can't be lower than the wind speed
     df["wind_gust"] = np.maximum(df["wind_gust"], df["wind_speed"])
 
-    # Reindex across realized hourly steps to prevent trailing unreleased forecast NaNs
+    # Reindex so there are no NaN rows at the end
     realized_idx = pd.date_range(start=df.index[0], end=df.index[-1], freq="1h")
     missing = realized_idx.difference(df.index)
     if len(missing) > 0:
         print(f"[WARNING] {len(missing)} hours missing from ERA5 pull")
     df = df.reindex(realized_idx)
 
-    # Operational lag: 120h (5 days)
+    # Delay: 120h (5 days)
     last_obs_utc = df.index[-1].tz_convert("UTC")
     cutoff_utc = last_obs_utc - pd.Timedelta(hours=120)
     df["is_provisional"] = df.index.tz_convert("UTC") > cutoff_utc
 
-    # Revision risk: ERA5T trailing ~90 days (~3 months) subject to ECMWF monthly revisions
+    # ERA5T values from the last ~90 days can still be changed by ECMWF
     revision_cutoff_utc = last_obs_utc - pd.Timedelta(days=90)
     df["era5t_revision_risk"] = df.index.tz_convert("UTC") >= revision_cutoff_utc
 

@@ -1,16 +1,16 @@
 """
-NASA GPM IMERG Final Daily V07B (GPM_3IMERGDF.07) Ingestion via OPeNDAP DAP2.
+Downloads NASA GPM IMERG Final Daily V07B (GPM_3IMERGDF.07) using OPeNDAP DAP2.
 
-Window: 2020-10-01 to 2025-09-30 (1,826 days, strictly verified Final Run boundary).
-Spatial Coverage: 30 cells (5 lon x 6 lat) spanning Balayan Bay and Verde Island Passage.
+Dates: 2020-10-01 to 2025-09-30 (1,826 days, the Final Run range).
+Area: 30 cells (5 lon x 6 lat) over Balayan Bay and the Verde Island Passage.
 
-Physical Controls:
-1. Full 30 cells preserved in raw archive without premature averaging.
-2. Bilinear interpolation & nearest-cell extraction computed at dive site (13.6874 N, 120.8931 E).
-3. Exact units confirmed from .das: mm/day.
-4. Dimensions confirmed from .das: [time][lon][lat].
-5. Timezone: UTC dates stored explicitly; PHT conversion noted as UTC+08:00.
-6. Isolated in separate gpm_daily directory to prevent mixing with half-hourly runs.
+Notes:
+1. All 30 cells are kept in the raw file (no averaging yet).
+2. Bilinear and closest-cell values are computed at the site (13.6874 N, 120.8931 E).
+3. Units from .das: mm/day.
+4. Dimensions from .das: [time][lon][lat].
+5. Dates are in UTC (PHT = UTC+8).
+6. Saved in its own gpm_daily folder so it doesn't get mixed with the half-hourly data.
 """
 
 import os
@@ -42,7 +42,7 @@ END_DATE = "2025-09-30"  # Exact verified last available day of IMERG Final V07B
 BASE_OPENDAP = "https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.07"
 WORKERS = 5
 
-# Grid definitions for Balayan Bay box
+# Grid for the Balayan Bay box
 LON_INDICES = [3007, 3008, 3009, 3010, 3011]
 LAT_INDICES = [1035, 1036, 1037, 1038, 1039, 1040]
 
@@ -58,7 +58,7 @@ def get_auth():
 
 
 def write_cells_used_manifest():
-    """Generates cells_used.json documenting the 30 grid cells and site weights."""
+    """Write cells_used.json with the 30 cells and the site weights."""
     dx = (SITE_LON - 120.85) / 0.1
     dy = (SITE_LAT - 13.65) / 0.1
 
@@ -116,7 +116,7 @@ def build_day_url(year: int, month: int, day: int) -> str:
 
 
 def parse_dap2_ascii(text: str) -> np.ndarray:
-    """Parses DAP2 ASCII output into a (5, 6) float array (lon, lat)."""
+    """Read the DAP2 text output into a (5, 6) array (lon, lat)."""
     grid = []
     for line in text.splitlines():
         if "precipitation.precipitation[" in line:
@@ -124,7 +124,7 @@ def parse_dap2_ascii(text: str) -> np.ndarray:
             row = [float(x) for x in parts[1:]]
             grid.append(row)
     arr = np.array(grid, dtype=np.float32)
-    # Map FillValue -9999.9 to NaN
+    # FillValue -9999.9 -> NaN
     arr[arr < -9000.0] = np.nan
     return arr
 
@@ -153,7 +153,7 @@ def fetch_single_day(session: requests.Session, auth: tuple, year: int, month: i
 
 
 def ingest_month(session: requests.Session, auth: tuple, year: int, month: int) -> pd.DataFrame:
-    """Ingests a single month of daily data and returns DataFrame of the 30 cells."""
+    """Download one month of daily data and return the 30 cells as a DataFrame."""
     num_days = calendar.monthrange(year, month)[1]
     month_str = f"{year:04d}_{month:02d}"
     checkpoint_file = RAW_DIR / f"gpm_daily_{month_str}.parquet"
@@ -188,7 +188,7 @@ def ingest_month(session: requests.Session, auth: tuple, year: int, month: int) 
                         "precipitation_mm_day": float(grid[i, j])
                     })
         else:
-            # Record failed or missing day
+            # Save the failed or missing day
             for lon in LON_COORDS:
                 for lat in LAT_COORDS:
                     rows.append({
@@ -233,7 +233,7 @@ def run_full_daily_ingestion():
         y, m = cur.year, cur.month
         df_m = ingest_month(session, auth, y, m)
         all_months.append(df_m)
-        # Advance to next month
+        # Next month
         cur = (cur.replace(day=1) + pd.Timedelta(days=32)).replace(day=1)
 
     df_all_cells = pd.concat(all_months).reset_index(drop=True)
@@ -242,7 +242,7 @@ def run_full_daily_ingestion():
     print(f"\nWrote full 30-cell raw archive -> {total_grid_file} ({len(df_all_cells)} cell-days)", flush=True)
 
     # -------------------------------------------------------------------------
-    # Spatial Point Extraction at Dive Site
+    # Values at the dive site
     # -------------------------------------------------------------------------
     print("\nComputing site-extracted daily rainfall time series...", flush=True)
     dx = (SITE_LON - 120.85) / 0.1
@@ -258,11 +258,11 @@ def run_full_daily_ingestion():
         p_nw = day_df[(day_df["lon"] == 120.85) & (day_df["lat"] == 13.75)]["precipitation_mm_day"].values[0]
         p_ne = day_df[(day_df["lon"] == 120.95) & (day_df["lat"] == 13.75)]["precipitation_mm_day"].values[0]
 
-        # 2D Bilinear
+        # Bilinear
         p_bilinear = float((1 - dx) * (1 - dy) * p_sw + dx * (1 - dy) * p_se + (1 - dx) * dy * p_nw + dx * dy * p_ne)
-        # Nearest (SW marine cell)
+        # Closest (SW ocean cell)
         p_nearest = float(p_sw)
-        # Box mean
+        # Box average
         p_mean = float(day_df["precipitation_mm_day"].mean())
 
         site_records.append({

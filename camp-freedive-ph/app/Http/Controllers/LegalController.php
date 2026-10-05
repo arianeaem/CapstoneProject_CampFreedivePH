@@ -7,7 +7,7 @@ use Illuminate\View\View;
 class LegalController extends Controller
 {
     /**
-     * Display the Terms and Conditions page.
+     * Terms and Conditions page.
      */
     public function terms(): View
     {
@@ -15,7 +15,7 @@ class LegalController extends Controller
     }
 
     /**
-     * Display the Privacy Policy page.
+     * Privacy Policy page.
      */
     public function privacy(): View
     {

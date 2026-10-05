@@ -40,7 +40,7 @@
     <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5E5EA] shadow-2xs">
         <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-3.5 flex items-center justify-between gap-3 sm:gap-6">
             
-            <!-- Left: Brand Logo & Title (Mobile: Only Logo, Desktop: Logo + Name) -->
+            <!-- Left: logo and name (mobile: logo only) -->
             <a href="{{ route('landing') }}" class="flex items-center gap-2 sm:gap-2.5 group shrink-0 min-w-0 focus-visible:outline-none" title="Camp FreedivePH">
                 <img src="{{ asset('images/logo.png') }}" alt="Camp FreedivePH Logo" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-contain bg-white shrink-0 border border-[#E5E5EA]">
                 <div class="hidden sm:block min-w-0">
@@ -49,9 +49,9 @@
                 </div>
             </a>
 
-            <!-- Right: Stepper (Desktop: Numbered Circles + Labels, Mobile: Numbered Circles Only) -->
+            <!-- Right: steps (mobile: numbers only) -->
             
-            <!-- Desktop Stepper (MD+) -->
+            <!-- Desktop steps -->
             <nav aria-label="Booking Progress" class="hidden md:flex items-center gap-1.5 lg:gap-2.5">
                 <template x-for="(label, index) in shortStepTitles" :key="index">
                     <div class="flex items-center">
@@ -91,14 +91,14 @@
                             </span>
                         </button>
 
-                        <!-- Connecting Line (if not last step) -->
+                        <!-- Line between steps -->
                         <div x-show="index < 4" class="w-3 lg:w-6 h-[1.5px] mx-1 lg:mx-2 transition-colors duration-200"
                              :class="currentStep > (index + 1) ? 'bg-[#780000]/40' : 'bg-[#E5E5EA]'"></div>
                     </div>
                 </template>
             </nav>
 
-            <!-- Mobile Stepper (<MD) -->
+            <!-- Mobile steps -->
             <nav aria-label="Booking Progress" class="flex md:hidden items-center gap-1 shrink-0">
                 <template x-for="stepNum in [1, 2, 3, 4, 5]" :key="stepNum">
                     <div class="flex items-center">
@@ -202,7 +202,7 @@
                     </div>
                 </div>
 
-                <!-- 3 Packages Grid (items-start prevents other cards from extending on accordion toggle) -->
+                <!-- 3 packages (items-start so the other cards don't stretch when one opens) -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                     
                     <!-- 1. Discovery Package Card -->
@@ -304,7 +304,7 @@
                     </div>
                 </div>
 
-                <!-- 2. Fundive Package Card (With 2-Option Direct Choice after Description) -->
+                <!-- 2. Fundive package (certified / not certified choice) -->
                 <div id="package-fundive"
                      x-data="{ openDetails: false }"
                      class="scroll-mt-32 lg:scroll-mt-0 bg-white rounded-2xl border border-[#E5E5EA] shadow-xs hover:border-[#D1D1D6] hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden text-sm relative">
@@ -325,12 +325,12 @@
                                 </span>
                             </div>
 
-                            <!-- Target Audience Description (Placed before certification options) -->
+                            <!-- Who it's for -->
                             <p class="text-sm text-[#4A4A4F] font-medium my-3 mb-4 min-h-[44px] flex items-center justify-center leading-relaxed text-center">
                                 Certified or experienced freedivers who want to explore and take photos.
                             </p>
 
-                            <!-- 2-Option Direct Choice Selector (Placed after description as requested) -->
+                            <!-- Certified / not certified choice -->
                             <div class="my-3 space-y-2 text-left" role="radiogroup" aria-label="Fundive certification options">
                                 <span class="text-[11px] font-bold text-[#6E6E73] uppercase tracking-wider block text-center mb-3">
                                     Select Your Certification Option
@@ -598,7 +598,7 @@
                     <!-- Interactive Dual-Month Calendar -->
                     <div class="bg-white rounded-2xl p-4 sm:p-7 space-y-6 shadow-2xs border border-[#E5E5EA]">
                         
-                        <!-- Months Container (Single month on mobile with arrows, dual months on desktop) -->
+                        <!-- Months (1 on mobile, 2 on desktop) -->
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
                             
                             <!-- First Month -->
@@ -669,7 +669,7 @@
                                 </div>
                             </div>
 
-                            <!-- Second Month (Visible on md+ screens for dual-calendar experience) -->
+                            <!-- Second month (desktop only) -->
                             <div class="space-y-4 hidden md:block">
                                 <!-- Header for Month 2 with Next Arrow -->
                                 <div class="flex items-center justify-between h-11">
@@ -824,7 +824,7 @@
                             </div>
                         </div>
 
-                        <!-- Weather Assessment Results (shared design: components/dive-safety/live-evaluation) -->
+                        <!-- Weather result (uses components/dive-safety/live-evaluation) -->
                         <template x-if="forecast && !weatherLoading">
                             <x-dive-safety.live-evaluation forecast="forecast" />
                         </template>
@@ -1043,7 +1043,7 @@
                                     </template>
                                 </div>
 
-                                <!-- Dropdown for Lead First Name (selecting from participants) -->
+                                <!-- Lead first name dropdown (pick from participants) -->
                                 <div x-show="form.selected_lead_participant !== 'custom'">
                                     <select x-model="form.selected_lead_participant" 
                                             @change="onLeadParticipantChange()"
@@ -1055,7 +1055,7 @@
                                     </select>
                                 </div>
 
-                                <!-- Text Input for Lead First Name (when custom is chosen) -->
+                                <!-- Lead first name text box (when custom is picked) -->
                                 <div x-show="form.selected_lead_participant === 'custom'" x-cloak class="space-y-1">
                                     <input type="text" 
                                            x-model="form.contact_first_name" 
@@ -1289,7 +1289,7 @@
                                 <span class="font-bold text-[#1D1D1F] shrink-0 text-right" x-text="'₱' + formatNumber((pricingQuote ? pricingQuote.base_price_per_pax : calculateBasePriceUnit()) * form.participants.length)"></span>
                             </div>
 
-                            <!-- Dynamic Pricing Adjustments (with vertical line on left, badges removed) -->
+                            <!-- Pricing rule adjustments -->
                             <template x-if="pricingQuote && pricingQuote.adjustments && pricingQuote.adjustments.length > 0">
                                 <div class="border-l-2 border-[#D1D1D6] pl-3 py-1 space-y-2 my-1.5">
                                     <template x-for="adj in pricingQuote.adjustments" :key="adj.rule_id">
@@ -1301,7 +1301,7 @@
                                 </div>
                             </template>
 
-                            <!-- Adjusted Class Subtotal (only shown if there are adjustments) -->
+                            <!-- Class subtotal after adjustments (only if there are any) -->
                             <div x-show="pricingQuote && pricingQuote.adjustments && pricingQuote.adjustments.length > 0" class="flex justify-between items-center gap-2 text-[#1D1D1F] font-semibold">
                                 <span>Adjusted Class Subtotal</span>
                                 <span class="font-extrabold text-[#1D1D1F] shrink-0 text-right" x-text="'₱' + formatNumber(calculateSubtotal())"></span>
@@ -1325,7 +1325,7 @@
                                 <span class="font-extrabold text-[#1D1D1F] shrink-0 text-right" x-text="'₱' + formatNumber(calculateLguAndEnvFee())"></span>
                             </div>
 
-                            <!-- Downpayment Due Now (No background color) -->
+                            <!-- Downpayment due now -->
                             <div class="pt-2.5 border-t border-[#E5E5EA] flex justify-between items-center gap-2">
                                 <div class="min-w-0">
                                     <span class="font-bold text-[#1D1D1F] block text-xs sm:text-sm leading-tight">Downpayment Due Now</span>
@@ -1334,13 +1334,13 @@
                                 <span class="text-sm sm:text-base font-black text-[#1D1D1F] shrink-0 text-right" x-text="'₱' + formatNumber(calculateDownpayment())"></span>
                             </div>
 
-                            <!-- Remaining Balance at Camp (No background color) -->
+                            <!-- Balance to pay at camp -->
                             <div class="flex justify-between items-center gap-2 text-[#1D1D1F]">
                                 <span class="font-medium text-xs sm:text-sm">Remaining Balance (at Camp)</span>
                                 <span class="font-bold text-xs sm:text-sm shrink-0 text-right text-[#1D1D1F]" x-text="'₱' + formatNumber(calculateTotal() - calculateDownpayment())"></span>
                             </div>
 
-                            <!-- Total Amount (Placed after the two payments) -->
+                            <!-- Total -->
                             <div class="pt-2.5 border-t border-[#E5E5EA] flex justify-between items-center gap-2 font-extrabold text-[#1D1D1F]">
                                 <span class="text-xs sm:text-sm">Total Amount</span>
                                 <span class="text-base sm:text-lg font-black text-[#1D1D1F] shrink-0 text-right" x-text="'₱' + formatNumber(calculateTotal())"></span>
@@ -1418,7 +1418,7 @@
                     <span class="font-mono font-bold text-amber-950 px-2.5 py-0.5 rounded-lg bg-amber-100/80 tracking-wide shrink-0" x-text="timerDisplay"></span>
                 </div>
 
-                <!-- 2-Column Grid: Reservation Breakdown (Left) & Cancellation Policy (Right) -->
+                <!-- Left: booking summary, right: cancellation policy -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-start">
                     
                     <!-- Left Column: Reservation Breakdown & Payment Channels -->
@@ -1537,7 +1537,7 @@
 
                 </div>
 
-                <!-- Hosted Checkout Action Button (Full Width Bottom) -->
+                <!-- Pay button -->
                 <div class="pt-4 space-y-4">
                     <!-- Step 4 Navigation Controls -->
                     <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
@@ -1575,7 +1575,7 @@
         <div x-show="currentStep === 5" x-cloak class="space-y-6">
 
             <div class="max-w-7xl mx-auto space-y-6">
-                <!-- 2-Column Grid: Confirmation & Voucher (Left) & Summary + Checklist (Right) -->
+                <!-- Left: confirmation and voucher, right: summary and checklist -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-start">
                     
                     <!-- Left Column: Confirmation Message & Voucher -->
@@ -1586,7 +1586,7 @@
                             </p>
                         </div>
 
-                        <!-- Booking Credentials Voucher (Apple-Style Dark Card) -->
+                        <!-- Booking number and PIN card -->
                         <div class="p-5 sm:p-6 rounded-2xl bg-[#1D1D1F] text-white space-y-4 shadow-md border border-[#2C2C2E]">
                             <div>
                                 <span class="text-xs uppercase tracking-wider text-[#00C3D0] font-bold">Booking Reference Number</span>
@@ -1669,7 +1669,7 @@
                                 <li>A pair of socks (any style) for fin fitting</li>
                             </ul>
 
-                            <!-- Carpool Guidelines (if carpool availed) -->
+                            <!-- Carpool reminders (if they have carpool) -->
                             <div x-show="form.pickup_option === 'carpool'" class="pt-2.5 border-t border-[#E5E5EA] space-y-1">
                                 <h4 class="font-bold text-[#1D1D1F]">Carpool Reminder:</h4>
                                 <p class="text-[#6E6E73] leading-relaxed">
@@ -1755,22 +1755,21 @@
 @push('scripts')
 <script>
 /**
- * Alpine.js Client-Side Booking Flow State Machine.
+ * Booking form (Alpine.js).
  *
- * Workflow Architecture:
- * - Step 1 (Package Selection): Class tier configuration and diver certification prerequisite checking.
- * - Step 2 (Date & Weather Selection): Interactive dual-calendar picker with live 16-day Open-Meteo & ML risk preview.
- * - Step 3 (Contact & Add-ons): Dynamic participant repeater, medical questionnaires, carpool hubs, and live pricing quote.
- * - Step 4 (Downpayment Checkout): 15-minute slot-hold countdown timer and PayMongo payment gateway integration.
- * - Step 5 (Voucher & PIN): Booking reference confirmation and credential copy tool.
+ * Steps:
+ * 1. pick a package (and certification for fundive)
+ * 2. pick the dates and see the weather
+ * 3. contact info, participants, add-ons and price
+ * 4. pay the downpayment (slots are held for 15 minutes)
+ * 5. booking number and PIN
  *
- * State Persistence:
- * Automatically synchronizes draft state to localStorage to prevent data loss on accidental page refresh.
+ * The form is saved in localStorage so it isn't lost if the page is refreshed.
  *
- * @param {Object} config Initial configuration (initialClass, pickupPoints).
- * @return {Object} Reactive Alpine.js component scope.
+ * @param {Object} config initialClass, pickupPoints
+ * @return {Object}
  */
-// TODO: Implement Web Worker background sync for offline draft storage in IndexedDB.
+// TODO: save drafts in IndexedDB for offline use
 function bookingForm(config) {
     return {
         config: config,
@@ -2740,7 +2739,7 @@ function bookingForm(config) {
                     this.clearDraft();
                     this.draftRestored = false;
 
-                    // If live PayMongo checkout session was created, redirect directly to PayMongo
+                    // If a PayMongo checkout was created, go to PayMongo
                     if (data.is_paymongo_redirect && data.checkout_url && !instantSimulation) {
                         window.location.href = data.checkout_url;
                         return;

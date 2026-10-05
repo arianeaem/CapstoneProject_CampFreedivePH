@@ -23,7 +23,7 @@ class RefundController extends Controller
     ) {}
 
     /**
-     * Display the dedicated Pending Refund Requests queue.
+     * Pending refunds page.
      */
     public function index(Request $request): View
     {
@@ -40,7 +40,7 @@ class RefundController extends Controller
             ->withQueryString();
 
 
-        // Calculate live policy snapshot for each pending request based on when it was submitted
+        // Get the policy result for each request based on when it was sent
         $policies = [];
         foreach ($pendingRefunds as $req) {
             $policies[$req->id] = $this->policyEngine->evaluate($req->booking, $req->requested_at ?? $req->created_at);
@@ -50,7 +50,7 @@ class RefundController extends Controller
     }
 
     /**
-     * Approve and execute refund via PayMongo API.
+     * Approve and send the refund through PayMongo.
      */
     public function approve(ApproveRefundRequest $request, RefundRequest $refundRequest): RedirectResponse
     {
@@ -84,7 +84,7 @@ class RefundController extends Controller
     }
 
     /**
-     * Forfeit payment/downpayment per policy.
+     * Keep the payment / downpayment (per policy).
      */
     public function forfeit(ForfeitPaymentRequest $request, RefundRequest $refundRequest): RedirectResponse
     {

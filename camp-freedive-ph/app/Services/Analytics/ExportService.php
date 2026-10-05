@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Excel (.xlsx) exports for Reports & Analytics: Revenue, Bookings, Batches & Coaches.
- * All three share one layout (title block, "at a glance" summary, list sheets with filters)
- * and use the same numbers as the Reports screen and the print summary (AnalyticsService).
+ * Excel (.xlsx) exports for Reports: Revenue, Bookings, Batches & Coaches.
+ * They all use the same layout (title, summary, list sheets with filters)
+ * and the same numbers as the Reports page and print page (AnalyticsService).
  */
 class ExportService
 {
@@ -112,7 +112,7 @@ class ExportService
             ->row(['Average per booking', (float) $fin['arpb']])
             ->blank();
 
-        // Monthly totals inside the period, each compared with the month before it
+        // Monthly totals in the period, each compared to the month before
         $s->section('Monthly/Yearly Total Revenue and Growth (%)', 'Money collected each month, and how it changed from the month before')
             ->header(['Month', 'Money collected', 'Change vs month before']);
         $monthly = Payment::whereIn('status', $paid)->whereBetween('created_at', [$start->copy()->startOfMonth()->subMonth(), $end])

@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 /**
- * One source of truth for demand/season rules, no fabricated forecasts,
- * and Dynamic Pricing consuming the ML forecast.
+ * Demand/season rules come from one place, no made-up forecasts,
+ * and pricing uses the ML forecast.
  */
 class DemandSingleSourceTest extends TestCase
 {

@@ -17,7 +17,7 @@ enum BatchStatus: string
 
     public const CANCELLED = [self::Cancelled, self::CancelledByCamp];
 
-    /** Finished or cancelled: nothing more will happen on this batch. */
+    /** Done or cancelled, nothing else happens to this batch. */
     public const CLOSED = [self::Completed, self::Cancelled, self::CancelledByCamp];
 
     /** @param  array<int, self>  $cases

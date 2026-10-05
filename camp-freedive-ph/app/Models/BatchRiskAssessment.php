@@ -8,24 +8,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Batch Risk Assessment Model representing an evaluation of marine weather conditions for a batch day.
- *
- * Domain & Safety Assessment Context:
- * - Stores aggregated multi-variable safety evaluations for Day 1 (Saturday) and Day 2 (Sunday).
- * - Records overall classification ('Very Safe', 'Safe', 'Moderate', 'High Risk', 'Critical Risk').
- * - Links to granular AM/PM hourly evaluations for tactical dive planning.
+ * Weather check result for one day of a batch (Day 1 = Saturday, Day 2 = Sunday).
+ * Has the overall rating and links to the AM/PM hourly rows.
  *
  * @property int $id
  * @property int $batch_id
  * @property int $day_number 1 (Saturday) or 2 (Sunday)
  * @property Carbon $dive_date
- * @property float $lead_time_hours Forecasting horizon lead time
+ * @property float $lead_time_hours hours before the dive when this was checked
  * @property string $overall_classification Very Safe, Safe, Moderate, High Risk, Critical Risk
- * @property float $weighted_score_pct 0 to 100 risk score
- * @property string $recommended_action Operational safety advisory for staff
+ * @property float $weighted_score_pct risk score 0 to 100
+ * @property string $recommended_action advice for the staff
  * @property string $worst_window AM or PM
- * @property Carbon $worst_hour Peak risk hour
- * @property bool $override_triggered Whether manual staff override was logged
+ * @property Carbon $worst_hour worst hour
+ * @property bool $override_triggered true if an admin override was used
  */
 class BatchRiskAssessment extends Model
 {

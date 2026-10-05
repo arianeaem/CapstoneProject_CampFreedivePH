@@ -1,10 +1,10 @@
 """
-Trains multi-horizon XGBoost forecaster for wind and atmospheric variables:
+Trains the XGBoost forecaster for wind and pressure
 (wind_speed, wind_gust, wind_dir_sin, wind_dir_cos, slp).
-Takes horizon as an input feature and predicts target at t+H (H in [1, 6, 12, 24, 48, 72, 96, 144] hours).
+Horizon is an input and it predicts the value at t+H (H in [1, 6, 12, 24, 48, 72, 96, 144] hours).
 
-Wind direction is predicted via sin/cos decomposition to handle the 0°/360° circular boundary,
-and reconstructed as degrees via atan2 during evaluation.
+Wind direction is predicted as sin and cos (because 0 and 360 deg are the same)
+and turned back into degrees with atan2 when scoring.
 
 Run from project root: python src/models/train_wind_forecaster.py
 """
@@ -40,7 +40,7 @@ def mae_score(y_true, y_pred) -> float:
 
 
 def circular_angular_diff(y_true_deg, y_pred_deg):
-    """Computes shortest angular difference in degrees accounting for 360 wrap-around."""
+    """Shortest angle difference in degrees (handles the 360 wrap)."""
     diff = np.abs(y_true_deg - y_pred_deg) % 360
     return np.minimum(diff, 360 - diff)
 
@@ -62,7 +62,7 @@ def main():
     stacked = build_stacked_dataset(df, lagged)
     print(f"Stacked multi-horizon dataset: {stacked.shape[0]} rows, {stacked.shape[1]} columns\n")
 
-    train, val, test = temporal_split(stacked)  # test untouched
+    train, val, test = temporal_split(stacked)  # test is not used
     print(f"Train split: {len(train)} rows ({train.index.min()} to {train.index.max()})")
     print(f"Val split:   {len(val)} rows ({val.index.min()} to {val.index.max()})")
     print(f"Test split:  {len(test)} rows (held out)\n")
@@ -121,7 +121,7 @@ def main():
         model.save_model(str(model_path))
         print(f"Saved model to {model_path}")
 
-        # Per-horizon validation evaluation
+        # Validation results per horizon
         val_preds = model.predict(val[feature_cols])
         val_predictions[target] = val_preds
         target_metrics = {"hyperparameters": best_params, "horizons": {}}
@@ -140,7 +140,7 @@ def main():
         all_metrics[target] = target_metrics
         print()
 
-    # Reconstruct circular wind_dir from sin and cos predictions
+    # Get wind_dir back from the sin and cos predictions
     if "wind_dir_sin" in val_predictions and "wind_dir_cos" in val_predictions and "target_wind_dir" in val.columns:
         pred_sin = val_predictions["wind_dir_sin"]
         pred_cos = val_predictions["wind_dir_cos"]

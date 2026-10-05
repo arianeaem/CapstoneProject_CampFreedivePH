@@ -1,3 +1,3 @@
 """
-Configuration package for safety-forecast microservice.
+Settings for the safety-forecast service.
 """

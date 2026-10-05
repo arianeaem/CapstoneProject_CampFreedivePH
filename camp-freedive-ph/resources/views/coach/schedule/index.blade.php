@@ -60,7 +60,7 @@
         </div>
     </div>
 
-    <!-- 1. UPCOMING CONFIRMED ASSIGNMENTS (Batch Card that opens Assigned Student Roster on click) -->
+    <!-- 1. Upcoming assignments (click a batch to see the students) -->
     <div x-show="activeTab === 'upcoming'" role="tabpanel" id="panel-upcoming" aria-labelledby="tab-upcoming" class="space-y-4">
         @forelse($upcomingBatches as $item)
             @php
@@ -78,7 +78,7 @@
                     
                     <!-- Left Column: Weather + Batch Title + Dive Dates & Students -->
                     <div class="space-y-2.5 flex-1 min-w-0">
-                        <!-- Weather Safety Status (shared design: components/dive-safety/status) -->
+                        <!-- Weather (uses components/dive-safety/status) -->
                         <x-dive-safety.status :classification="$item['weather_class']"
                                               :description="\App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($assessment?->recommended_action ?? null)"
                                               :engines="$item['model_comparison'] ?? null" />
@@ -149,7 +149,7 @@
 
                 </div>
 
-                <!-- Expandable Assigned Student Roster Section (Dashboard Card Format) -->
+                <!-- Assigned students (can be expanded) -->
                 <div x-show="isBatchOpen({{ $batch->id }})" 
                      x-cloak 
                      id="roster-panel-{{ $batch->id }}"
@@ -171,7 +171,7 @@
                         </span>
                     </div>
 
-                    <!-- 2-Column Student Cards Grid (Matching Dashboard Format) -->
+                    <!-- Student cards (2 columns) -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                         @foreach($students as $student)
                             @php
@@ -206,7 +206,7 @@
                                     </span>
                                 </div>
 
-                                <!-- Information Rows (3 Semantic Rows) -->
+                                <!-- Info rows -->
                                 <div class="space-y-3.5 text-sm">
                                     
                                     <!-- Row 1: Age & Package -->
@@ -289,10 +289,10 @@
         @endforelse
     </div>
 
-    <!-- 2. PAST DIVE HISTORY (Admin/Owner Filter Pattern & Expandable Batches) -->
+    <!-- 2. Past dives -->
     <div x-show="activeTab === 'history'" role="tabpanel" id="panel-history" aria-labelledby="tab-history" class="space-y-6">
         
-        <!-- Filter Bar Toolbar (Identical to Admin/Owner Filter Patterns) -->
+        <!-- Filter bar -->
         <div class="bg-white rounded-2xl p-3 sm:p-4 border border-[#E5E5EA]">
             <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 
@@ -327,7 +327,7 @@
                             <span class="w-2 h-2 rounded-full bg-[#780000] shrink-0"></span>
                         @endif
                     </button>
-                    <!-- Filter Dropdown Menu (Standardized) -->
+                    <!-- Filter menu -->
                     <div x-show="openFilters" 
                          @click.outside="openFilters = false" 
                          x-cloak 
@@ -394,7 +394,7 @@
             </div>
         </div>
 
-        <!-- Past Sessions List (Expandable Batch Cards) -->
+        <!-- Past batches -->
         @forelse($historyBatches as $item)
             @php
                 $batch = $item['batch'];

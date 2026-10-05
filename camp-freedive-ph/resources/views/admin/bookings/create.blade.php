@@ -25,7 +25,7 @@
         </div>
     </div>
 
-    <!-- Create Booking Form (Single Unified Card) -->
+    <!-- Create booking form -->
     <form action="{{ route('admin.bookings.store') }}" method="POST">
         @csrf
 
@@ -82,7 +82,7 @@
                         </div>
                     </div>
 
-                    <!-- Weather Assessment Results (shared design: components/dive-safety/live-evaluation) -->
+                    <!-- Weather result (uses components/dive-safety/live-evaluation) -->
                     <template x-if="forecast && forecast.day1 && !weatherLoading && !forecast.is_benchmark">
                         <x-dive-safety.live-evaluation forecast="forecast" class="pt-2" />
                     </template>
@@ -211,7 +211,7 @@
                                 </template>
                             </div>
 
-                            <!-- Dropdown for Lead First Name (selecting from participants) -->
+                            <!-- Lead first name dropdown (pick from participants) -->
                             <div x-show="selectedLeadIndex !== 'custom'">
                                 <select x-model="selectedLeadIndex" 
                                         @change="onLeadSelectChange()"
@@ -224,7 +224,7 @@
                                 <input type="hidden" name="first_name" :value="leadFirstName">
                             </div>
 
-                            <!-- Text Input for Lead First Name (when custom is chosen) -->
+                            <!-- Lead first name text box (when custom is picked) -->
                             <div x-show="selectedLeadIndex === 'custom'" x-cloak class="space-y-1">
                                 <input type="text" 
                                        name="first_name" 
@@ -448,7 +448,7 @@
                 </div>
             </div>
 
-            <!-- 4. Payment Recording (Offline Reception) -->
+            <!-- 4. Payment (offline) -->
             <div class="space-y-4">
                 <h3 class="text-base font-extrabold text-[#1D1D1F]">4. Payment Recording</h3>
 

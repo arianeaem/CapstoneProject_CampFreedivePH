@@ -263,7 +263,7 @@ class PricingRuleEngineTest extends TestCase
         // 1. Without ML forecast or bookings, demand is low
         $this->assertEquals('low', $engine->getDemandForDate($futureDate));
 
-        // 2. Persist a Prophet/XGBoost ML forecast predicting High demand (38 pax)
+        // 2. Save an ML forecast that says High demand (38 pax)
         DemandForecast::create([
             'forecast_date' => $futureDate,
             'days_ahead' => 65,
@@ -277,7 +277,7 @@ class PricingRuleEngineTest extends TestCase
 
         \Illuminate\Support\Facades\Cache::forget('ml_demand_forecast');
 
-        // 3. Engine now evaluates demand as 'high' predictive yield
+        // 3. Now the demand should be 'high'
         $this->assertEquals('high', $engine->getDemandForDate($futureDate));
         $this->assertEquals('peak', $engine->getSeasonForDate($futureDate));
 

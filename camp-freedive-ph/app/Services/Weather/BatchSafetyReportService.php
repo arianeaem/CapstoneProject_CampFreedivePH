@@ -11,10 +11,9 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Builds everything the Safety Monitoring batch page shows: the latest Day 1 / Day 2
- * assessments (re-running them when the forecast is newer), the 24-hour profiles,
- * the safety-model summary, the two-model comparison and the run history.
- * Moved out of WeatherSafetyController::show() so the controller only handles the request.
+ * Gets all the data for the Safety Monitoring batch page: Day 1 / Day 2 results
+ * (runs them again if the forecast is newer), the 24-hour data, the ML model summary,
+ * the model comparison and the history.
  */
 class BatchSafetyReportService
 {
@@ -24,7 +23,7 @@ class BatchSafetyReportService
     ) {}
 
     /**
-     * @return array<string, mixed> The view data for admin.weather.show
+     * @return array<string, mixed> data for admin.weather.show
      */
     public function build(Batch $batch, ?User $operator = null): array
     {
@@ -42,7 +41,7 @@ class BatchSafetyReportService
         $horizonInfo = WeatherForecastService::getOperationalHorizon($batch);
         $isConcluded = ($horizonInfo['status'] === 'CONCLUDED') || ($batch->end_date && $batch->end_date->isPast()) || in_array($batch->status, ['completed', 'cancelled_by_camp']);
 
-        // Auto-run assessment if not yet assessed or if active batch is behind latest forecast cache update
+        // Run the assessment if it was never done or the forecast cache is newer
         $lastForecastUpdate = Cache::get('forecast:last_updated_at');
         $needsSync = !$day1Assessment || !$day2Assessment;
 
@@ -60,7 +59,7 @@ class BatchSafetyReportService
             $day2Assessment = $batch->latestDay2Assessment;
         }
 
-        // Overall classification: worse of Day 1 and Day 2
+        // Overall is the worse of Day 1 and Day 2
         $overallClassification = 'Safe';
         if ($day1Assessment && $day2Assessment) {
             $rank1 = WeatherForecastService::RISK_RANK[$day1Assessment->overall_classification] ?? 1;
@@ -69,7 +68,7 @@ class BatchSafetyReportService
             $overallClassification = array_search($worseRank, WeatherForecastService::RISK_RANK) ?: 'Safe';
         }
 
-        // Group past assessment runs (pair Day 1 and Day 2 assessments from the same assessment run)
+        // Group old runs (Day 1 and Day 2 from the same run)
         $allAssessments = $batch->riskAssessments()
             ->with(['assessor'])
             ->orderBy('id', 'desc')
@@ -85,7 +84,7 @@ class BatchSafetyReportService
             $runGroup = collect([$item]);
             $visited[$item->id] = true;
 
-            // Look for paired assessment for the opposite day number from the same run (within 3 minutes)
+            // Find the other day from the same run (within 3 minutes)
             $otherDay = ((int) $item->day_number === 1) ? 2 : 1;
             $pair = $allAssessments->first(function ($candidate) use ($item, $otherDay, $visited) {
                 if (isset($visited[$candidate->id])) {
@@ -111,24 +110,24 @@ class BatchSafetyReportService
 
         $assessmentRuns = collect($runs);
 
-        // Fetch 24-Hour Continuous Profiles for Day 1 and Day 2
+        // 24-hour data for Day 1 and Day 2
         $day1Date = $batch->start_date->format('Y-m-d');
         $day2Date = $batch->end_date ? $batch->end_date->format('Y-m-d') : $batch->start_date->copy()->addDay()->format('Y-m-d');
         $day1Continuous24h = Cache::get("forecast:date:{$day1Date}");
         $day2Continuous24h = Cache::get("forecast:date:{$day2Date}");
 
-        // Auto-refresh continuous 16-day cache on demand if missing or expired (e.g. IDE/server restarted)
+        // Refresh the 16-day cache if it's missing or expired (e.g. after a server restart)
         if ((!$day1Continuous24h || empty($day1Continuous24h['hourly'])) && Carbon::now()->diffInDays($batch->start_date, false) <= 16) {
             try {
                 $master = $this->forecastService->updateAllForecasts(16);
                 $day1Continuous24h = $master['daily_summaries'][$day1Date] ?? Cache::get("forecast:date:{$day1Date}");
                 $day2Continuous24h = $master['daily_summaries'][$day2Date] ?? Cache::get("forecast:date:{$day2Date}");
             } catch (\Throwable $e) {
-                // If Open-Meteo API is temporarily unreachable, gracefully fallback to DB
+                // Open-Meteo is down, use the database instead
             }
         }
 
-        // Resilient Fallback: If 24h continuous cache is still empty, populate from persisted DB hourly assessments
+        // If the cache is still empty, use the saved hourly assessments
         if (empty($day1Continuous24h['hourly']) && $day1Assessment && $day1Assessment->hourlyAssessments->isNotEmpty()) {
             $day1Continuous24h = [
                 'date' => $day1Date,
@@ -169,7 +168,7 @@ class BatchSafetyReportService
             ];
         }
 
-        // ML Safety Assessments (Dual-Engine microservice pipeline)
+        // ML model results
         $overridesData = $latestOverride ? [
             'tcws_signal' => $latestOverride->tcws_signal,
             'gale_warning' => $latestOverride->gale_warning,
@@ -264,7 +263,7 @@ class BatchSafetyReportService
             ];
         }
 
-        // Side-by-side model comparison (same engines as the booking page's Dive Safety Evaluation)
+        // Model comparison (same as the booking page)
         $modelComparison = null;
         if (!$isConcluded) {
             try {

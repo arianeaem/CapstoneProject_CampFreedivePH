@@ -9,9 +9,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 /**
- * 24-Hour Continuous Weather & Marine Forecast Cache Sync
- * Runs every 15 minutes (96 times a day) to maintain continuous whole-day predictions in local cache
- * providing sub-millisecond (<1ms) response times for all users, booking requests, and batch risk engines.
+ * Refresh the weather forecast cache every 15 minutes,
+ * so pages can read the forecast from the cache instead of calling the API.
  */
 Schedule::command('forecast:update --assess-batches')
     ->everyFifteenMinutes()
@@ -20,8 +19,7 @@ Schedule::command('forecast:update --assess-batches')
     ->appendOutputTo(storage_path('logs/forecast_cron.log'));
 
 /**
- * Live Open-Meteo Weather & Marine Risk Assessment
- * Runs hourly for ongoing and upcoming batches within 16 days.
+ * Check the weather risk every hour for batches that are ongoing or within 16 days.
  */
 Schedule::command('weather:assess-batches')
     ->hourly()
@@ -36,8 +34,7 @@ Schedule::command('coaches:notify-matching')
     ->appendOutputTo(storage_path('logs/coach_matching_alerts.log'));
 
 /**
- * Automated Nightly Forecast Accuracy Archive & Verification
- * Runs daily at 00:05 to compare multi-horizon predictions against realized ocean observations.
+ * Every night at 00:05, compare the old forecasts with the actual weather.
  */
 Schedule::command('forecast:archive-accuracy')
     ->dailyAt('00:05')
@@ -46,19 +43,19 @@ Schedule::command('forecast:archive-accuracy')
     ->appendOutputTo(storage_path('logs/forecast_accuracy.log'));
 
 /**
- * Nightly demand retraining (demand:retrain) - DISABLED.
+ * Nightly demand retraining (demand:retrain) - turned OFF.
  *
- * The old nightly flow could overwrite the new pipeline's results. Until the new
- * 553-record pipeline is signed off, retraining is run MANUALLY only:
+ * The old nightly job could overwrite the results of the new pipeline. Until the new
+ * 553-record pipeline is approved, run it by hand:
  *     php artisan demand:retrain        (or: python retrain_pipeline.py in demand-forecast/)
- * Re-enable by restoring:
+ * To turn it back on, add:
  *     Schedule::command('demand:retrain')->dailyAt('02:00')->withoutOverlapping()->runInBackground()
  *         ->appendOutputTo(storage_path('logs/ml_demand_retrain.log'));
  */
 
 /**
- * Automated Quarterly ML Multi-Horizon Model Re-benchmarking
- * Runs quarterly (Jan 1, Apr 1, Jul 1, Oct 1 at 00:00) to evaluate seasonal shifts (Dry vs. Wet season).
+ * Re-check the ML models every 3 months (Jan 1, Apr 1, Jul 1, Oct 1)
+ * because the weather changes between dry and wet season.
  */
 Schedule::command('ml:rebenchmark')
     ->quarterly()

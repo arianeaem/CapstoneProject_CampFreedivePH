@@ -1,11 +1,9 @@
 """
-Trains xgb_wave_regressor: 4 independent single-output XGBoost models predicting
-hs, tp, swell_height, wind_wave_height (implemented as 4 parallel models sharing one
-feature set and one tuned hyperparameter set for high computational efficiency).
+Trains xgb_wave_regressor: 4 separate XGBoost models for
+hs, tp, swell_height and wind_wave_height (same features and same settings for all 4).
 
-Tuning Design: Optuna tunes against `hs` (40 trials) since significant wave height is the
-primary safety-gating variable; the resulting hyperparameters are reused for the
-other wave targets, with `tp` receiving independent fine-tuning where error distribution warrants.
+Optuna tunes on hs (40 trials) because wave height matters most for safety.
+The other targets use the same settings, except tp which gets its own tuning.
 
 Run from the project root: python src\\models\\train_wave.py
 """
@@ -18,23 +16,19 @@ import optuna
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# Running this file directly (python src\models\train_wave.py) only puts
-# src\models on Python's import path, not the project root — so "from src....."
-# below would fail with ModuleNotFoundError without this. Inserting the project
-# root explicitly makes it work regardless of how the script is invoked.
+# Running this file directly only adds src\models to the import path, not the
+# project root, so "from src...." would fail. Adding the project root fixes it.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-# Same project-root anchoring as the sys.path fix above — "models/" as a plain
-# relative string breaks (or silently writes to the wrong place) depending on
-# which folder the script happens to be run from. This guarantees it always
-# resolves to <project_root>/models regardless of cwd.
+# Same idea: build the models/ path from the project root so it always
+# points to <project_root>/models no matter where the script is run from.
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def rmse_score(y_true, y_pred):
-    """sklearn removed mean_squared_error(..., squared=False) in 1.6+ (you're on 1.9.0) —
-    compute RMSE manually so this doesn't break across scikit-learn versions."""
+    """sklearn 1.6+ removed mean_squared_error(..., squared=False),
+    so we compute RMSE ourselves."""
     return float(np.sqrt(mean_squared_error(y_true, y_pred)))
 
 
@@ -48,12 +42,10 @@ MODEL_NAME = "xgb_wave_regressor"
 TARGETS = ["hs", "tp", "swell_height", "wind_wave_height"]
 PRIMARY_TARGET = "hs"  # the one Optuna actually tunes against
 
-# Excluded on purpose: these are DERIVED FROM the wave targets themselves
+# Left out on purpose: these are made FROM the wave targets
 # (wave_steepness = f(hs, tp), swell_ratio = f(swell_height, hs), wave_power = f(hs, tp)).
-# Including them as inputs here would be target leakage — the model could reconstruct
-# hs/tp almost trivially from a feature that already encodes them. These three are
-# legitimate features for the safety classifier, which sits downstream of
-# these outputs, but not for the models that produce hs/tp/swell_height themselves.
+# Using them as inputs would be target leakage. They are fine for the safety classifier
+# (which uses these outputs), but not for the models that predict hs/tp/swell_height.
 LEAKY_FEATURES = ["wave_steepness", "swell_ratio", "wave_power"]
 
 ACCEPTANCE_THRESHOLDS = {"hs": 0.15}  # m, RMSE operational acceptance target threshold
@@ -92,9 +84,8 @@ def tune_hyperparameters(train_df, features, target, n_trials=40):
 
 
 def collect_fold_scores(train_df, features, target, params):
-    """Re-run walk-forward CV once with the final params, purely to capture
-    per-fold RMSE for the walk-forward figure — training itself already happened
-    during tuning, this is just for the plot."""
+    """Run walk-forward CV again with the final settings just to get the
+    RMSE per fold for the chart (training was already done during tuning)."""
     fold_rmses = []
     for fold_train, fold_val in walk_forward_folds(train_df):
         model = xgb.XGBRegressor(**params)
@@ -117,18 +108,15 @@ def evaluate(y_true, y_pred, target):
     return {"rmse": rmse, "mae": mae, "bias": bias}
 
 
-# Targets that get their own independent Optuna search instead of reusing
-# PRIMARY_TARGET's hyperparameters. Added after diagnosing that tp's error
-# distribution (a tight ~6s mode with real tails in both directions) needs
-# more model capacity than hs's tuned params provide — hs/swell_height/
-# wind_wave_height all validated well under the shared params, so only tp
-# gets the extra tuning cost.
+# Targets that get their own Optuna tuning instead of using PRIMARY_TARGET's settings.
+# tp needed it (its errors have tails on both sides), the others were fine
+# with the shared settings.
 RETUNE_TARGETS = ["tp"]
 
 
 def main():
     df = load_training_features()
-    train, val, test = temporal_split(df)  # test is not touched anywhere below
+    train, val, test = temporal_split(df)  # test is not used below
     features = get_feature_columns(df)
 
     print(f"Training {MODEL_NAME} on {len(features)} features, excluding leaky: {LEAKY_FEATURES}")
@@ -141,7 +129,7 @@ def main():
     fold_scores = collect_fold_scores(train, features, PRIMARY_TARGET, best_params)
     plot_walk_forward_scores(fold_scores, PRIMARY_TARGET, MODEL_NAME)
 
-    # Independent tuning pass for targets flagged in RETUNE_TARGETS
+    # Separate tuning for the targets in RETUNE_TARGETS
     target_params = {t: best_params for t in TARGETS}
     for target in RETUNE_TARGETS:
         print(f"Retuning independently for '{target}' (shared params underfit its tails)...")

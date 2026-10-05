@@ -14,7 +14,7 @@
         </div>
     </div>
 
-    <!-- Audit Logs Ledger -->
+    <!-- Audit logs -->
     <div class="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden shadow-2xs">
         
         <!-- Audit Log Filters and Search -->

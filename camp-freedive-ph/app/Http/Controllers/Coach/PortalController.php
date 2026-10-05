@@ -20,14 +20,14 @@ class PortalController extends Controller
     ) {}
 
     /**
-     * Page 1: Coach Portal Dashboard.
+     * Page 1: coach dashboard.
      */
     public function index(): View
     {
         $coach = Auth::user();
         $today = Carbon::today('Asia/Manila');
 
-        // 1. Next Immediate Dive Assignment & Mission Card
+        // 1. Next dive assignment
         $nextAssignment = ParticipantAssignment::with(['batch.riskAssessments', 'participant', 'booking'])
             ->where('coach_id', $coach->id)
             ->where('status', 'assigned')
@@ -53,7 +53,7 @@ class PortalController extends Controller
                 $classBreakdown[$type] = ($classBreakdown[$type] ?? 0) + 1;
             }
 
-            // Weather classification for this batch
+            // Weather for this batch
             $d1Assessment = $batch->latestDay1Assessment;
             $weatherClass = $d1Assessment ? $d1Assessment->overall_classification : 'Safe';
             $weatherBadge = $d1Assessment ? $d1Assessment->classification_badge : [
@@ -61,7 +61,7 @@ class PortalController extends Controller
                 'class' => 'bg-emerald-50 text-emerald-700',
             ];
 
-            // Emergency release requests are available regardless of lead time.
+            // Emergency release can be requested any time
             $diveStart = $batch->start_date->copy()->setTime(6, 30);
             $hoursUntilDive = max(0, Carbon::now('Asia/Manila')->diffInHours($diveStart, false));
             $canRequestRelease = true;
@@ -80,7 +80,7 @@ class PortalController extends Controller
                 'is_shared_pool' => false,
             ];
         } elseif (!$nextAssignment) {
-            // Also check if coach is assigned to batch team during pre-trip
+            // Also check if the coach is in the batch team before the trip
             $nextBatch = Batch::whereDate('start_date', '>=', $today)
                 ->whereIn('status', ['confirmed', 'open'])
                 ->orderBy('start_date', 'asc')
@@ -129,7 +129,7 @@ class PortalController extends Controller
             }
         }
 
-        // 2. Metrics & KPI Counts
+        // 2. Counts
         $availableDaysCount = CoachAvailability::where('coach_id', $coach->id)
             ->where('status', 'available')
             ->whereDate('date', '>=', $today)
@@ -145,7 +145,7 @@ class PortalController extends Controller
             ->filter(fn($b) => $b->assigned_coaches->pluck('id')->contains($coach->id))
             ->count();
 
-        // Exclude batches that this coach is already assigned to or approved for
+        // Hide batches this coach is already assigned to or approved for
         $assignedBatchIds = ParticipantAssignment::where('coach_id', $coach->id)
             ->where('status', 'assigned')
             ->pluck('batch_id')
@@ -172,7 +172,7 @@ class PortalController extends Controller
             ->distinct('participant_id')
             ->count('participant_id');
 
-        // 3. Upcoming Schedule Pipeline (Next 3 upcoming batches)
+        // 3. Next 3 batches
         $upcomingAssignments = ParticipantAssignment::with(['batch.riskAssessments', 'participant', 'booking'])
             ->where('coach_id', $coach->id)
             ->where('status', 'assigned')
@@ -182,7 +182,7 @@ class PortalController extends Controller
             ->groupBy('batch_id')
             ->take(3);
 
-        // 4. Open Broadcast Volunteer Openings (Exclude batches already assigned/approved)
+        // 4. Open slots (not counting batches already assigned/approved)
         $openCoachOpenings = CoachOpening::where('status', 'open')
             ->whereDate('dive_date', '>=', $today)
             ->whereNotIn('batch_id', $excludeBatchIds)
@@ -191,7 +191,7 @@ class PortalController extends Controller
             ->take(3)
             ->get();
 
-        // 5. Quick Upcoming Availability Calendar Status (Next 7 days from today)
+        // 5. Availability for the next 7 days
         $quickDays = [];
         $cursor = $today->copy();
         for ($i = 0; $i < 7; $i++) {

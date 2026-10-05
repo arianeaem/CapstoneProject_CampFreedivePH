@@ -11,7 +11,7 @@ use Illuminate\View\View;
 class AuditLogController extends Controller
 {
     /**
-     * Display the in-app audit logs list (Owner only).
+     * Audit logs page (owner only).
      */
     public function index(Request $request): View
     {
@@ -24,7 +24,7 @@ class AuditLogController extends Controller
             $query->where('action', $request->input('action'));
         }
 
-        // Filter by search query (actor, email, description, ip)
+        // Search (user, email, description, IP)
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {

@@ -5,36 +5,32 @@ namespace App\Services;
 use Carbon\Carbon;
 
 /**
- * Weather Safety Evaluation & Risk Classification Service.
+ * Weather safety check for the booking pages.
  *
- * Domain & Marine Safety Context:
- * Provides unified safety assessments for freediving sessions in Mabini / Anilao, Batangas.
- * Translates multi-variable meteorological forecasts (wave height, wind speed, gusts,
- * barometric pressure drops, and current speed) into actionable 5-tier safety states:
- * - Very Safe & Safe: Normal operations, calm seas, optimal equalizing conditions.
- * - Moderate: Diveable with caution; sheltered coves selected.
- * - High Risk: Heavy chop; backup safety divers assigned.
- * - Critical Risk: Operations suspended; automatic reschedule/refund triggers activated.
+ * Turns the forecast (waves, wind, gusts, pressure, current) into one of 5 levels:
+ * - Very Safe / Safe: normal
+ * - Moderate: ok but be careful, use sheltered spots
+ * - High Risk: rough sea, extra safety divers
+ * - Critical Risk: no diving, reschedule/refund
  *
- * Forecast Horizon Limits:
- * - 0 to 16 Days: High-resolution Open-Meteo marine and atmospheric models.
- * - > 16 Days: Historical Batangas climate benchmarks (Amihan vs Habagat seasonal profiles).
+ * Up to 16 days ahead we use the Open-Meteo forecast. After that we use
+ * the usual weather for that season (Amihan / Habagat).
  */
 class WeatherSafetyService
 {
     /**
-     * @param WeatherForecastService $forecastService Underlying Open-Meteo multi-parameter forecast provider
+     * @param WeatherForecastService $forecastService
      */
     public function __construct(
         protected WeatherForecastService $forecastService
     ) {}
 
     /**
-     * Evaluates dive safety conditions for a 2D1N weekend date range in Mabini, Batangas.
+     * Check the weather for a 2-day weekend.
      *
-     * @param string|Carbon $startDate Weekend start date (Saturday)
-     * @param string|Carbon $endDate Weekend end date (Sunday)
-     * @return array Multi-attribute safety assessment including UI theme tokens, risk badges, and hourly breakdowns
+     * @param string|Carbon $startDate Saturday
+     * @param string|Carbon $endDate Sunday
+     * @return array safety result with the badge/colors for the UI and hourly data
      */
     public function getForecast(string|Carbon $startDate, string|Carbon $endDate): array
     {
@@ -135,7 +131,7 @@ class WeatherSafetyService
             }
         }
 
-        // For dates beyond 16 days or advance bookings:
+        // More than 16 days away:
         $riskConfig = $this->getRiskConfig('safe');
         return [
             'is_benchmark' => true,

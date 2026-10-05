@@ -1,9 +1,9 @@
 """
-Automated unit test validating 100% alignment between:
-1. feature_manifest.json feature names and ordering.
-2. Real snapshot-extracted features via feature_extractor.py.
-3. Model router execution on real physical snapshot features.
-4. Quarantine verification: zero legacy 133-feature models in active serving paths.
+Tests that these all match:
+1. feature names and order in feature_manifest.json
+2. the features made by feature_extractor.py from the snapshot
+3. the model router running on those real features
+4. no old 133-feature models are used anymore
 """
 
 from pathlib import Path
@@ -31,7 +31,7 @@ def test_snapshot_feature_extraction_order_and_types():
     df_waves = load_snapshot_dataset("waves", training_only=False)
     df_currents = load_snapshot_dataset("currents", training_only=False)
 
-    # Origin timestamp inside valid holdout
+    # Origin time inside the holdout
     origin_time = pd.Timestamp("2026-05-15 12:00:00", tz="UTC")
     horizon_h = 24
 
@@ -39,24 +39,24 @@ def test_snapshot_feature_extraction_order_and_types():
     manifest = load_feature_manifest()
     expected_names = [f["name"] for f in manifest["features"]]
 
-    # 1. Exact length match
+    # 1. Same length
     assert len(features_series) == len(expected_names)
     
-    # 2. Exact name and order match
+    # 2. Same names and order
     assert list(features_series.index) == expected_names
 
-    # 3. No NaNs in real feature vector
+    # 3. No NaNs
     nan_cols = features_series[features_series.isna()].index.tolist()
     assert len(nan_cols) == 0, f"Found NaNs in extracted features: {nan_cols}"
 
-    # 4. Physical values sanity
+    # 4. Values look normal
     assert features_series["hs_lag_12h"] > 0.0
     assert features_series["current_speed_lag_24h"] >= 0.0
     assert -1.0 <= features_series["doy_sin"] <= 1.0
 
 
 def test_model_router_with_real_snapshot_features():
-    """Feeds the real extracted features into ModelRouter rather than a synthetic dummy vector."""
+    """Run the model router on real features, not random ones."""
     df_waves = load_snapshot_dataset("waves", training_only=False)
     df_currents = load_snapshot_dataset("currents", training_only=False)
 
@@ -67,14 +67,14 @@ def test_model_router_with_real_snapshot_features():
     real_feature_array = features_series.values.astype(np.float32)
 
     router = ModelRouter()
-    # Route tactical forecast using real features
+    # Short-range forecast with the real features
     res = router.route_forecast("hs", horizon_h, real_feature_array, origin_time)
     assert res["value"] is not None
     assert res["confidence_tier"] in ["HIGH_CONFIDENCE", "MODERATE_CONFIDENCE", "LOW_CONFIDENCE", "LOW_CONFIDENCE_CLIMATOLOGY_BOUND"]
 
 
 def test_legacy_133_feature_models_quarantined():
-    """Verifies that legacy 133-feature models have been removed from active models/ and models/onnx/."""
+    """Check that the old 133-feature models are gone from models/ and models/onnx/."""
     models_dir = Path(__file__).resolve().parents[1] / "models"
     onnx_dir = models_dir / "onnx"
 
@@ -84,14 +84,14 @@ def test_legacy_133_feature_models_quarantined():
     legacy_features_json = onnx_dir / "forecaster_features.json"
     assert not legacy_features_json.exists(), "Legacy forecaster_features.json must be archived!"
 
-    # archive/ is kept out of git, so it only exists on machines that still have the old models locally
+    # archive/ is not in git, it only exists on machines that still have the old models
     archive_dir = Path(__file__).resolve().parents[1] / "archive" / "legacy_133_models"
     if archive_dir.exists():
         assert len(list(archive_dir.glob("*"))) > 0, "Archive folder exists but is empty!"
 
 
 def test_no_era5_feature_shorter_than_120h_lag():
-    """Validates that all ERA5 features in feature_manifest.json strictly observe >= 120h operational lag."""
+    """Check that every ERA5 feature in feature_manifest.json has a lag of at least 120h."""
     manifest = load_feature_manifest()
     era5_features = [f for f in manifest["features"] if f.get("source") == "era5"]
     assert len(era5_features) > 0, "No ERA5 features declared in manifest!"

@@ -1,7 +1,6 @@
 """
-Shared evaluation figures for the physics regressors (wave, wind, current) and safety classifier.
-Import these from every train_*.py script instead of re-implementing plotting
-per model — keeps the figures visually consistent across the defense deck.
+Charts for checking the models (wave, wind, current and the safety classifier).
+All train_*.py scripts use these so the charts look the same.
 """
 
 import os
@@ -11,10 +10,9 @@ import matplotlib.pyplot as plt
 
 from pathlib import Path
 
-# eval_plots.py lives at <project_root>/src/models/eval_plots.py — anchor to
-# project root explicitly rather than a cwd-relative path, since relative
-# "reports/figures" silently creates a WRONG folder (e.g. src/models/reports/figures)
-# if this is ever run from a different working directory.
+# Use the project root, not the current folder. Otherwise running it from
+# somewhere else would create reports/figures in the wrong place
+# (e.g. src/models/reports/figures).
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FIGURES_DIR = str(_PROJECT_ROOT / "reports" / "figures")
 
@@ -24,8 +22,8 @@ def _ensure_dir():
 
 
 def plot_pred_vs_actual(y_true, y_pred, target_name: str, model_name: str):
-    """Scatter of predicted vs actual on the validation set, with a y=x reference line.
-    The single most important figure — a tight diagonal cluster is the headline evidence."""
+    """Predicted vs actual on the validation set, with a y=x line.
+    The closer the points are to the line, the better."""
     _ensure_dir()
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.scatter(y_true, y_pred, alpha=0.25, s=8, color="#003049")
@@ -42,8 +40,8 @@ def plot_pred_vs_actual(y_true, y_pred, target_name: str, model_name: str):
 
 
 def plot_residuals_over_time(timestamps, y_true, y_pred, target_name: str, model_name: str):
-    """Residual (pred - actual) over the validation period. Catches error clustering
-    around specific events (e.g. a storm month) that a scatter plot would hide."""
+    """Error (pred - actual) over the validation period. Shows if the errors
+    happen around certain events (e.g. a storm month), which the scatter plot hides."""
     _ensure_dir()
     residuals = y_pred - y_true
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -59,7 +57,7 @@ def plot_residuals_over_time(timestamps, y_true, y_pred, target_name: str, model
 
 
 def plot_feature_importance(model, feature_names, target_name: str, model_name: str, top_n: int = 15):
-    """XGBoost gain-based feature importance — usually the first thing a panelist asks about."""
+    """XGBoost feature importance (gain)."""
     _ensure_dir()
     raw_importances = [float(x) for x in model.feature_importances_]
     pairs = sorted(zip(raw_importances, feature_names), key=lambda x: x[0], reverse=True)[:top_n]
@@ -79,8 +77,8 @@ def plot_feature_importance(model, feature_names, target_name: str, model_name: 
 
 
 def plot_walk_forward_scores(fold_scores: list, target_name: str, model_name: str):
-    """RMSE per walk-forward fold — demonstrates the temporal CV strategy was actually
-    followed, and surfaces any single fold that behaves unusually (e.g. a typhoon season)."""
+    """RMSE per walk-forward fold. Shows if one fold is very different
+    from the others (e.g. a typhoon season)."""
     _ensure_dir()
     fig, ax = plt.subplots(figsize=(6, 4))
     folds = list(range(len(fold_scores)))
@@ -100,8 +98,8 @@ def plot_walk_forward_scores(fold_scores: list, target_name: str, model_name: st
 
 def plot_actual_vs_predicted_overlay(timestamps, y_true, y_pred, target_name: str, model_name: str,
                                       window_days: int = 30):
-    """Actual vs predicted as two overlaid lines, over one representative window rather
-    than the full validation set — the easiest figure to read at a glance in a slide."""
+    """Actual vs predicted as two lines over one sample period
+    (easier to read than the full validation set)."""
     _ensure_dir()
     df = pd.DataFrame({"time": timestamps, "actual": y_true, "predicted": y_pred}).set_index("time")
     window = df.iloc[: window_days * 24] if len(df) > window_days * 24 else df
@@ -122,9 +120,9 @@ def plot_actual_vs_predicted_overlay(timestamps, y_true, y_pred, target_name: st
 
 
 def plot_confusion_matrix(cm, class_names, model_name: str):
-    """5x5 confusion matrix heatmap for the safety classifier. Rows = true tier,
-    columns = predicted tier — the row for Critical Risk is the one that matters
-    most: mass should sit on the diagonal, not spread into the low-risk columns."""
+    """5x5 confusion matrix for the safety classifier. Rows = real tier,
+    columns = predicted tier. The Critical Risk row is the most important:
+    most of it should be on the diagonal, not in the low-risk columns."""
     _ensure_dir()
     fig, ax = plt.subplots(figsize=(7, 6))
     im = ax.imshow(cm, cmap="Reds")

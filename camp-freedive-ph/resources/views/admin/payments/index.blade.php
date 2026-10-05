@@ -55,7 +55,7 @@
         </div>
     </div>
 
-    <!-- Payments Ledger Table -->
+    <!-- Payments table -->
     <div class="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden shadow-2xs">
         
         <!-- Table Toolbar Header -->

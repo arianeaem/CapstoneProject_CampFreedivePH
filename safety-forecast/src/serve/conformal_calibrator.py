@@ -1,14 +1,12 @@
 """
-Conformal Prediction Interval Calibrator for Short-Range Forecasts (Days 1-3).
+Conformal p10/p90 ranges for the short-range forecasts (days 1-3).
 
-Calculates empirically calibrated p10 and p90 prediction intervals (80% coverage)
-derived directly from out-of-fold cross-validation residuals:
+The p10 and p90 (80% coverage) come from the out-of-fold CV errors:
   e_i = y_i - y_hat_i
   p10 = max(0, y_hat + q10)
   p90 = y_hat + q90
 
-Guarantees finite-sample coverage validity across walk-forward folds without
-parametric Gaussian assumptions or heuristic sigma multipliers.
+This doesn't assume the errors are normal, it just uses the real errors.
 """
 
 import sys
@@ -39,10 +37,10 @@ class ConformalIntervalCalibrator:
 
     def get_quantiles(self, variable: str, horizon: int, point_forecast: float) -> Tuple[float, float, float]:
         """
-        Returns (p10, p50, p90) calibrated via conformal CV residuals.
-        Falls back gracefully if exact horizon is not tabulated.
+        Returns (p10, p50, p90) using the conformal CV errors.
+        If the exact horizon isn't in the table, uses a default.
         """
-        # Map variable name to calibration key
+        # Variable name -> calibration key
         key_map = {
             "hs": "waves_hs",
             "eulerian_speed": "currents_eulerian",
@@ -51,7 +49,7 @@ class ConformalIntervalCalibrator:
         calib_key = key_map.get(variable)
         var_table = self._table.get(calib_key, {})
 
-        # Snap to closest horizon in [1, 3, 6, 12, 24, 48, 72]
+        # Use the closest horizon in [1, 3, 6, 12, 24, 48, 72]
         available_h = [1, 3, 6, 12, 24, 48, 72]
         closest_h = min(available_h, key=lambda x: abs(x - horizon))
         h_key = f"{closest_h}h"
@@ -65,7 +63,7 @@ class ConformalIntervalCalibrator:
             p90 = max(p10, float(point_forecast + q90))
             return p10, p50, p90
 
-        # Safe default scaling if calibration table is absent
+        # Default scaling if there is no calibration table
         scale = (1.0 + horizon / 72.0)
         default_half_width = 0.12 * scale if "wave" in variable or variable == "hs" else 0.08 * scale
         p10 = max(0.0, float(point_forecast - default_half_width))

@@ -1,18 +1,18 @@
 """
-Rigorous Multi-Seed Ablation Benchmark with 168h Block Bootstrap Confidence Intervals.
+Ablation test with several seeds and 168h block bootstrap confidence intervals.
 
-Evaluates out-of-fold CV MAE across walk-forward folds for:
-1. Wave Significant Height (Hs) across 4 Wave Folds.
-2. Eulerian Current Speed across 6 Current Folds.
+Checks the out-of-fold CV MAE for:
+1. wave height (Hs) over the 4 wave folds
+2. current speed over the 6 current folds
 
-Methodological Controls:
-- Strict 240h purge margin between fold training and validation.
-- All climatological mappings and feature scalers fitted strictly on training data per fold.
-- Identical model architecture and hyperparameters (Ridge regression alpha=100.0, linear baseline).
-- Multi-seed evaluation across 5 random seeds (42, 123, 456, 789, 2026).
-- Paired 168h stationary block bootstrap (1,000 resamples) on error differences:
-  * Delta(B - A) = |Error(Model B)| - |Error(Model A)| (Tests ERA5 120h value)
-  * Delta(A - Clim) = |Error(Model A)| - |Error(Climatology)| (Tests if Model A has genuine skill over climatology)
+How:
+- 240h gap between train and validation in each fold
+- climatology and scalers are fit on the training data of each fold only
+- same model and settings for all (Ridge regression, alpha=100.0)
+- 5 seeds (42, 123, 456, 789, 2026)
+- 168h block bootstrap (1,000 samples) on the error differences:
+  * Delta(B - A) = |error B| - |error A| (does ERA5 at 120h help?)
+  * Delta(A - Clim) = |error A| - |error climatology| (is model A better than climatology?)
 """
 
 import sys
@@ -30,7 +30,7 @@ from splits import WAVES_WALK_FORWARD_FOLDS, CURRENTS_WALK_FORWARD_FOLDS
 
 HORIZONS = [1, 3, 6, 12, 24, 48, 72, 120, 168, 240]
 SEEDS = [42, 123, 456, 789, 2026]
-BLOCK_SIZE = 168  # 7 days synoptic block length
+BLOCK_SIZE = 168  # 7 days
 N_BOOT = 1000
 
 
@@ -38,7 +38,7 @@ def paired_block_bootstrap_diff(err1: np.ndarray, err2: np.ndarray,
                                 block_size: int = BLOCK_SIZE,
                                 n_boot: int = N_BOOT,
                                 alpha: float = 0.05):
-    """Moving block bootstrap on paired error differences err1 - err2."""
+    """Block bootstrap on the paired error differences err1 - err2."""
     diff = err1 - err2
     diff = diff[~np.isnan(diff)]
     n = len(diff)
@@ -78,12 +78,12 @@ def build_ablation_dataset():
     df["hs"] = waves["hs"].reindex(idx).interpolate(method="time")
     df["eulerian_speed"] = currents["eulerian_speed"].reindex(idx)
 
-    # Wave features (strictly >= 12h lag)
+    # Wave features (lag >= 12h)
     df["hs_lag_12h"] = waves["hs"].reindex(idx).shift(12)
     df["hs_lag_24h"] = waves["hs"].reindex(idx).shift(24)
     df["hs_roll_mean_24h"] = waves["hs"].reindex(idx).shift(12).rolling(24).mean()
 
-    # Current features (strictly >= 24h lag)
+    # Current features (lag >= 24h)
     df["eul_lag_24h"] = currents["eulerian_speed"].reindex(idx).shift(24)
     df["eul_lag_48h"] = currents["eulerian_speed"].reindex(idx).shift(48)
     df["eul_roll_mean_24h"] = currents["eulerian_speed"].reindex(idx).shift(24).rolling(24).mean()
@@ -95,7 +95,7 @@ def build_ablation_dataset():
     df["hod_sin"] = np.sin(2 * np.pi * idx.hour / 24.0)
     df["hod_cos"] = np.cos(2 * np.pi * idx.hour / 24.0)
 
-    # ERA5 features (strictly >= 120h operational lag)
+    # ERA5 features (lag >= 120h)
     df["wind_speed_lag_120h"] = era5["wind_speed"].reindex(idx).shift(120)
     df["wind_gust_lag_120h"] = era5["wind_gust"].reindex(idx).shift(120)
     df["slp_lag_120h"] = era5["slp"].reindex(idx).shift(120)
@@ -120,7 +120,7 @@ def run_rigorous_ablation():
     base_curr_feats = ["eul_lag_24h", "eul_lag_48h", "eul_roll_mean_24h", "tide_speed_lag_24h", "doy_sin", "doy_cos", "hod_sin", "hod_cos"]
 
     # -------------------------------------------------------------------------
-    # 1. WAVE HS EVALUATION
+    # 1. Wave height (Hs)
     # -------------------------------------------------------------------------
     print("\n>>> 1. WAVE SIGNIFICANT HEIGHT (Hs) ABLATION (4 FOLDS, 5 SEEDS) <<<")
     wave_summary = []
@@ -136,7 +136,7 @@ def run_rigorous_ablation():
             v_start = pd.Timestamp(f_info["val_start"], tz="UTC")
             v_end = pd.Timestamp(f_info["val_end"], tz="UTC")
 
-            # Verify 240h purge margin
+            # Check the 240h gap
             actual_purge = (v_start - t_end).total_seconds() / 3600.0
             assert actual_purge >= 240, f"Purge violation: {actual_purge}h < 240h"
 
@@ -149,7 +149,7 @@ def run_rigorous_ablation():
             y_val = val["hs"].shift(-h).dropna()
             X_val = val.loc[y_val.index]
 
-            # Fit Climatology strictly on fold train
+            # Fit climatology on the fold's training data only
             clim_map = train.groupby([train.index.month, train.index.hour])["hs"].mean()
             y_clim_val = np.array([clim_map.get((t.month, t.hour), np.nan) for t in y_val.index])
             y_pers_val = X_val["hs_lag_12h"].values
@@ -157,7 +157,7 @@ def run_rigorous_ablation():
             err_clim_fold = np.abs(y_clim_val - y_val.values)
             err_pers_fold = np.abs(y_pers_val - y_val.values)
 
-            # Multi-seed models
+            # Models for each seed
             preds_a_seeds = []
             preds_b_seeds = []
             for seed in SEEDS:
@@ -187,9 +187,9 @@ def run_rigorous_ablation():
         mae_c = float(np.mean(concat_c))
         mae_p = float(np.mean(concat_p))
 
-        # Bootstrap: B vs A (Does 120h ERA5 help Model A?)
+        # Bootstrap: B vs A (does ERA5 at 120h help model A?)
         diff_ba, ci_ba_l, ci_ba_u = paired_block_bootstrap_diff(concat_b, concat_a)
-        # Bootstrap: A vs Clim (Does Model A beat Climatology?)
+        # Bootstrap: A vs climatology (is model A better than climatology?)
         diff_ac, ci_ac_l, ci_ac_u = paired_block_bootstrap_diff(concat_a, concat_c)
 
         wave_summary.append({
@@ -209,7 +209,7 @@ def run_rigorous_ablation():
     print(w_df[["Horizon", "CV_Clim_MAE", "Model_A_MAE", "Model_B_MAE", "Delta_BA", "Delta_BA_CI", "Delta_A_vs_Clim", "Delta_AC_CI", "A_Skill_vs_Clim_%"]].to_string(index=False))
 
     # -------------------------------------------------------------------------
-    # 2. EULERIAN CURRENT SPEED EVALUATION
+    # 2. Current speed
     # -------------------------------------------------------------------------
     print("\n>>> 2. EULERIAN CURRENT SPEED ABLATION (6 FOLDS, 5 SEEDS) <<<")
     curr_summary = []

@@ -41,7 +41,7 @@ class UpdateForecastCommand extends Command
         $this->line("Forecast Horizon: Next {$days} Days (24 Hours/Day = " . ($days * 24) . " Hourly Intervals)");
 
         try {
-            // 1. Fetch and Cache Continuous 16-Day Forecasts
+            // 1. Get and cache the 16-day forecast
             $result = $weatherService->updateAllForecasts($days);
             $cacheDuration = round((microtime(true) - $startTime) * 1000, 2);
 
@@ -50,7 +50,7 @@ class UpdateForecastCommand extends Command
             $this->line("  Source Weather Endpoint: https://api.open-meteo.com/v1/forecast");
             $this->line("  Last Updated: " . $result['updated_at']);
 
-            // Render 7-day preview table
+            // Show a 7-day table
             $headers = ['Date', '24h Overall Risk', 'Daytime (06-18h)', 'AM Window', 'PM Window', 'Wave (Hs)', 'Wind Speed'];
             $rows = [];
 
@@ -68,7 +68,7 @@ class UpdateForecastCommand extends Command
 
             $this->table($headers, $rows);
 
-            // 2. Assess Active Batches if requested
+            // 2. Assess the active batches if asked
             if ($assessBatches) {
                 $this->info("\nAssessing active batches within forecast window...");
                 $today = Carbon::today(WeatherForecastService::TIMEZONE);

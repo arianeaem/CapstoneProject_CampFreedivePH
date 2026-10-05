@@ -25,7 +25,7 @@
             <p class="text-lg sm:text-xl font-black tracking-tight leading-tight"
                :class="$safety.text({{ $f }}.overall_classification, {{ $seasonal }})"
                x-text="$safety.headline({{ $f }}.overall_classification, {{ $seasonal }})"></p>
-            <!-- 5-line safety indicator: each line has its own color (1 red → 5 green) -->
+            <!-- 5-line safety bar: each line has its own color (1 red to 5 green) -->
             <template x-if="$safety.tone({{ $f }}.overall_classification, {{ $seasonal }}) !== 'neutral'">
                 <div class="flex items-center gap-1 shrink-0" role="img"
                      :aria-label="'Safety score ' + $safety.score({{ $f }}.overall_classification) + ' out of 5'">
@@ -58,7 +58,7 @@
                             <div class="text-sm font-extrabold truncate" :class="$safety.text(day.classification, {{ $seasonal }})"
                                  x-text="{{ $seasonal }} ? 'Seasonal outlook' : day.classification"></div>
                         </div>
-                        <!-- Roughest hour (backend "worst_hour": when wind & waves peak) -->
+                        <!-- Roughest hour (worst_hour: when wind and waves are highest) -->
                         <div class="text-right shrink-0" x-show="$safety.hasTime(day.worst_hour)" title="When wind and waves peak that day">
                             <div class="text-[11px] font-bold uppercase tracking-wider text-[#8E8E93]">Roughest<span class="sr-only"> (when wind and waves peak)</span></div>
                             <div class="text-sm font-black text-[#1D1D1F] whitespace-nowrap" x-text="day.worst_hour"></div>
@@ -81,7 +81,7 @@
         </ul>
     </template>
 
-    <!-- 4. Forecast details (collapsible, technical) -->
+    <!-- 4. Forecast details (can be expanded) -->
     <div class="border-t border-[#E5E5EA] pt-1">
         <button type="button"
                 @click="detailsOpen = !detailsOpen"

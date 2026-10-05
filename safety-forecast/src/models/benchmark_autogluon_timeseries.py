@@ -1,9 +1,9 @@
 """
-Complete Multi-Horizon Benchmark & Visualization Engine
-======================================================
-Executes AutoGluon-TimeSeries benchmark across 11 physics variables and 9 horizons.
-Extracts best models per cell with TFT guardrails, outputs production_model_selection.json,
-and generates the 4 required stakeholder-facing visualizations.
+Benchmark and charts for all horizons
+======================================
+Runs the AutoGluon-TimeSeries benchmark for 11 variables and 9 horizons.
+Picks the best model per cell (with the TFT rule), writes production_model_selection.json
+and makes the 4 charts.
 """
 
 import os
@@ -39,7 +39,7 @@ PHYSICS_VARIABLES = [
 
 HORIZONS = [1, 6, 12, 24, 48, 72, 96, 144, 168]
 
-# Visual Styling
+# Chart style
 plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
 plt.rcParams["font.sans-serif"] = "DejaVu Sans"
 plt.rcParams["axes.edgecolor"] = "#CBD5E1"
@@ -62,13 +62,13 @@ def execute_full_benchmark():
         df_raw.index = pd.to_datetime(df_raw.index)
     df_raw = df_raw.sort_index()
 
-    # Use 1,000 recent hourly timesteps (over 41 days continuous) for high fidelity, rapid benchmarking
+    # Use the last 1,000 hours (about 41 days) so the benchmark is fast
     eval_slice = df_raw.iloc[-1000:].copy()
 
     all_leaderboards = []
     efficiency_records = []
 
-    # 1. Run TFT benchmark comparison on representative anchor (hs at H=24)
+    # 1. TFT comparison on one cell (hs at H=24)
     print("\n[Benchmarking Deep Learning: TemporalFusionTransformer for Efficiency Comparison...]")
     tft_ts = TimeSeriesDataFrame.from_data_frame(
         pd.DataFrame({
@@ -104,7 +104,7 @@ def execute_full_benchmark():
         "sample_mase": tft_mase,
     })
 
-    # Benchmark Chronos2 (Zero-shot / Pretrained Foundation Model)
+    # Chronos2 (pretrained model, zero-shot)
     efficiency_records.append({
         "model_family": "Chronos2 (Zero-shot)",
         "fit_time_seconds": 12.5,
@@ -163,7 +163,7 @@ def execute_full_benchmark():
             best_m = lb.sort_values("score_test", ascending=False).iloc[0]
             print(f" Best: {best_m['model']:<18} | MASE: {best_m['mase']:.4f} | Fit: {fit_time:.1f}s")
 
-            # Collect efficiency metrics for representative families
+            # Fit time and prediction time for some model families
             for _, row in lb.iterrows():
                 family = row["model"]
                 if "DirectTabular" in family:
@@ -186,13 +186,13 @@ def execute_full_benchmark():
                     "sample_mase": float(row["mase"]),
                 })
 
-    # Combine into full leaderboard
+    # Put everything in one leaderboard
     full_leaderboard = pd.concat(all_leaderboards, ignore_index=True)
     full_leaderboard.to_csv(full_lb_path, index=False)
     print(f"\nWrote full leaderboard ({len(full_leaderboard)} rows) -> {full_lb_path}")
 
     # =========================================================================
-    # MODEL SELECTION WITH TFT GUARDRAIL
+    # Pick the models (with the TFT rule)
     # =========================================================================
     print("\nExtracting Best Model per (Variable, Horizon) Cell...")
     best_candidates = (
@@ -202,10 +202,9 @@ def execute_full_benchmark():
         .reset_index()
     )
 
-    # Check TFT Rule
-    # "Before accepting any row where model == 'TemporalFusionTransformer', manually confirm:
-    #  1. Its MASE beats the next-best candidate by a material margin (not noise), and
-    #  2. You have an actual downstream need for interpretability."
+    # TFT rule: only accept TemporalFusionTransformer if
+    #  1. its MASE is clearly better than the next one (not just noise), and
+    #  2. we actually need it to be interpretable.
     final_selections = []
     for (var, h), cell_df in full_leaderboard.groupby(["variable", "horizon"]):
         sorted_cell = cell_df.sort_values("score_test", ascending=False).reset_index(drop=True)
@@ -215,7 +214,7 @@ def execute_full_benchmark():
             if len(sorted_cell) > 1:
                 runner_up = sorted_cell.iloc[1]
                 margin = runner_up["mase"] - winner["mase"]  # Positive if TFT is better
-                # Check material margin (> 0.05) and interpretability requirement
+                # Is it clearly better (> 0.05) and do we need interpretability?
                 if margin < 0.05:
                     print(f"[TFT GUARDRAIL] Rejected TFT for ({var}, {h}h): MASE margin {margin:.4f} is noise. Selected {runner_up['model']}.")
                     winner = runner_up.to_dict()
@@ -231,7 +230,7 @@ def execute_full_benchmark():
     print(f"Saved production model selection mapping -> {model_sel_path}")
 
     # =========================================================================
-    # VISUALIZATION GENERATION
+    # Charts
     # =========================================================================
     print("\nGenerating 4 Stakeholder-Facing Visualizations...")
     generate_leaderboard_chart(full_leaderboard)
@@ -249,14 +248,14 @@ def execute_full_benchmark():
 
 def generate_leaderboard_chart(full_lb: pd.DataFrame):
     """
-    Chart 1: Phase 0 Benchmark Leaderboard
-    Bar / line chart of MASE per model family per horizon.
-    Shows where Tabular/XGBoost wins vs. Theta vs. Ensemble across horizons.
+    Chart 1: benchmark leaderboard
+    MASE per model family per horizon.
+    Shows where Tabular/XGBoost, Theta or Ensemble wins.
     """
     out_file = REPORTS_DIR / "phase0_benchmark_leaderboard.png"
     plt.figure(figsize=(12, 6), dpi=300)
 
-    # Simplify model names for clean plotting
+    # Shorter model names for the chart
     plot_df = full_lb.copy()
     plot_df["clean_model"] = plot_df["model"].apply(
         lambda m: "DirectTabular (XGB/GBDT)" if "DirectTabular" in m
@@ -298,14 +297,14 @@ def generate_leaderboard_chart(full_lb: pd.DataFrame):
 
 def generate_degradation_curve(best_per_cell: pd.DataFrame):
     """
-    Chart 2: Horizon-wise Degradation Curve
-    MASE vs. Horizon (1h -> 168h) for the winning model at each horizon.
-    Shows how error rises past 72h to justify low-confidence warnings.
+    Chart 2: error vs horizon
+    MASE from 1h to 168h for the best model at each horizon.
+    Shows the error going up after 72h (why we show low-confidence warnings).
     """
     out_file = REPORTS_DIR / "horizon_degradation_curve.png"
     plt.figure(figsize=(11, 6), dpi=300)
 
-    # Plot wave height (hs), wind speed, and current velocity degradation
+    # Wave height (hs), wind speed and current
     key_vars = ["hs", "wind_speed", "wind_gust", "tp", "current_u"]
     color_map = {
         "hs": "#0284C7",
@@ -328,7 +327,7 @@ def generate_degradation_curve(best_per_cell: pd.DataFrame):
                 color=color_map.get(var, "#334155"),
             )
 
-    # Shaded confidence drop zone past 72h
+    # Shade the area after 72h
     plt.axvspan(72, 168, color="#FEE2E2", alpha=0.5, label="Low Confidence Zone (> 72h Lead Time)")
     plt.axvline(72, color="#EF4444", linestyle="--", linewidth=1.5, alpha=0.8)
 
@@ -356,29 +355,29 @@ def generate_degradation_curve(best_per_cell: pd.DataFrame):
 
 def generate_quantile_fan_chart(eval_slice: pd.DataFrame, best_per_cell: pd.DataFrame):
     """
-    Chart 3: Quantile Fan Chart
-    Observed history + widening p10-p90 shaded band into the future (7 days).
-    Visually explains why 7-day-out forecasts carry wider uncertainty.
+    Chart 3: fan chart
+    Past values + p10-p90 band that gets wider over the next 7 days.
+    Shows why a 7-day forecast is less certain.
     """
     out_file = REPORTS_DIR / "quantile_fan_chart.png"
     plt.figure(figsize=(13, 6), dpi=300)
 
-    # Focus on Significant Wave Height (Hs)
+    # Wave height (Hs)
     obs_window = eval_slice["hs"].iloc[-72:].copy()
     last_ts = obs_window.index[-1]
 
-    # Future timestamps for 168h (7 days)
+    # Next 168 hours (7 days)
     future_timestamps = pd.date_range(last_ts + pd.Timedelta(hours=1), periods=168, freq="1h")
 
-    # Generate synthetic realistic multi-horizon fan trajectory based on best_per_cell degradation
+    # Make a sample fan from the error growth in best_per_cell
     np.random.seed(42)
     base_val = obs_window.iloc[-1]
     
-    # Trend toward seasonal median with diurnal cycle
+    # Goes toward the seasonal median with a daily cycle
     diurnal = 0.08 * np.sin(np.linspace(0, 7 * 2 * np.pi, 168))
     mean_forecast = base_val + np.linspace(0, 0.15, 168) + diurnal
 
-    # Uncertainty expands with sqrt(horizon)
+    # Band gets wider with sqrt(horizon)
     horizon_scale = np.sqrt(np.arange(1, 169)) / np.sqrt(168)
     sigma = 0.05 + 0.35 * horizon_scale
 
@@ -388,18 +387,18 @@ def generate_quantile_fan_chart(eval_slice: pd.DataFrame, best_per_cell: pd.Data
     p75 = mean_forecast + 0.67 * sigma
     p90 = mean_forecast + 1.28 * sigma
 
-    # Plot Historical Observations
+    # Past values
     plt.plot(obs_window.index, obs_window.values, color="#1E293B", linewidth=2.0, label="Observed Realized $H_s$ (Last 72h)")
 
-    # Plot Quantile Bands
+    # p10-p90 band
     plt.plot(future_timestamps, p50, color="#0284C7", linewidth=2.2, linestyle="-", label="Median Forecast ($p_{50}$)")
     plt.fill_between(future_timestamps, p25, p75, color="#0284C7", alpha=0.35, label="Interquartile Range ($p_{25} - p_{75}$)")
     plt.fill_between(future_timestamps, p10, p90, color="#0284C7", alpha=0.15, label="Confidence Band ($p_{10} - p_{90}$)")
 
-    # Coast Guard Hard-Gate Reference Ceiling (1.80m for freediving)
+    # Coast Guard limit line (1.80 m)
     plt.axhline(1.80, color="#DC2626", linestyle="--", linewidth=1.5, label="PCG Safety Limit ($H_s = 1.80$m)")
 
-    # Anchor boundary line
+    # Line between past and future
     plt.axvline(last_ts, color="#64748B", linestyle=":", linewidth=1.5)
     plt.text(last_ts - pd.Timedelta(hours=2), 1.9, "Now ($T_0$)", horizontalalignment="right", fontweight="bold", color="#334155")
 
@@ -416,14 +415,14 @@ def generate_quantile_fan_chart(eval_slice: pd.DataFrame, best_per_cell: pd.Data
 
 def generate_efficiency_comparison(eff_df: pd.DataFrame):
     """
-    Chart 4: Computational Efficiency Comparison
-    Training time and prediction latency per model family.
-    Justifies skipping TFT by default with an empirical visualization.
+    Chart 4: training and prediction time
+    Training time and prediction time per model family.
+    Shows why we skip TFT by default.
     """
     out_file = REPORTS_DIR / "computational_efficiency_comparison.png"
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5), dpi=300)
 
-    # Average metrics per model family
+    # Average per model family
     agg_eff = eff_df.groupby("model_family").agg({
         "fit_time_seconds": "mean",
         "pred_time_seconds": "mean",
@@ -434,7 +433,7 @@ def generate_efficiency_comparison(eff_df: pd.DataFrame):
 
     colors = ["#F59E0B", "#94A3B8", "#8B5CF6", "#2563EB", "#10B981", "#EC4899", "#EF4444"]
 
-    # 1. Fit Time (Log Scale)
+    # 1. Fit time (log scale)
     bars1 = ax1.bar(agg_eff["model_family"], agg_eff["fit_time_seconds"], color=colors, edgecolor="#1E293B", linewidth=0.6)
     ax1.set_yscale("log")
     ax1.set_ylabel("Training Time (Seconds, Log Scale)", fontsize=11, fontweight="semibold")
@@ -444,7 +443,7 @@ def generate_efficiency_comparison(eff_df: pd.DataFrame):
         yval = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width() / 2, yval * 1.15, f"{yval:.2f}s", ha="center", va="bottom", fontsize=8, fontweight="bold")
 
-    # 2. Prediction Latency
+    # 2. Prediction time
     bars2 = ax2.bar(agg_eff["model_family"], agg_eff["pred_time_seconds"] * 1000, color=colors, edgecolor="#1E293B", linewidth=0.6)
     ax2.set_ylabel("Prediction Latency per Request (Milliseconds)", fontsize=11, fontweight="semibold")
     ax2.set_title("Inference Latency: Serving Budget (< 350ms)", fontsize=12, fontweight="bold")

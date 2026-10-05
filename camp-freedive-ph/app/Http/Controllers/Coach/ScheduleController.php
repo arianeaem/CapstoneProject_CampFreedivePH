@@ -18,7 +18,7 @@ class ScheduleController extends Controller
     ) {}
 
     /**
-     * Page 3: My Assigned Schedule (Upcoming & History).
+     * Page 3: my schedule (upcoming and past).
      */
     public function index(Request $request): View
     {
@@ -26,7 +26,7 @@ class ScheduleController extends Controller
         $today = Carbon::today();
         $activeTab = $request->input('tab', ($request->filled('date_from') || $request->filled('date_to') || $request->filled('class_type')) ? 'history' : 'upcoming');
 
-        // 1. UPCOMING ASSIGNMENTS (Future Confirmed Batches)
+        // 1. Upcoming assignments
         $upcomingAssignmentsQuery = ParticipantAssignment::with([
             'batch.riskAssessments',
             'batch.latestManualOverride',
@@ -40,7 +40,7 @@ class ScheduleController extends Controller
 
         $upcomingRaw = $upcomingAssignmentsQuery->get();
 
-        // Group by batch_id
+        // Group by batch
         $upcomingBatches = [];
         foreach ($upcomingRaw->groupBy('batch_id') as $batchId => $assignments) {
             $firstAssignment = $assignments->first();
@@ -49,14 +49,14 @@ class ScheduleController extends Controller
 
             $students = $assignments->pluck('participant')->unique('id');
 
-            // Class type breakdown
+            // Count per class
             $classCounts = [];
             foreach ($students as $s) {
                 $cType = $s->booking?->formatted_class_type ?? 'Freediving';
                 $classCounts[$cType] = ($classCounts[$cType] ?? 0) + 1;
             }
 
-            // Weather classification
+            // Weather
             $d1 = $batch->latestDay1Assessment;
             $weatherClass = $d1 ? $d1->overall_classification : 'Safe';
             $weatherBadge = $d1 ? $d1->classification_badge : [
@@ -64,12 +64,12 @@ class ScheduleController extends Controller
                 'class' => 'bg-emerald-50 text-emerald-700',
             ];
 
-            // Emergency release requests are available regardless of lead time.
+            // Emergency release can be requested any time
             $diveStart = $batch->start_date->copy()->setTime(6, 30);
             $hoursUntilDive = Carbon::now()->diffInHours($diveStart, false);
             $canRequestRelease = true;
 
-            // Check if release request already submitted
+            // Was a release request already sent?
             $releaseRequest = AssignmentReleaseRequest::where('coach_id', $coach->id)
                 ->where('batch_id', $batch->id)
                 ->first();
@@ -91,7 +91,7 @@ class ScheduleController extends Controller
             ];
         }
 
-        // 2. PAST ASSIGNMENT HISTORY (Archival completed dives)
+        // 2. Past dives
         $historyQuery = ParticipantAssignment::with([
             'batch',
             'participant',
@@ -103,7 +103,7 @@ class ScheduleController extends Controller
               ->orWhere('status', 'completed');
         });
 
-        // Filter: Date Range
+        // Filter by date range
         if ($request->filled('date_from')) {
             $historyQuery->whereDate('dive_date', '>=', $request->input('date_from'));
         }
@@ -111,7 +111,7 @@ class ScheduleController extends Controller
             $historyQuery->whereDate('dive_date', '<=', $request->input('date_to'));
         }
 
-        // Filter: Class Type
+        // Filter by class
         if ($request->filled('class_type')) {
             $historyQuery->whereHas('booking', function ($bq) use ($request) {
                 $bq->where('class_type', $request->input('class_type'));

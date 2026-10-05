@@ -1,14 +1,13 @@
 """
-Source: NASA GPM IMERG Final Run V07B (GPM_3IMERGHH.07) & Late Run V07 (GPM_3IMERGHHL.07)
-Access: Remote spatial subsetting via NASA OPeNDAP DAP2
+Source: NASA GPM IMERG Final Run V07B (GPM_3IMERGHH.07) and Late Run V07 (GPM_3IMERGHHL.07)
+Access: download only our area using NASA OPeNDAP DAP2
 
-Optimized Architecture:
-- Concurrent ThreadPoolExecutor with 48 worker threads (benchmarked optimal at ~3.3 granules/sec).
-- HTTP connection pooling (size 96+) with exponential backoff on 429/500/502/503/504.
-- Month-by-month incremental checkpointing: saves gpm_{run_type}_{year}_{month}.nc per month.
-- Auto-resume: verifies existing month files by size and granule count, skipping completed months.
-- Persistent failure log (gpm_failures.log) and JSON progress summary (gpm_ingestion_summary.json).
-- Scientific integrity: missing values preserved as NaN; no blind interpolation.
+- 48 worker threads (we tested, about 3.3 files/sec)
+- reuses HTTP connections (pool 96+) and retries with backoff on 429/500/502/503/504
+- saves one file per month: gpm_{run_type}_{year}_{month}.nc
+- skips months that are already complete (checks size and file count)
+- failures go to gpm_failures.log and progress to gpm_ingestion_summary.json
+- missing values stay NaN, we don't fill them in here
 """
 
 from datetime import datetime, timedelta, timezone
@@ -54,7 +53,7 @@ LON_COORDS = np.array([round(-179.95 + idx * 0.1, 2) for idx in range(LON_IDX_MI
 
 
 def create_session(pool_size: int = DEFAULT_WORKERS) -> requests.Session:
-    """Configures a thread-safe requests session with connection pooling."""
+    """requests session with a connection pool (safe to use from threads)."""
     session = requests.Session()
     retries = Retry(
         total=5,
@@ -162,8 +161,8 @@ def update_summary(summary_data: dict):
 
 def download(start_date: str = None, end_date: str = None, run_type: str = "final", max_workers: int = DEFAULT_WORKERS) -> list[Path]:
     """
-    Downloads NASA GPM IMERG month by month with auto-resume.
-    Saves gpm_{run_type}_{year}_{month:02d}.nc per completed month.
+    Download NASA GPM IMERG month by month, skipping months already done.
+    Saves gpm_{run_type}_{year}_{month:02d}.nc for each finished month.
     """
     RAW_SUBDIR.mkdir(parents=True, exist_ok=True)
     if start_date is None:
@@ -190,7 +189,7 @@ def download(start_date: str = None, end_date: str = None, run_type: str = "fina
         m_start = f"{year}-{month:02d}-01 00:00:00"
         m_end = f"{year}-{month:02d}-{days_in_month:02d} 23:30:00"
 
-        # Cap if month is at the boundary
+        # Stop at the end date
         if f"{year}-{month:02d}" == start_date[:7]:
             m_start = f"{start_date} 00:00:00"
         if f"{year}-{month:02d}" == end_date[:7]:
@@ -198,7 +197,7 @@ def download(start_date: str = None, end_date: str = None, run_type: str = "fina
 
         month_timestamps = pd.date_range(start=m_start, end=m_end, freq="30min")
 
-        # Auto-resume check: skip if month file exists and has full granule count
+        # Skip if the month file exists and has all the files
         if out_file.exists() and out_file.stat().st_size > 1000:
             try:
                 with xr.open_dataset(out_file) as ds_check:
@@ -291,11 +290,11 @@ def to_interim() -> Path:
     df_all_30min = pd.concat(dfs).sort_index()
     df_all_30min = df_all_30min[~df_all_30min.index.duplicated(keep="last")]
 
-    # Resample 30min -> 1h mean
+    # 30 min -> 1 hour average
     df_hourly = df_all_30min.resample("1h").mean()
     df_hourly.index.name = "timestamp"
 
-    # Explicitly track interpolated rain hours (never interpolate silently!)
+    # Keep track of which rain hours are interpolated
     nan_mask = df_hourly["rain_rate_mm_hr"].isna()
     df_hourly["rain_is_interpolated"] = nan_mask
     if nan_mask.any():

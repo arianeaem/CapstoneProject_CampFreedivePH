@@ -5,9 +5,9 @@ namespace App\Support;
 use Carbon\Carbon;
 
 /**
- * Single access point for the demand / season rules defined in config/demand.php
- * (which reads demand-forecast/demand_thresholds.json, written by the ML pipeline
- * from the 553 actual records). No other class should define its own thresholds.
+ * Reads the demand and season rules from config/demand.php
+ * (which reads demand-forecast/demand_thresholds.json, made by the ML script
+ * from the 553 real records). Use this class instead of writing the thresholds again.
  */
 class DemandRules
 {
@@ -56,13 +56,13 @@ class DemandRules
         return self::seasonForMonth((int) Carbon::parse($date)->format('n'));
     }
 
-    /** 'peak' | 'shoulder' | 'off_peak' - the slug format used by pricing rules. */
+    /** 'peak', 'shoulder' or 'off_peak' (format used by pricing rules). */
     public static function seasonSlug(string $season): string
     {
         return strtolower(str_replace(['-', ' '], '_', $season));
     }
 
-    /** Normalise any 'high' / 'HIGH' / 'High' to 'High' (or null if unknown). */
+    /** Turn 'high' / 'HIGH' / 'High' into 'High' (or null if unknown). */
     public static function normalizeLevel(?string $level): ?string
     {
         $l = ucfirst(strtolower(trim((string) $level)));
@@ -70,7 +70,7 @@ class DemandRules
         return in_array($l, [self::LOW, self::MEDIUM, self::HIGH], true) ? $l : null;
     }
 
-    /** Calendar month numbers (1-12) that belong to a season, e.g. 'Peak' => [3, 4, 6, 8]. */
+    /** Month numbers (1-12) in a season, e.g. 'Peak' => [3, 4, 6, 8]. */
     public static function monthsForSeason(string $season): array
     {
         $wanted = self::seasonSlug($season);
@@ -84,7 +84,7 @@ class DemandRules
         return $months;
     }
 
-    /** Readable month list for a season, e.g. 'Mar, Apr, Jun, Aug'. */
+    /** Month names for a season, e.g. 'Mar, Apr, Jun, Aug'. */
     public static function monthsLabel(string $season): string
     {
         $names = array_map(fn ($m) => date('M', mktime(0, 0, 0, $m, 1)), self::monthsForSeason($season));

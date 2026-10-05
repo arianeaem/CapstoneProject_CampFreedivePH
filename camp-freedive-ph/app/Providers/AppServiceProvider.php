@@ -11,7 +11,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // One settings load per request/job instead of one cache lookup per setting
+        // Load the settings once per request/job, not once per setting
         $this->app->scoped(\App\Services\SystemSettingService::class);
 
         if (file_exists(app_path('Helpers/portal_helpers.php'))) {
@@ -48,7 +48,7 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Configure application-wide rate limiters.
+     * Rate limits for the app.
      */
     protected function configureRateLimiting(): void
     {
@@ -70,7 +70,7 @@ class AppServiceProvider extends ServiceProvider
                 ->withHeaders($responseHeaders);
         };
 
-        // 1. General API & Public Endpoints
+        // 1. General API and public pages
         \Illuminate\Support\Facades\RateLimiter::for('api', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.general_api.decay_minutes', 15);
             $max = (int) config('rate_limits.general_api.max_attempts', 100);
@@ -79,7 +79,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($key)->response($formatResponse);
         });
 
-        // 2. Authentication / Login (Per normalized email + IP or IP)
+        // 2. Login (per email + IP, or per IP)
         \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.login.decay_minutes', 15);
             $max = (int) config('rate_limits.login.max_attempts', 10);
@@ -89,7 +89,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($key)->response($formatResponse);
         });
 
-        // 3. Password Reset Endpoints
+        // 3. Password reset
         \Illuminate\Support\Facades\RateLimiter::for('password_reset', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.password_reset.decay_minutes', 15);
             $max = (int) config('rate_limits.password_reset.max_attempts', 5);
@@ -97,7 +97,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 4. Booking Creation & Slot Reservation
+        // 4. Creating bookings / holding slots
         \Illuminate\Support\Facades\RateLimiter::for('booking_create', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.booking_create.decay_minutes', 15);
             $max = (int) config('rate_limits.booking_create.max_attempts', 10);
@@ -105,7 +105,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 5. Booking Pricing Quotes & Weather Checks
+        // 5. Price quotes and weather checks
         \Illuminate\Support\Facades\RateLimiter::for('booking_quote_weather', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.booking_quote_weather.decay_minutes', 1);
             $max = (int) config('rate_limits.booking_quote_weather.max_attempts', 60);
@@ -113,7 +113,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 6. Customer Portal PIN Search / Lookup
+        // 6. Manage Booking PIN lookup
         \Illuminate\Support\Facades\RateLimiter::for('manage_lookup', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.manage_lookup.decay_minutes', 15);
             $max = (int) config('rate_limits.manage_lookup.max_attempts', 10);
@@ -121,7 +121,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 7. Customer Reschedule / Cancellation Requests
+        // 7. Reschedule / cancel requests
         \Illuminate\Support\Facades\RateLimiter::for('manage_requests', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.manage_requests.decay_minutes', 15);
             $max = (int) config('rate_limits.manage_requests.max_attempts', 5);
@@ -129,7 +129,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 8. PayMongo Checkout Session Creation
+        // 8. PayMongo checkout
         \Illuminate\Support\Facades\RateLimiter::for('paymongo_checkout', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.paymongo_checkout.decay_minutes', 15);
             $max = (int) config('rate_limits.paymongo_checkout.max_attempts', 10);
@@ -137,7 +137,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 9. PayMongo Webhook Endpoint
+        // 9. PayMongo webhook
         \Illuminate\Support\Facades\RateLimiter::for('paymongo_webhook', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.paymongo_webhook.decay_minutes', 1);
             $max = (int) config('rate_limits.paymongo_webhook.max_attempts', 120);
@@ -145,7 +145,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($request->ip())->response($formatResponse);
         });
 
-        // 10. Weather Forecast External API Cache Sync
+        // 10. Weather forecast sync
         \Illuminate\Support\Facades\RateLimiter::for('weather_sync', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.weather_sync.decay_minutes', 15);
             $max = (int) config('rate_limits.weather_sync.max_attempts', 10);
@@ -154,7 +154,7 @@ class AppServiceProvider extends ServiceProvider
             return \Illuminate\Cache\RateLimiting\Limit::perMinutes($decay, $max)->by($key)->response($formatResponse);
         });
 
-        // 11. Machine Learning API Pipeline
+        // 11. ML API
         \Illuminate\Support\Facades\RateLimiter::for('ml_api', function (\Illuminate\Http\Request $request) use ($formatResponse) {
             $decay = (int) config('rate_limits.ml_api.decay_minutes', 1);
             $max = (int) config('rate_limits.ml_api.max_attempts', 60);

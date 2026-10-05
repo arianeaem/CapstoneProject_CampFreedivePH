@@ -1,7 +1,6 @@
 """
-Diagnostic tool for investigating upstream regression-to-the-mean and variance
-shrinkage across forecast horizons (1h -> 144h), and how it affects downstream
-safety classifier performance.
+Checks how the forecasts get smoother (closer to the average) the further ahead
+they go (1h -> 144h), and how that affects the safety classifier.
 
 Run from project root: python src/models/diagnose_horizon_smoothing.py
 """
@@ -51,7 +50,7 @@ def main():
     val["pred_risk_tier"] = val_preds
 
     # -----------------------------------------------------------------------
-    # Part 1: Distribution Shrinkage Analysis by Horizon
+    # Part 1: how much the spread shrinks per horizon
     # -----------------------------------------------------------------------
     print("=" * 75)
     print("PART 1: FORECAST VARIANCE & PEAK SHRINKAGE ACROSS ALL 8 HORIZONS")
@@ -69,7 +68,7 @@ def main():
                   f"{h_data.median():>8.2f} {h_data.quantile(0.95):>8.2f} {h_data.max():>8.2f}")
 
     # -----------------------------------------------------------------------
-    # Part 2: Spot-Check Long-Horizon Critical Risk Rows
+    # Part 2: look at some Critical Risk rows far ahead
     # -----------------------------------------------------------------------
     print("\n" + "=" * 75)
     print("PART 2: SPOT-CHECKING TRUE CRITICAL RISK ROWS AT 48h, 72h, 96h, 144h")

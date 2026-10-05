@@ -1,17 +1,15 @@
 """
-Site Forecaster Module for Camp FreedivePH.
-Provides POST /forecast/site microservice backend logic.
+Site forecast logic for POST /forecast/site.
 
-Capabilities:
-1. Spatial verification: Validates lat/lon against Camp FreedivePH Batangas operational area.
-2. Store Freshness Check: Flags stale store and degrades gracefully to Climatology (degraded: true).
-3. Horizon Routing & Cutoffs:
-   - hs: Model up to 48h (H < 6 clamped to h6; interpolated between 6, 12, 24, 36, 48). Climatology beyond 48h.
-   - current_speed: Model up to 72h (H < 24 clamped to h24; interpolated between 24, 48, 72). Climatology beyond 72h.
-   - Separate interpolation of predicted anomaly and conformal quantiles [q10, q90].
-   - All other variables (wind, gust, slp, tp, swell, wind_wave, tide, stokes, eulerian): Climatology.
-4. Daily aggregates: rain_mm, p_wet (Wilson CI), p_high_gust (Wilson CI), wind direction bands.
-5. Strict contract guarantees: p10 <= p50 <= p90 everywhere, continuous hourly timestamps.
+1. Checks that the lat/lon is inside our Batangas area.
+2. Checks if the store data is old. If it is, uses climatology (degraded: true).
+3. Horizons:
+   - hs: model up to 48h (H < 6 uses h6, in between 6, 12, 24, 36, 48 it interpolates). Climatology after 48h.
+   - current_speed: model up to 72h (H < 24 uses h24, interpolates between 24, 48, 72). Climatology after 72h.
+   - the anomaly and the conformal range [q10, q90] are interpolated separately.
+   - everything else (wind, gust, slp, tp, swell, wind_wave, tide, stokes, eulerian): climatology.
+4. Daily values: rain_mm, p_wet (Wilson CI), p_high_gust (Wilson CI), wind direction bands.
+5. Always p10 <= p50 <= p90, and the hourly times have no gaps.
 """
 
 import json
@@ -47,7 +45,7 @@ MAX_LAG_HOURS = {
 
 
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calculates great-circle distance between two points in km."""
+    """Distance between two points in km."""
     r = 6371.0
     phi1, phi2 = np.radians(lat1), np.radians(lat2)
     dphi = np.radians(lat2 - lat1)
@@ -63,13 +61,13 @@ class OutOfAreaError(ValueError):
 class SiteForecaster:
     def __init__(self):
         self.clim_df = pd.read_parquet(PROCESSED_DIR / "climatology.parquet")
-        # MultiIndex lookup by (day_of_year, hour_pht)
+        # Lookup by (day_of_year, hour_pht)
         self.clim_lookup = self.clim_df.set_index(["day_of_year", "hour_pht"])
 
         with open(MODELS_DIR / "short_range_manifest.json", "r", encoding="utf-8") as f:
             self.manifest = json.load(f)
 
-        # Load models
+        # Load the models
         self.hs_models = {}
         for h in HS_HORIZONS:
             p = MODELS_DIR / f"hs_h{h}.joblib"
@@ -82,7 +80,7 @@ class SiteForecaster:
             if p.exists():
                 self.current_models[h] = joblib.load(p)
 
-        # Conformal intervals
+        # Conformal ranges
         self.hs_quantiles = {}
         for h in HS_HORIZONS:
             info = self.manifest["models"]["hs"]["horizons"][f"h{h}"]
@@ -93,7 +91,7 @@ class SiteForecaster:
             info = self.manifest["models"]["current_speed"]["horizons"][f"h{h}"]
             self.current_quantiles[h] = (info["conformal_q10"], info["conformal_q90"])
 
-        # Feature extractor
+        # Feature builder
         self.feature_extractor = None
         self._init_feature_extractor()
 
@@ -108,7 +106,7 @@ class SiteForecaster:
 
     def check_store_status(self, issued_at_ts: pd.Timestamp) -> Tuple[bool, Optional[str], Dict[str, float]]:
         """
-        Checks if observed store is missing or stale on a per-variable basis.
+        Check if the observed store is missing or old, for each variable.
         Returns: (is_stale, reason, var_lags)
         """
         meta_path = STORE_DIR / "store_meta.json"
@@ -173,17 +171,17 @@ class SiteForecaster:
                 "horizon_h": H
             }
 
-        # Effective horizon clamped to min 6
+        # Horizon is at least 6
         H_eff = max(6, H)
 
-        # Find bounding horizons
+        # Find the horizons before and after
         if H_eff in HS_HORIZONS:
             model = self.hs_models[H_eff]
             feats = self.feature_extractor.extract_features("hs", t0, H_eff)
             anomaly = float(model.predict(feats.reshape(1, -1))[0])
             q10, q90 = self.hs_quantiles[H_eff]
         else:
-            # Interpolate between adjacent horizons
+            # Interpolate between them
             h_below = max([h for h in HS_HORIZONS if h <= H_eff])
             h_above = min([h for h in HS_HORIZONS if h >= H_eff])
             alpha = (H_eff - h_below) / float(h_above - h_below)
@@ -206,7 +204,7 @@ class SiteForecaster:
         p50 = max(0.0, clim_p50 + anomaly)
         p10 = max(0.0, p50 + q10)
         p90 = max(p50, p50 + q90)
-        # Monotonicity
+        # Keep p10 <= p50 <= p90
         p10 = min(p10, p50)
         p90 = max(p90, p50)
 
@@ -243,7 +241,7 @@ class SiteForecaster:
                 "horizon_h": H
             }
 
-        # Effective horizon clamped to min 24
+        # Horizon is at least 24
         H_eff = max(24, H)
 
         if H_eff in CURRENT_HORIZONS:
@@ -334,8 +332,8 @@ class SiteForecaster:
             hour = target_ts.hour
             clim_row = self.clim_lookup.loc[(doy, hour)]
 
-            # Freshness is enforced per model input. A stale waves feed must not
-            # disable a fresh currents model (and vice versa).
+            # Check freshness per model input. Old wave data shouldn't
+            # turn off a fresh current model (and the other way around).
             hs_res = self.predict_hs(
                 t0, h, target_ts, force_stale, hs_lag
             )
@@ -362,7 +360,7 @@ class SiteForecaster:
                     "p90": round(max(p90, p50), 4),
                     "unit": v_unit,
                 }
-                # Explicit SI raw (m/s) and converted km/h for wind and gust
+                # Raw value in m/s and also km/h for wind and gust
                 if v in ["wind_speed", "wind_gust"]:
                     v_res["raw_si_unit"] = "m/s"
                     v_res["raw_p50_ms"] = round(p50, 3)

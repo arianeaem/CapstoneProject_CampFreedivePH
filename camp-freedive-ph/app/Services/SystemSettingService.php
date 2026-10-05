@@ -14,8 +14,8 @@ class SystemSettingService
     protected const MAP_CACHE_KEY = 'system_settings_map';
 
     /**
-     * All settings as [key => ['value' => ..., 'type' => ...]], loaded once per request
-     * (the service is bound as scoped) from a single cache entry.
+     * All settings as [key => ['value' => ..., 'type' => ...]].
+     * Loaded once per request from one cache entry.
      */
     protected ?array $map = null;
 
@@ -34,7 +34,7 @@ class SystemSettingService
     }
 
     /**
-     * Get a setting value by key with typed casting and caching.
+     * Get a setting by key (cached, converted to the right type).
      */
     public function get(string $key, mixed $default = null): mixed
     {
@@ -58,7 +58,7 @@ class SystemSettingService
     }
 
     /**
-     * Get all settings grouped by group.
+     * All settings grouped by group.
      */
     public function all(): Collection
     {
@@ -69,7 +69,7 @@ class SystemSettingService
     }
 
     /**
-     * Get all settings for a specific group.
+     * All settings in one group.
      */
     public function getGroup(string $group): Collection
     {
@@ -77,7 +77,7 @@ class SystemSettingService
     }
 
     /**
-     * Update a single setting.
+     * Update one setting.
      */
     public function set(string $key, mixed $value, ?User $user = null): ?SystemSetting
     {
@@ -107,7 +107,7 @@ class SystemSettingService
     }
 
     /**
-     * Update multiple settings in bulk.
+     * Update several settings at once.
      */
     public function updateMany(array $settings, ?User $user = null): void
     {
@@ -143,7 +143,7 @@ class SystemSettingService
     }
 
     /**
-     * Clear all cached settings.
+     * Clear the settings cache.
      */
     public function clearCache(): void
     {

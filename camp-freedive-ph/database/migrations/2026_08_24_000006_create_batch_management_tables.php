@@ -24,7 +24,7 @@ return new class extends Migration
             $table->string('capacity_note')->nullable()->after('max_capacity');
         });
 
-        // Batch Status Logs (Audit trail for whole-batch status changes)
+        // Batch status history
         Schema::create('batch_status_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('batch_id')->constrained('batches')->onDelete('cascade');

@@ -1,9 +1,9 @@
 """
-Benchmark Daily IMERG (GPM_3IMERGDF.07) Ingestion Speed across 1 Month (30 Days).
+Times the daily IMERG (GPM_3IMERGDF.07) download for 1 month (30 days).
 
-Tests direct OPeNDAP DAP2 spatial slice retrieval with concurrent worker pool
-to measure throughput (sec/day, total seconds for 30 days) and determine
-if Harmony is required or if OPeNDAP is already fast enough for 5 years (~1,826 days).
+Downloads only our area with OPeNDAP DAP2 using several workers, to see how fast
+it is (sec/day, total for 30 days) and if OPeNDAP is fast enough for 5 years
+(~1,826 days) or if we need Harmony.
 """
 
 import os
@@ -95,7 +95,7 @@ def run_benchmark(year: int = 2024, month: int = 6):
     print(f"Effective Rate:           {total_time / num_days:.2f} seconds per day", flush=True)
     print(f"Throughput:               {num_days / total_time:.2f} days per second", flush=True)
 
-    # Extrapolations for 5 Years (~1,826 days)
+    # Estimate for 5 years (~1,826 days)
     total_5y_days = 1826
     est_5y_sec = (total_time / num_days) * total_5y_days
     est_5y_min = est_5y_sec / 60.0

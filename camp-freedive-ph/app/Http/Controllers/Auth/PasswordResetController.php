@@ -30,7 +30,7 @@ class PasswordResetController extends Controller
     }
 
     /**
-     * Send password reset link to user.
+     * Send the password reset link.
      */
     public function sendResetLink(SendResetLinkRequest $request): RedirectResponse
     {
@@ -63,7 +63,7 @@ class PasswordResetController extends Controller
 
         $redirect = back()->with('status', 'If an active account exists with that email, we have sent a password reset link.');
 
-        // In local development, provide direct link so developers/admins can easily test password reset
+        // On local, show the link directly so we can test it
         if (app()->environment('local') && $resetUrl) {
             $redirect->with('dev_reset_link', $resetUrl);
         }
@@ -83,7 +83,7 @@ class PasswordResetController extends Controller
     }
 
     /**
-     * Reset the user password.
+     * Save the new password.
      */
     public function resetPassword(ResetPasswordRequest $request): RedirectResponse
     {
@@ -95,7 +95,7 @@ class PasswordResetController extends Controller
             return back()->withErrors(['email' => 'This password reset token is invalid or has expired.']);
         }
 
-        // Token expired after 60 minutes
+        // Token expires after 60 minutes
         if (Carbon::parse($resetRecord->created_at)->addMinutes(60)->isPast()) {
             DB::table('password_reset_tokens')->where('email', $request->email)->delete();
             return back()->withErrors(['email' => 'This password reset link has expired. Please request a new one.']);

@@ -22,7 +22,7 @@ class ReportsController extends Controller
     }
 
     /**
-     * Display the multi-tab Reports and Analytics dashboard.
+     * Reports page (with tabs).
      */
     public function index(Request $request): View
     {
@@ -36,7 +36,7 @@ class ReportsController extends Controller
         $range = $this->analyticsService->resolveDateRange($preset, $customStart, $customEnd);
         $data = $this->analyticsService->getAnalyticsReport($range, $isOwner);
 
-        // Active tab: default to financial for owner, bookings for admin
+        // Default tab: financial for owner, bookings for admin
         $activeTab = $request->input('tab', $isOwner ? 'financial' : 'bookings');
         if (!in_array($activeTab, ['financial', 'bookings', 'operations'], true) || (!$isOwner && $activeTab === 'financial')) {
             $activeTab = $isOwner ? 'financial' : 'bookings';
@@ -46,7 +46,7 @@ class ReportsController extends Controller
     }
 
     /**
-     * Download the Excel (.xlsx) export for the selected report and date range.
+     * Download the Excel file for the selected report and dates.
      */
     public function export(Request $request): Response
     {
@@ -64,7 +64,7 @@ class ReportsController extends Controller
     }
 
     /**
-     * Display the printable executive report format (for print & PDF).
+     * Print version of the report (for print / PDF).
      */
     public function printSummary(Request $request): View
     {

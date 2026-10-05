@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 class DeactivationService
 {
     /**
-     * Propose deactivation of a coach (Admin or Owner).
+     * Ask to deactivate a coach (admin or owner).
      *
      * @throws Exception
      */
@@ -38,13 +38,13 @@ class DeactivationService
     }
 
     /**
-     * Confirm deactivation (Owner only). Blocks if future active assignments exist.
+     * Confirm the deactivation (owner only). Not allowed if the coach has future assignments.
      */
     public function confirm(DeactivationRequest $request, User $owner): array
     {
         $coach = $request->coach;
 
-        // Check for future active assignments
+        // Does the coach have future assignments?
         $conflicts = $coach->activeAssignments()
             ->whereHas('batch', function ($q) {
                 $q->where('start_date', '>=', now()->startOfDay());
@@ -77,7 +77,7 @@ class DeactivationService
     }
 
     /**
-     * Dismiss a deactivation request (Owner only).
+     * Dismiss a deactivation request (owner only).
      */
     public function dismiss(DeactivationRequest $request, User $owner): void
     {

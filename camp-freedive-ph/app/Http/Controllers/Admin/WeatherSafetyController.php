@@ -19,20 +19,16 @@ use App\Http\Requests\Admin\Weather\ApplyOverrideRequest;
 use App\Http\Requests\Admin\Weather\CancelBatchRequest;
 
 /**
- * Administrative Weather & Marine Safety Operations Controller.
+ * Admin pages for weather and sea safety.
  *
- * Operational Responsibilities:
- * 1. Batch Monitoring Roster (Page 1): Tracks all active freediving batches within the 16-day forecast window.
- * 2. Deep-Dive Weather Dashboard (Page 2): Renders 24-hour continuous physical profiles and dual-engine
- *    comparisons (Native 9-variable heuristic vs Python ML ONNX models).
- * 3. Administrative Manual Overrides: Allows authorized operators to enforce storm signals (TCWS 1-5),
- *    gale warnings, or local squall alerts, escalating batches to Critical Risk.
- * 4. Automated Cancellation & Refund Trigger: Integrates one-click batch cancellation, triggering 100% force
- *    majeure refund entitlements and background-queued customer cancellation emails.
+ * - page 1: list of batches in the next 16 days and their risk
+ * - page 2: hourly weather for one batch, rule-based vs ML model
+ * - admin overrides (storm signal, gale warning, squall) that make a batch Critical Risk
+ * - cancel a whole batch (full refund, emails go out through the queue)
  */
 class WeatherSafetyController extends Controller
 {
-    /** Non-weather reasons an operator can choose for a manual safety override. */
+    /** Non-weather reasons the admin can pick for an override. */
     public const OTHER_HAZARDS = [
         'oil_spill' => 'Oil spill',
         'red_tide' => 'Red tide / harmful algal bloom',
@@ -49,10 +45,10 @@ class WeatherSafetyController extends Controller
     ) {}
 
     /**
-     * Page 1: Weather & Safety Monitoring Batch Roster.
+     * Page 1: batch list with weather risk.
      *
-     * @param Request $request Contains filters for risk classification, status, and date range.
-     * @return View Renders the administrative batch safety roster.
+     * @param Request $request filters: risk, status, date range
+     * @return View
      */
     public function index(Request $request): View
     {
@@ -62,7 +58,7 @@ class WeatherSafetyController extends Controller
             'manualOverrides',
         ]);
 
-        // Filter out batches that do not yet have forecast data (beyond 16-day model horizon and no recorded assessment)
+        // Hide batches with no forecast yet (more than 16 days away and never assessed)
         $maxForecastHorizon = Carbon::today(WeatherForecastService::TIMEZONE)->addDays(WeatherForecastService::MAX_FORECAST_DAYS);
         $query->where(function ($q) use ($maxForecastHorizon) {
             $q->whereDate('start_date', '<=', $maxForecastHorizon)
@@ -71,17 +67,17 @@ class WeatherSafetyController extends Controller
               });
         });
 
-        // Filter: Risk Classification
+        // Filter by risk
         if ($request->filled('risk')) {
             $query->where('risk_classification', $request->input('risk'));
         }
 
-        // Filter: Status
+        // Filter by status
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
 
-        // Filter: Date Range
+        // Filter by date range
         if ($request->filled('date_from')) {
             $query->whereDate('start_date', '>=', $request->input('date_from'));
         }
@@ -89,18 +85,18 @@ class WeatherSafetyController extends Controller
             $query->whereDate('start_date', '<=', $request->input('date_to'));
         }
 
-        // Critical and High Risk count (only for active/upcoming batches, excluding completed, cancelled, or past batches)
+        // Count Critical and High Risk (upcoming batches only)
         $criticalCount = (clone $query)
             ->whereIn('risk_classification', ['high_risk', 'critical_risk'])
             ->whereNotIn('status', ['completed', 'cancelled', 'cancelled_by_camp'])
             ->whereDate('end_date', '>=', Carbon::today(WeatherForecastService::TIMEZONE))
             ->count();
 
-        // Sort safety monitoring to latest first
+        // Newest first
         $perPage = max(4, min(100, (int) $request->input('per_page', 12)));
         $batches = $query->orderBy('start_date', 'desc')->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
 
-        // 24-Hour Master Continuous Cache Info
+        // Forecast cache info
         $lastUpdatedAt = Cache::get('forecast:last_updated_at');
         $masterForecast = Cache::get('forecast:continuous_16d');
         if (!$masterForecast) {
@@ -108,11 +104,11 @@ class WeatherSafetyController extends Controller
                 $masterForecast = $this->forecastService->updateAllForecasts(16);
                 $lastUpdatedAt = Cache::get('forecast:last_updated_at');
             } catch (\Throwable $e) {
-                // Ignore API failure
+                // Ignore API errors
             }
         }
 
-        // ML Microservice & Circuit Breaker Status
+        // ML service and circuit breaker status
         $mlSafetyUrl = config('services.ml_safety.url', 'http://127.0.0.1:8001');
         $circuitStatus = $this->mlService->getCircuitStatus();
         $isMLReachable = false;
@@ -123,7 +119,7 @@ class WeatherSafetyController extends Controller
             $isMLReachable = false;
         }
 
-        // Prepare batch ML and risk assessments
+        // Get the ML and risk results for each batch
         $batchMLAssessments = [];
         foreach ($batches as $b) {
             $d1Date = $b->start_date->format('Y-m-d');
@@ -186,7 +182,7 @@ class WeatherSafetyController extends Controller
                     'hard_gate_triggered' => ($d1ML['safety_threshold_triggered'] ?? $d1ML['hard_gate_triggered'] ?? false) || ($d2ML['safety_threshold_triggered'] ?? $d2ML['hard_gate_triggered'] ?? false),
                 ];
             } else {
-                // Concluded or physics fallback assessment from recorded DB data
+                // Past batch or fallback: use the saved assessment
                 $existingD1 = $b->riskAssessments->where('day_number', 1)->first() ?? $b->riskAssessments->filter(fn($a) => $a->dive_date?->toDateString() === $b->start_date?->toDateString())->first();
                 $existingD2 = $b->riskAssessments->where('day_number', 2)->first() ?? $b->riskAssessments->filter(fn($a) => $a->dive_date?->toDateString() === $b->end_date?->toDateString())->first();
                 
@@ -235,14 +231,14 @@ class WeatherSafetyController extends Controller
     }
 
     /**
-     * One-Click Operator Sync 16-Day 24-Hour Forecast Cache.
+     * Refresh the 16-day forecast cache.
      */
     public function syncCache(): RedirectResponse
     {
         try {
             $result = $this->forecastService->updateAllForecasts(16);
 
-            // Auto-sync all active batches so risk assessments and audit trails match latest telemetry
+            // Re-assess all active batches with the new forecast
             $today = Carbon::today(WeatherForecastService::TIMEZONE);
             $activeBatches = Batch::whereNotIn('status', ['completed', 'cancelled', 'cancelled_by_camp'])
                 ->where('end_date', '>=', $today->toDateString())
@@ -259,7 +255,7 @@ class WeatherSafetyController extends Controller
 
 
     /**
-     * Page 2: Deep-Dive Batch Weather Dashboard.
+     * Page 2: weather details for one batch.
      */
     public function show(Batch $batch, BatchSafetyReportService $report): View
     {
@@ -269,7 +265,7 @@ class WeatherSafetyController extends Controller
     }
 
     /**
-     * One-Click Operator Run Assessment.
+     * Run the assessment for a batch.
      */
     public function assess(Batch $batch): RedirectResponse
     {
@@ -282,13 +278,13 @@ class WeatherSafetyController extends Controller
     }
 
     /**
-     * Submit Manual Override (PAGASA-style advisories).
+     * Save an admin override (like a PAGASA advisory).
      */
     public function override(ApplyOverrideRequest $request, Batch $batch): RedirectResponse
     {
         $validated = $request->validated();
 
-        // Store the readable hazard name (or the operator's own description for "Other")
+        // Save the hazard name (or the admin's own text for "Other")
         $hazard = $validated['other_hazard'] ?? null;
         $validated['other_hazard'] = match (true) {
             !$hazard => null,
@@ -319,7 +315,7 @@ class WeatherSafetyController extends Controller
     }
 
     /**
-     * Confirm Whole-Batch Cancellation from Risk Assessment or Override.
+     * Cancel the whole batch.
      */
     public function cancel(CancelBatchRequest $request, Batch $batch): RedirectResponse
     {

@@ -1,15 +1,16 @@
 """
-Unified spatial extraction module for Camp FreedivePH pipeline.
+Gets the values at our dive site from the gridded data.
 
-Guarantees 100% parity between data ingestion (to_interim) and verification (check_coordinate_cells).
+Used by both the download (to_interim) and the check (check_coordinate_cells)
+so they always pick the same cell.
 
 Rules:
-1. Target site is fixed at real location: Lat = 13.6874° N, Lon = 120.8931° E.
-2. CMEMS Wave: Nearest non-NaN ocean cell.
-3. CMEMS Current: Nearest non-NaN ocean cell.
-4. ERA5 Atmosphere: 2D bilinear interpolation of u10, v10, i10fg, msl across 4 surrounding grid corners.
-   Wind speed and direction are computed from the interpolated vector components.
-5. GPM IMERG Precipitation: 2D bilinear interpolation from surrounding grid cells (or nearest cell).
+1. Site: Lat = 13.6874 N, Lon = 120.8931 E.
+2. CMEMS waves: closest ocean cell that isn't NaN.
+3. CMEMS currents: closest ocean cell that isn't NaN.
+4. ERA5: bilinear interpolation of u10, v10, i10fg, msl from the 4 corners around the site.
+   Wind speed and direction are computed from the interpolated u/v.
+5. GPM IMERG rain: bilinear interpolation (or closest cell).
 """
 
 from typing import Tuple, Dict, Any, List
@@ -22,7 +23,7 @@ EARTH_RADIUS_KM = 6371.0
 
 
 def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Computes great-circle distance between two coordinates in kilometers."""
+    """Distance between two points in km."""
     phi1, phi2 = np.radians(lat1), np.radians(lat2)
     delta_phi = np.radians(lat2 - lat1)
     delta_lambda = np.radians(lon2 - lon1)
@@ -33,7 +34,7 @@ def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) ->
 
 
 def _get_lat_lon_keys(ds: xr.Dataset) -> Tuple[str, str]:
-    """Finds latitude and longitude coordinate names."""
+    """Find the names of the lat and lon coordinates."""
     lat_key = next((k for k in ["latitude", "lat"] if k in ds.coords or k in ds.dims), None)
     lon_key = next((k for k in ["longitude", "lon"] if k in ds.coords or k in ds.dims), None)
     if not lat_key or not lon_key:
@@ -48,24 +49,24 @@ def extract_nearest_ocean_cell(
     primary_var: str = None
 ) -> Tuple[xr.Dataset, Dict[str, Any]]:
     """
-    Finds the nearest valid (non-NaN) ocean water cell to (target_lat, target_lon).
-    Returns (extracted_dataset_at_cell, metadata_dict).
+    Find the closest ocean cell (not NaN) to (target_lat, target_lon).
+    Returns (dataset_at_cell, info_dict).
     """
     lat_key, lon_key = _get_lat_lon_keys(ds)
     
-    # If no primary variable is specified, use the first data variable
+    # If no variable is given, use the first one
     if not primary_var:
         primary_var = list(ds.data_vars.keys())[0]
 
     da = ds[primary_var]
     
-    # Collapse extra dimensions (e.g. time, depth) to check for valid non-NaN spatial points
+    # Remove extra dimensions (e.g. time, depth) so we can check which cells have values
     spatial_slice = da
     for dim in spatial_slice.dims:
         if dim not in (lat_key, lon_key):
             spatial_slice = spatial_slice.isel({dim: 0})
             
-    # Extract 2D grid coordinates
+    # Grid coordinates
     lat_vals = ds[lat_key].values
     lon_vals = ds[lon_key].values
 
@@ -81,11 +82,11 @@ def extract_nearest_ocean_cell(
     if not valid_cells:
         raise ValueError(f"No valid non-NaN ocean cells found in dataset for variable '{primary_var}'.")
 
-    # Sort by closest distance
+    # Closest first
     valid_cells.sort(key=lambda x: x[0])
     best_dist_km, best_lat, best_lon, sample_val = valid_cells[0]
 
-    # Select point on the full dataset
+    # Pick that point in the full dataset
     extracted = ds.sel({lat_key: best_lat, lon_key: best_lon}, method="nearest")
 
     metadata = {
@@ -108,16 +109,16 @@ def extract_era5_bilinear(
     target_lon: float = SITE_LON
 ) -> Tuple[xr.Dataset, Dict[str, Any]]:
     """
-    Performs 2D bilinear interpolation from the 4 surrounding grid corners for ERA5.
-    Interpolates u10, v10, i10fg, msl, then derives wind speed and wind direction from u/v.
+    Bilinear interpolation from the 4 grid corners for ERA5.
+    Interpolates u10, v10, i10fg, msl, then computes wind speed and direction from u/v.
     """
     lat_key, lon_key = _get_lat_lon_keys(ds)
     
-    # 2D bilinear interpolation across surrounding grid corners for continuous fields
+    # Bilinear interpolation for the smooth fields
     interp_ds = ds.interp({lat_key: target_lat, lon_key: target_lon}, method="linear")
 
-    # For instantaneous gusts (i10fg), linear interpolation depresses convective peaks.
-    # Take the maximum across the 4 surrounding corners to preserve squall peaks per PRD.
+    # For gusts (i10fg) interpolation lowers the peaks, so we take
+    # the max of the 4 corners instead (PRD).
     lats = np.sort(ds[lat_key].values)
     lons = np.sort(ds[lon_key].values)
     
@@ -156,14 +157,14 @@ def extract_imerg(
     method: str = "linear"
 ) -> Tuple[xr.Dataset, Dict[str, Any]]:
     """
-    Performs spatial extraction for NASA GPM IMERG (default: 2D bilinear interpolation).
+    Get the GPM IMERG values at the site (bilinear interpolation by default).
     """
     lat_key, lon_key = _get_lat_lon_keys(ds)
     
     try:
         interp_ds = ds.interp({lat_key: target_lat, lon_key: target_lon}, method=method)
     except Exception:
-        # Fallback to nearest if interpolation bounds issue arises
+        # If interpolation fails, use the closest cell
         interp_ds = ds.sel({lat_key: target_lat, lon_key: target_lon}, method="nearest")
         method = "nearest"
 

@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Account removal without data loss: accounts are archived (status = 'archived'), never deleted.
+ * Removing accounts without losing data: accounts are archived (status = 'archived'), not deleted.
  */
 class UserAccountService
 {
@@ -64,8 +64,8 @@ class UserAccountService
     }
 
     /**
-     * Archive ("remove") an account: keeps every record, blocks login, releases future open
-     * availability / pending requests, and emails the person.
+     * Archive ("remove") an account: keeps all records, blocks login, removes future open
+     * availability and pending requests, and emails the person.
      */
     public function archive(User $user, User $removedBy): void
     {
@@ -75,13 +75,13 @@ class UserAccountService
             if ($user->isCoach()) {
                 $today = Carbon::today('Asia/Manila');
 
-                // Future open days are no longer offered; past records stay untouched
+                // Remove future open days, past records stay
                 CoachAvailability::where('coach_id', $user->id)
                     ->where('status', 'available')
                     ->whereDate('date', '>=', $today)
                     ->update(['status' => 'unavailable']);
 
-                // Pending volunteer requests can no longer be approved
+                // Pending requests can't be approved anymore
                 CoachRequest::where('coach_id', $user->id)
                     ->where('status', 'pending')
                     ->update(['status' => 'not_selected', 'notes' => 'Coach account removed']);
@@ -98,7 +98,7 @@ class UserAccountService
     }
 
     /**
-     * Human-readable list of the commitments, for error messages.
+     * List of what the coach still has to do, for error messages.
      */
     public function describeCommitments(Collection $commitments): string
     {

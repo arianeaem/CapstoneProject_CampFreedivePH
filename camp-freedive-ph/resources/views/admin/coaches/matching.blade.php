@@ -44,7 +44,7 @@
         </div>
     </div>
 
-    <!-- Batch Groups Queue (2-Column Card Format) -->
+    <!-- Batches (2 columns) -->
     @if(isset($batchData) && count($batchData) > 0)
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             @foreach($batchData as $group)
@@ -104,7 +104,7 @@
                                 </button>
                             @endif
 
-                            <!-- Toggle Coaches Button (placed at the bottom of Share to Coaches) -->
+                            <!-- Show/hide coaches button -->
                             <button type="button" 
                                     @click="isOpen = !isOpen"
                                     class="btn-secondary px-3 py-1.5 text-sm font-semibold inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap">

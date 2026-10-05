@@ -16,7 +16,7 @@ use Illuminate\View\View;
 class RequestController extends Controller
 {
     /**
-     * Page 4: Open Requests Board & My Submitted Requests.
+     * Page 4: open slots and my requests.
      */
     public function index(Request $request): View
     {
@@ -24,7 +24,7 @@ class RequestController extends Controller
         $today = Carbon::today();
         $activeTab = $request->input('tab', 'open_slots');
 
-        // Exclude batches that this coach is already assigned to or approved for
+        // Hide batches this coach is already assigned to or approved for
         $assignedBatchIds = ParticipantAssignment::where('coach_id', $coach->id)
             ->where('status', 'assigned')
             ->pluck('batch_id')
@@ -41,7 +41,7 @@ class RequestController extends Controller
 
         $excludeBatchIds = array_unique(array_merge($assignedBatchIds, $approvedBatchIds));
 
-        // 1. Open Camp Slots (Where camp is short-staffed and looking for volunteer coaches)
+        // 1. Open slots (camp needs more coaches)
         $openings = CoachOpening::with(['batch.riskAssessments', 'postedByUser', 'requests'])
             ->where('status', 'open')
             ->whereDate('dive_date', '>=', $today)
@@ -49,7 +49,7 @@ class RequestController extends Controller
             ->orderBy('dive_date', 'asc')
             ->get();
 
-        // 2. Coach's Submitted Requests History & Status
+        // 2. My requests and their status
         $myRequests = CoachRequest::with(['opening.batch', 'batch.riskAssessments', 'reviewer'])
             ->where('coach_id', $coach->id)
             ->orderBy('created_at', 'desc')
@@ -67,23 +67,23 @@ class RequestController extends Controller
     }
 
     /**
-     * Submit interest / request for an open slot.
+     * Ask to take an open slot.
      */
     public function store(Request $request, CoachOpening $opening): RedirectResponse
     {
         $coach = Auth::user();
 
-        // Check if opening is still open
+        // Is the slot still open?
         if ($opening->status !== 'open') {
             return back()->with('error', 'This slot is no longer open for requests.');
         }
 
-        // Check if dive date is past
+        // Is the dive date already past?
         if ($opening->dive_date->isPast() && !$opening->dive_date->isToday()) {
             return back()->with('error', 'Cannot request past dive dates.');
         }
 
-        // Check if coach is already assigned to this batch
+        // Is the coach already in this batch?
         $isAlreadyAssigned = ParticipantAssignment::where('coach_id', $coach->id)
             ->where('batch_id', $opening->batch_id)
             ->where('status', 'assigned')
@@ -93,7 +93,7 @@ class RequestController extends Controller
             return back()->with('error', 'You are already assigned to this dive batch.');
         }
 
-        // Check if coach already has a pending or approved request for this opening
+        // Does the coach already have a pending or approved request for it?
         $existing = CoachRequest::where('coach_id', $coach->id)
             ->where(function ($q) use ($opening) {
                 $q->where('opening_id', $opening->id)
@@ -118,7 +118,7 @@ class RequestController extends Controller
     }
 
     /**
-     * Withdraw a pending slot request.
+     * Cancel a pending request.
      */
     public function withdraw(CoachRequest $coachRequest): RedirectResponse
     {

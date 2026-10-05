@@ -40,7 +40,7 @@ class SystemSettingsSeeder extends Seeder
                 'description' => 'Minimum number of coaches required for a batch to operate.',
             ],
 
-            // 2. Program Pricing & Inclusions/Exclusions
+            // 2. Program prices, inclusions and exclusions
             [
                 'group' => 'program_pricing',
                 'key' => 'program_pricing.base_price_discovery',
@@ -158,7 +158,7 @@ class SystemSettingsSeeder extends Seeder
                 'description' => 'List of excluded items for Skills Refinement.',
             ],
 
-            // 3. Downpayment Deposits
+            // 3. Downpayments
             [
                 'group' => 'program_pricing',
                 'key' => 'program_pricing.downpayment_carpool',
@@ -174,7 +174,7 @@ class SystemSettingsSeeder extends Seeder
                 'description' => 'Fixed reservation downpayment deposit per person when Own Transportation is selected.',
             ],
 
-            // 4. Add-ons & Transportation
+            // 4. Add-ons and transport
             [
                 'group' => 'addons',
                 'key' => 'addons.carpool_fee_per_head',
@@ -242,7 +242,7 @@ class SystemSettingsSeeder extends Seeder
                 'description' => 'List of configurable carpool pickup hubs and departure times.',
             ],
 
-            // 5. Booking & Cancellation Rules
+            // 5. Booking and cancellation rules
             [
                 'group' => 'booking_cancellation',
                 'key' => 'booking_cancellation.full_refund_threshold_days',
@@ -258,7 +258,7 @@ class SystemSettingsSeeder extends Seeder
                 'description' => 'Days before batch start within which only rescheduling is permitted (no refund).',
             ],
 
-            // 6. Account & Security
+            // 6. Account and security
             [
                 'group' => 'account_security',
                 'key' => 'account_security.session_timeout_minutes',

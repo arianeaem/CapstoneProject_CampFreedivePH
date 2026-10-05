@@ -1,16 +1,15 @@
 """
-Post-Ingestion Audit & Closure Test for CMEMS SMOC Ocean Currents.
+Checks the CMEMS SMOC current data after download.
 
-Performs:
-1. Mathematical closure test:
+1. Do the parts add up?
    |utotal - (uo + utide + vsdx)| and |vtotal - (vo + vtide + vsdy)|
-2. Component speed distributions:
-   - Total Surface Current (utotal, vtotal)
-   - Eulerian Navier-Stokes Current (uo, vo)
-   - Tidal Current (utide, vtide)
-   - Wave Stokes Drift (vsdx, vsdy)
-3. FFT spectral power analysis at M2 tidal period (12.42h)
-4. Data continuity, interpolation, and provisional row auditing.
+2. Speed of each part:
+   - total surface current (utotal, vtotal)
+   - Eulerian current (uo, vo)
+   - tide current (utide, vtide)
+   - Stokes drift from waves (vsdx, vsdy)
+3. FFT power at the M2 tide period (12.42h)
+4. Gaps, interpolation and provisional rows.
 """
 
 import sys
@@ -39,7 +38,7 @@ def run_audit():
     print(f"Interpolated:     {df['current_is_interpolated'].sum():,} rows ({df['current_is_interpolated'].mean()*100:.2f}%)")
     print(f"Provisional:      {df['is_provisional'].sum():,} rows ({df['is_provisional'].mean()*100:.2f}%)")
 
-    # 1. Closure Test
+    # 1. Do the parts add up?
     has_components = all(c in df.columns for c in ["current_u", "eulerian_u", "tide_u", "stokes_u",
                                                    "current_v", "eulerian_v", "tide_v", "stokes_v"])
     if has_components:
@@ -65,7 +64,7 @@ def run_audit():
         else:
             print("\n>> WARNING: Discrepancy observed in closure relation. Target must remain raw utotal/vtotal.")
 
-    # 2. Speed Distributions
+    # 2. Speeds
     print("\n" + "-" * 50)
     print("2. SPEED DISTRIBUTIONS (m/s and knots)")
     print("-" * 50)
@@ -85,14 +84,14 @@ def run_audit():
             mean_kt = s.mean() * 1.94384
             print(f"{label:<24} | {s.mean():<10.4f} | {s.std():<10.4f} | {s.median():<10.4f} | {s.quantile(0.95):<10.4f} | {s.max():<10.4f} | {mean_kt:<10.3f}")
 
-    # 3. FFT Spectral Power at M2 Tidal Period (12.42h)
+    # 3. FFT power at the M2 tide period (12.42h)
     print("\n" + "-" * 50)
     print("3. FFT SPECTRAL POWER AT M2 TIDAL FREQUENCY (f = 1 / 12.42h = 0.0805 cph)")
     print("-" * 50)
     
     def m2_spectral_ratio(series):
         s = series.dropna()
-        f, psd = periodogram(s - s.mean(), fs=1.0)  # fs=1 cycle per hour
+        f, psd = periodogram(s - s.mean(), fs=1.0)  # fs = 1 per hour
         m2_idx = np.argmin(np.abs(f - (1.0 / 12.42)))
         peak_power = psd[m2_idx]
         total_power = np.sum(psd)
@@ -113,7 +112,7 @@ def run_audit():
             p_val, r_val = m2_spectral_ratio(df[col])
             print(f"{label:<30} | {p_val:<15.6f} | {r_val:<15.6f}")
 
-    # 4. Yearly Means
+    # 4. Average per year
     print("\n" + "-" * 50)
     print("4. YEARLY MEAN TOTAL CURRENT SPEED (m/s)")
     print("-" * 50)

@@ -8,29 +8,22 @@ use App\Support\DemandRules;
 use Carbon\Carbon;
 
 /**
- * Dynamic Yield Management & Pricing Rule Engine.
+ * Pricing rules (discounts and surcharges).
  *
- * Business Model & Economic Rationale:
- * 1. Multi-Factor Dynamic Pricing: Evaluates seasonal trends, occupancy velocity, ML demand forecasts,
- *    and booking lead times to optimize freediving camp capacity utilization across the year.
- * 2. Predictive Yield Management: Connects with Prophet/XGBoost seasonal demand forecasts to project
- *    batch fill rates and optimize early-bird discounts and capacity revenue ahead of time.
- * 3. Strict ±30% Price Clamping Cap (ADJUSTMENT_PERCENTAGE_CAP):
- *    Protects customer trust and transparent pricing by strictly bounding cumulative discounts/surcharges
- *    between -30% and +30% of the base class tier price.
- * 4. Batangas Micro-Climate Seasonality:
- *    - Peak / Shoulder / Off-Peak come from the demand module (config/demand.php), derived from
- *      the 553 actual registration records. They are no longer hardcoded here.
+ * - looks at season, how full the batch is, the demand forecast and how early people book
+ * - all adjustments together are kept between -30% and +30% of the base price
+ * - Peak / Shoulder / Off-Peak months come from config/demand.php (based on the 553 real
+ *   registration records), not from this file
  */
 class PricingRuleEngine
 {
     /**
-     * Percentage cap to clamp stacked adjustments (+/- 30% of base price).
+     * Max total adjustment (+/- 30% of the base price).
      */
     public const ADJUSTMENT_PERCENTAGE_CAP = 0.30;
 
     /**
-     * Standard Base Prices per class type (fallback defaults).
+     * Default base prices per class.
      */
     public const BASE_PRICES = [
         'discovery' => 4250.00,
@@ -48,7 +41,7 @@ class PricingRuleEngine
     }
 
     /**
-     * Resolve base price for given class and diver certification.
+     * Get the base price for a class (certified divers pay less for fundive).
      */
     public function getBasePrice(string $classType, bool $isCertified = false): float
     {
@@ -76,7 +69,7 @@ class PricingRuleEngine
     }
 
     /**
-     * Get dynamic pricing cap as a decimal float (e.g. 0.30 for 30%).
+     * Get the max adjustment as a decimal (e.g. 0.30 = 30%).
      */
     public function getAdjustmentCap(): float
     {
@@ -89,11 +82,10 @@ class PricingRuleEngine
     }
 
     /**
-     * Season for a date: 'peak' | 'shoulder' | 'off_peak'.
+     * Season for a date: 'peak', 'shoulder' or 'off_peak'.
      *
-     * Uses the ML demand forecast's season_period when a forecast row covers the date,
-     * otherwise the single source of truth in config/demand.php (App\Support\DemandRules).
-     * No season months are hardcoded in this class.
+     * Uses the demand forecast's season_period if there is a forecast for the date,
+     * otherwise config/demand.php (App\Support\DemandRules).
      */
     public function getSeasonForDate(string|Carbon $date): string
     {
@@ -111,12 +103,11 @@ class PricingRuleEngine
     }
 
     /**
-     * Demand level for a date: 'high' | 'medium' | 'low'.
+     * Demand level for a date: 'high', 'medium' or 'low'.
      *
-     * 1. The ML forecast's demand_level (High / Medium / Low) for that date is the base.
-     * 2. Real confirmed headcount can only RAISE it (a date already filling up is never priced
-     *    below its forecast). Headcount is judged with the same thresholds as the forecast.
-     * 3. With no forecast row for the date, only the real headcount is used.
+     * 1. Start with the forecast's demand_level for that date.
+     * 2. Real bookings can only make it higher, never lower (uses the same thresholds).
+     * 3. If there's no forecast for the date, only real bookings are used.
      */
     public function getDemandForDate(string|Carbon $date): string
     {
@@ -136,7 +127,7 @@ class PricingRuleEngine
             $forecastLevel = DemandRules::normalizeLevel($forecast['demand_level'] ?? null);
 
             if ($forecastLevel !== null) {
-                // Real bookings may only raise the forecast level, never lower it.
+                // Real bookings can only raise the level, not lower it
                 $level = ($rank[$level] > $rank[$forecastLevel]) ? $level : $forecastLevel;
             }
         }
@@ -145,7 +136,7 @@ class PricingRuleEngine
     }
 
     /**
-     * Days between today and the scheduled dive date.
+     * Days from today until the dive.
      */
     public function getLeadTimeDays(string|Carbon $date): int
     {
@@ -156,8 +147,8 @@ class PricingRuleEngine
     }
 
     /**
-     * Evaluate all matching active pricing rules for a class and date.
-     * Enforces priority ordering and a +/- 30% clamping cap.
+     * Apply all matching active pricing rules for a class and date.
+     * Rules run by priority and the total is kept within +/- 30%.
      */
     public function evaluate(string $classType, string|Carbon $diveDate, bool $isCertified = false, int $paxCount = 1): array
     {
@@ -167,7 +158,7 @@ class PricingRuleEngine
         $demand = $this->getDemandForDate($diveDate);
         $leadTimeDays = $this->getLeadTimeDays($diveDate);
 
-        // Fetch matching active rules
+        // Get the matching active rules
         $rules = PricingRule::active()
             ->where(function ($q) use ($normalizedClass) {
                 $q->where('applies_to', 'all')
@@ -208,7 +199,7 @@ class PricingRuleEngine
             }
 
             if ($matched) {
-                // Calculate unit delta per person
+                // Change per person
                 $amount = ($rule->adjustment_method === 'percentage')
                     ? ($basePrice * ((float) $rule->adjustment_value / 100.0))
                     : (float) $rule->adjustment_value;
@@ -229,7 +220,7 @@ class PricingRuleEngine
             }
         }
 
-        // Apply clamping cap (+/- max cap % of base price)
+        // Keep the total within the max %
         $cap = $this->getAdjustmentCap();
         $maxAdjustment = $basePrice * $cap;
         $minAdjustment = -$basePrice * $cap;

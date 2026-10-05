@@ -16,7 +16,7 @@ class WeatherPreviewController extends Controller
     ) {}
 
     /**
-     * Preview endpoint for client date selection on the booking page.
+     * Weather preview for the date picked on the booking page.
      */
     public function preview(WeatherPreviewRequest $request): JsonResponse
     {

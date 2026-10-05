@@ -20,21 +20,21 @@ class CoachRosterController extends Controller
     ) {}
 
     /**
-     * Page 1: Coach List (Roster View).
+     * Page 1: coach list.
      */
     public function index(Request $request): View
     {
         $query = User::where('role', 'coach')
             ->with(['coachAvailabilities', 'activeAssignedParticipants.batch']);
 
-        // Filter: Status (Active/Inactive); removed (archived) coaches only when explicitly filtered
+        // Filter by status (archived coaches only show if picked)
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         } else {
             $query->where('status', '!=', 'archived');
         }
 
-        // Filter: Search Name/Email/Phone
+        // Search by name, email or phone
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
@@ -46,7 +46,7 @@ class CoachRosterController extends Controller
 
         $coaches = $query->orderBy('name')->get();
 
-        // Specific date availability filter (in-memory evaluation)
+        // Filter by available date (done in PHP)
         if ($request->filled('available_on')) {
             $date = Carbon::parse($request->input('available_on'))->format('Y-m-d');
             $coaches = $coaches->filter(function ($coach) use ($date) {
@@ -55,7 +55,7 @@ class CoachRosterController extends Controller
             });
         }
 
-        // Unassigned capacity filter
+        // Filter by free capacity
         if ($request->boolean('has_capacity')) {
             $today = Carbon::today()->format('Y-m-d');
             $coaches = $coaches->filter(function ($coach) use ($today) {
@@ -66,12 +66,12 @@ class CoachRosterController extends Controller
         $activeCount = User::where('role', 'coach')->where('status', 'active')->count();
         $inactiveCount = User::where('role', 'coach')->where('status', 'inactive')->count();
 
-        // Calculate unassigned students count for matching banner
+        // Number of students with no coach (for the banner)
         $unassignedStudentsCount = BookingParticipant::whereHas('booking', function ($q) {
             $q->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'completed', 'no_show', 'pending_downpayment']);
         })->whereDoesntHave('activeAssignment')->count();
 
-        // Paginate coaches collection
+        // Paginate
         $page = (int) $request->input('page', 1);
         $perPage = max(5, min(100, (int) $request->input('per_page', 10)));
         $total = $coaches->count();
@@ -93,7 +93,7 @@ class CoachRosterController extends Controller
 
 
     /**
-     * Page 2: Coach Detail View.
+     * Page 2: coach details.
      */
     public function show(User $coach): View
     {
@@ -106,7 +106,7 @@ class CoachRosterController extends Controller
             'assignedParticipants' => fn($q) => $q->with(['participant.booking', 'batch'])->orderBy('dive_date', 'desc'),
         ]);
 
-        // 1. Assigned Students list (Active / Upcoming only)
+        // 1. Assigned students (active / upcoming)
         $activeAssignments = $coach->assignedParticipants()
             ->where('status', 'assigned')
             ->where('dive_date', '>=', Carbon::today())
@@ -114,10 +114,10 @@ class CoachRosterController extends Controller
             ->orderBy('dive_date', 'asc')
             ->get();
 
-        // 2. Upcoming Schedule (Chronological future dive dates)
+        // 2. Upcoming dive dates
         $upcomingAssignments = $activeAssignments;
 
-        // 3. Past Completed Dives History (Grouped by batch)
+        // 3. Past dives (grouped by batch)
         $pastAssignments = $coach->assignedParticipants()
             ->where(function ($q) {
                 $q->where('dive_date', '<', Carbon::today())
@@ -131,7 +131,7 @@ class CoachRosterController extends Controller
             return $assignment->batch_id ? 'batch_' . $assignment->batch_id : 'date_' . $assignment->dive_date->format('Y-m-d');
         });
 
-        // Available active coaches for student reassignment modal
+        // Active coaches for the reassign popup
         $otherCoaches = User::where('role', 'coach')
             ->where('status', 'active')
             ->where('id', '!=', $coach->id)
@@ -148,7 +148,7 @@ class CoachRosterController extends Controller
     }
 
     /**
-     * Reassign a student away from this coach.
+     * Move a student from this coach to another one.
      */
     public function reassignStudent(ReassignStudentRequest $request, User $coach): RedirectResponse
     {

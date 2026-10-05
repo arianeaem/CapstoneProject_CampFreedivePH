@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
 class DemandForecastService
 {
     /**
-     * Get demand forecast data cached for 1 hour directly from persisted database records.
+     * Get the demand forecast from the database (cached for 1 hour).
      */
     public function getForecastData(bool $forceRefresh = false): array
     {
@@ -26,13 +26,13 @@ class DemandForecastService
     }
 
     /**
-     * Get specific forecast prediction for a single dive date.
+     * Get the forecast for one dive date.
      */
     public function getForecastForDate(string|Carbon $date): ?array
     {
         $targetDate = $date instanceof Carbon ? $date->toDateString() : Carbon::parse($date)->toDateString();
 
-        // 1. A real scheduled batch on exactly this date has its own per-batch forecast: use it first.
+        // 1. If there is a batch on this exact date, use its own forecast first
         $batchRow = $this->findBatchForecastForDate($targetDate);
         if ($batchRow !== null) {
             return $batchRow;
@@ -45,7 +45,7 @@ class DemandForecastService
             }
         }
 
-        // Forecast rows are weekly; a camp date is covered by the weekly row within 3 days of it.
+        // Forecast rows are weekly, so use the row within 3 days of the date
         $nearest = null;
         $nearestDiff = 4;
         foreach ($forecasts as $item) {
@@ -80,8 +80,8 @@ class DemandForecastService
     }
 
     /**
-     * Per-batch forecast row (as a forecast_date-shaped array) for an exact batch date, or null.
-     * Fails soft: if the table is missing (migration not run yet) pricing keeps using the weekly forecast.
+     * Batch forecast for an exact batch date, or null.
+     * If the table doesn't exist yet (migration not run), pricing just uses the weekly forecast.
      */
     protected function findBatchForecastForDate(string $targetDate): ?array
     {
@@ -110,7 +110,7 @@ class DemandForecastService
     }
 
     /**
-     * Upcoming per-batch forecasts from the latest ML sync (one row per real scheduled batch).
+     * Upcoming batch forecasts from the last ML sync (one row per scheduled batch).
      */
     public function getBatchForecasts(): array
     {
@@ -146,7 +146,7 @@ class DemandForecastService
     }
 
     /**
-     * Monthly rollup = the SUM of the per-batch forecasts in that month (not a separate guess).
+     * Monthly total = sum of the batch forecasts in that month.
      */
     public function getBatchMonthlyRollup(array $batchRows): array
     {
@@ -187,7 +187,7 @@ class DemandForecastService
     }
 
     /**
-     * Model information stored by the last ML sync (version, data basis, baseline comparison).
+     * Model info from the last ML sync (version, data used, baseline comparison).
      */
     public function getModelInfo(): array
     {
@@ -213,14 +213,14 @@ class DemandForecastService
     }
 
     /**
-     * Load forecasts from the local demand_forecasts table.
+     * Load the forecasts from the demand_forecasts table.
      */
     protected function loadFromDatabase(): array
     {
         $records = DemandForecast::latestSync()->get();
 
         if ($records->isEmpty()) {
-            // No ML forecast has been synced yet. Return an honest empty state - never fabricated numbers.
+            // No forecast synced yet. Return an empty result, don't make up numbers.
             return $this->emptyForecast();
         }
 
@@ -270,7 +270,7 @@ class DemandForecastService
     }
 
     /**
-     * Compute monthly cards grouped by month for 7d, 30d, 60d, and 90d projection periods.
+     * Monthly cards for the 7, 30, 60 and 90 day views.
      */
     public function computeMonthlyHorizons(
         array $forecastList, 
@@ -299,7 +299,7 @@ class DemandForecastService
                 $filtered = array_slice($forecastList, 0, 1);
             }
 
-            // Group by Month (Y-m)
+            // Group by month (Y-m)
             $monthGroups = [];
             foreach ($filtered as $item) {
                 $date = Carbon::parse($item['forecast_date'] ?? now());
@@ -369,7 +369,7 @@ class DemandForecastService
                     $dominantSeason = array_key_first($counts);
                 }
 
-                // If at full 90-day horizon, use Python pre-aggregated monthly figures directly
+                // For the full 90 days, use the monthly numbers from Python
                 $preAgg = ($h === 90 && isset($monthlyForecastMap[$mKey])) ? $monthlyForecastMap[$mKey] : null;
 
                 $paxTotal = $preAgg !== null && isset($preAgg['predicted_participants'])
@@ -417,14 +417,14 @@ class DemandForecastService
             }
 
             $result["{$h}_day"] = $cards;
-            $result[(string)$h] = $cards; // numeric key alias for easy Alpine.js binding
+            $result[(string)$h] = $cards; // number key too, easier to use in Alpine.js
         }
 
         return $result;
     }
 
     /**
-     * Compute dynamic 7d, 30d, 60d, 90d horizon summaries.
+     * Summary for the 7, 30, 60 and 90 day views.
      */
     public function computeHorizonSummariesFromList(array $forecastList): array
     {
@@ -475,8 +475,8 @@ class DemandForecastService
     }
 
     /**
-     * Empty state used until the ML pipeline has synced a real forecast.
-     * Intentionally contains NO invented forecast rows.
+     * Empty result used until the ML pipeline has synced a forecast.
+     * No made-up forecast rows here.
      */
     protected function emptyForecast(): array
     {
@@ -492,13 +492,13 @@ class DemandForecastService
     }
 
     /**
-     * Retrieve statistical demand classifications from ML model output.
-     * The Python ML pipeline (retrain_pipeline.py) is the single source of truth for
-     * statistical demand formulas (Mean ± 1 SD thresholds and Peak/Shoulder/Off-Peak logic).
+     * Get the demand levels from the ML output.
+     * The formulas (mean +/- 1 SD, Peak/Shoulder/Off-Peak) are in retrain_pipeline.py,
+     * so we don't repeat them here.
      */
     public function computeMonthlyClassifications(array $forecastList = []): array
     {
-        // 1. Primary: Load directly from the Python ML pipeline's generated output artifact
+        // 1. Load the file made by the Python pipeline
         $fromArtifact = $this->loadClassificationsFromArtifact();
         if (!empty($fromArtifact)) {
             return $fromArtifact;
@@ -508,7 +508,7 @@ class DemandForecastService
             return [];
         }
 
-        // 2. Fallback: Map classifications directly from forecast records without duplicating ML statistics
+        // 2. If there is no file, use the levels saved in the forecast rows
         $monthGroups = [];
         foreach ($forecastList as $item) {
             $date = Carbon::parse($item['forecast_date'] ?? now());
@@ -537,7 +537,7 @@ class DemandForecastService
     }
 
     /**
-     * Load dynamic statistical demand classifications from the ML output artifact.
+     * Load the demand levels from the ML output file.
      */
     public function loadClassificationsFromArtifact(): array
     {
@@ -553,7 +553,7 @@ class DemandForecastService
     }
 
     /**
-     * Load monthly forecast aggregations from the ML output artifact (outputs/forecast_monthly.csv).
+     * Load the monthly forecast from outputs/forecast_monthly.csv.
      */
     public function loadMonthlyForecastsFromArtifact(): array
     {
@@ -580,11 +580,11 @@ class DemandForecastService
     }
 
     /**
-     * Get historical actuals combined with model predictions for monthly trend charts.
+     * Past actual numbers + forecast, for the monthly chart.
      */
     public function getHistoricalVsForecastTrend(): array
     {
-        // 1. Fetch historical batches from past months grouped by month
+        // 1. Past batches grouped by month
         $historicalBatches = Batch::where(function ($q) {
                 $q->where('status', 'completed')
                   ->orWhere(function ($sq) {
@@ -633,7 +633,7 @@ class DemandForecastService
         }
 
         $trend = [];
-        // Take up to last 4 historical months
+        // Last 4 months only
         $recentHistory = array_slice($historyByMonth, -4, 4, true);
         foreach ($recentHistory as $mKey => $item) {
             $coachCount = count($item['coach_ids']);
@@ -655,7 +655,7 @@ class DemandForecastService
             ];
         }
 
-        // 2. Append upcoming model forecasts grouped by month
+        // 2. Add the upcoming forecast grouped by month
         $forecastData = $this->getForecastData();
         $forecasts = $forecastData['forecasts'] ?? [];
 
@@ -697,7 +697,7 @@ class DemandForecastService
             }
         }
 
-        // Take next 4 forecasted months
+        // Next 4 months only
         $upcomingForecastMonths = array_slice($forecastByMonth, 0, 4, true);
         foreach ($upcomingForecastMonths as $mKey => $item) {
             $paxTotal = (int) round($item['participants']);
@@ -728,7 +728,7 @@ class DemandForecastService
     }
 
     /**
-     * Get staffing recommendation pill for a specific date (used in Batch Create and Coach Matching).
+     * Staffing suggestion for a date (used in Create Batch and Coach Matching).
      */
     public function getStaffingRecommendationForDate($date): ?array
     {
@@ -745,13 +745,13 @@ class DemandForecastService
             $fDate = Carbon::parse($f['forecast_date']);
             $diff = abs($targetDate->diffInDays($fDate));
 
-            // Exact date match
+            // Same date
             if ($fDate->toDateString() === $targetDateStr) {
                 $match = $f;
                 break;
             }
 
-            // Closest weekend match within 4 days
+            // Closest weekend within 4 days
             if ($diff < $closestDiff && $diff <= 4) {
                 $closestDiff = $diff;
                 $match = $f;
@@ -774,7 +774,7 @@ class DemandForecastService
             ];
         }
 
-        // No ML forecast covers this date. Do not invent a staffing suggestion.
+        // No forecast for this date, so no suggestion
         return null;
     }
 }

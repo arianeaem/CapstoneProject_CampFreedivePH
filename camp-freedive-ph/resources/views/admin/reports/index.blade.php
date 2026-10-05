@@ -85,7 +85,7 @@
     <!-- Global Date Range & Filter Bar -->
     @include('admin.reports.partials.filter_bar')
 
-    <!-- Interactive Analytics Tab Navigation (Underline #780000 on active, No Icons) -->
+    <!-- Tabs -->
     <div class="border-b border-[#E5E5EA] flex items-center gap-6 overflow-x-auto no-scrollbar">
         @if($isOwner)
             <button type="button" 
@@ -111,9 +111,9 @@
         </button>
     </div>
 
-    <!-- Tab Content Panes (Consistent Container Structure) -->
+    <!-- Tab content -->
     <div class="w-full">
-        <!-- Tab 1: Financial Analytics (Owner Exclusive) -->
+        <!-- Tab 1: Financial (owner only) -->
         @if($isOwner)
             <div x-show="activeTab === 'financial'" x-cloak class="w-full transition-all">
                 @include('admin.reports.partials.financial_tab')

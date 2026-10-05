@@ -19,17 +19,13 @@ use App\Http\Requests\ManageBooking\FindBookingRequest;
 use App\Http\Requests\ManageBooking\CancelBookingRequest;
 
 /**
- * Customer Self-Service Booking Management Controller.
+ * Manage Booking page for guests.
  *
- * Business Workflow & Security Policies:
- * 1. Frictionless PIN Authentication: Allows guests to access vouchers, reschedule requests, and cancellation forms
- *    using their unique Booking Reference Code (CFP-YYYY-XXXXX) and 4-digit PIN without account registration.
- * 2. Automated Policy Enforcement:
- *    - Voluntary Reschedules: Permitted up to 72 hours prior to scheduled departure.
- *    - Force Majeure Weather Cancellations: Automatically grants 100% refund entitlement if coastal storm warnings
- *      or Critical Risk conditions are active on the dive date.
- *    - Voluntary Guest Cancellations: Calculates tiered refund deductions based on booking lead time.
- * 3. Proactive Safety Re-Verification: Validates marine weather safety for newly requested dates during reschedule attempts.
+ * - guests log in with their booking number (CFP-YYYY-XXXX) and 4-digit PIN, no account needed
+ * - they can request a reschedule (until 72 hours before) or a cancellation
+ * - weather cancellations (storm warning / Critical Risk) get a full refund
+ * - normal cancellations get a refund based on how early they cancel
+ * - when rescheduling, we check the weather on the new date too
  */
 class ManageBookingController extends Controller
 {
@@ -38,13 +34,13 @@ class ManageBookingController extends Controller
         protected WeatherSafetyService $weatherService
     ) {}
 
-    // TODO: Implement SMS OTP two-factor authentication for sensitive booking cancellations.
+    // TODO: add SMS OTP for cancellations
 
     /**
-     * Show the public booking lookup portal.
+     * Booking lookup page.
      *
-     * @param Request $request Optional query params for pre-filling booking code and PIN.
-     * @return View Renders the lookup portal.
+     * @param Request $request can have the booking number and PIN to pre-fill
+     * @return View
      */
     public function index(Request $request): View
     {
@@ -55,10 +51,10 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Authenticates booking credentials and establishes guest session.
+     * Check the booking number and PIN and log the guest in.
      *
-     * @param Request $request Contains `booking_number` and `pin`.
-     * @return RedirectResponse Redirects to self-service dashboard on success.
+     * @param Request $request booking_number and pin
+     * @return RedirectResponse
      */
     public function search(FindBookingRequest $request): RedirectResponse
     {
@@ -84,11 +80,11 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Show the booking details and self-service management dashboard.
+     * Booking details page for the guest.
      *
-     * @param Request $request Guest request holding auth session credentials.
-     * @param string $booking_number Unique booking code (CFP-YYYY-XXXXX).
-     * @return View|RedirectResponse Renders voucher, participant details, and policy actions.
+     * @param Request $request
+     * @param string $booking_number e.g. CFP-2026-1234
+     * @return View|RedirectResponse
      */
     public function show(Request $request, string $booking_number): View|RedirectResponse
     {
@@ -120,26 +116,25 @@ class ManageBookingController extends Controller
             'auth_booking_pin' => $booking->pin,
         ]);
 
-        // Live evaluation of the cancellation/reschedule policy engine
+        // What the guest is allowed to do right now (reschedule/cancel)
         $policy = $this->policyEngine->evaluate($booking);
 
-        // Marine forecast for current booking date
+        // Weather for the booking date
         $currentForecast = $this->weatherService->getForecast($booking->start_date, $booking->end_date);
 
         return view('manage.detail', compact('booking', 'policy', 'currentForecast'));
     }
 
     /**
-     * Submit a customer request to reschedule the dive date.
+     * Guest asks to move the dive date.
      *
-     * Business Logic:
-     * 1. Validates that downpayment was settled (unpaid bookings cannot hold replacement dates).
-     * 2. Checks policy cutoff window (minimum 72h lead time required for voluntary changes).
-     * 3. Proactively evaluates marine weather on the target replacement date to prevent moving into a storm.
+     * 1. Downpayment must be paid first.
+     * 2. Must be at least 72 hours before the dive.
+     * 3. The new date must not have bad weather.
      *
-     * @param Request $request Holds `pin`, `requested_start_date`, `requested_end_date`, and `reason`.
-     * @param string $booking_number Target booking identifier.
-     * @return RedirectResponse Redirects back with status feedback.
+     * @param Request $request pin, requested_start_date, requested_end_date, reason
+     * @param string $booking_number
+     * @return RedirectResponse
      */
     public function reschedule(RescheduleBookingRequest $request, string $booking_number): RedirectResponse
     {
@@ -158,8 +153,7 @@ class ManageBookingController extends Controller
             return back()->with('error', 'Rescheduling is not allowed: ' . $policy['reschedule_message']);
         }
 
-        // Proactive Marine Safety Verification on Replacement Date:
-        // Protects guests from inadvertently rescheduling into an approaching cyclone or gale warning.
+        // Check the weather on the new date so the guest doesn't move into a storm
         $forecast = $this->weatherService->getForecast($validated['requested_start_date'], $validated['requested_end_date']);
         if (!$forecast['is_bookable']) {
             return back()->with('error', 'The requested new date has a Critical Storm Warning. Please pick an alternative safe date.');
@@ -192,17 +186,16 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Submit a customer request to cancel the reservation.
+     * Guest asks to cancel the booking.
      *
-     * Business Logic:
-     * Computes refund eligibility via BookingPolicyEngine:
-     * - Weather / Force Majeure: 100% full refund entitlement.
-     * - Voluntary Notice (>7 days): Partial downpayment refund minus non-refundable processing costs.
-     * - Last-minute Notice (<7 days): Non-refundable deposit retention.
+     * Refund is computed by BookingPolicyEngine:
+     * - weather cancellation: full refund
+     * - more than 7 days before: partial refund
+     * - less than 7 days before: no refund
      *
-     * @param Request $request Holds `pin`, `confirm_cancel_ack`, and `reason`.
-     * @param string $booking_number Target booking identifier.
-     * @return RedirectResponse Redirects back with status feedback.
+     * @param Request $request pin, confirm_cancel_ack, reason
+     * @param string $booking_number
+     * @return RedirectResponse
      */
     public function cancel(CancelBookingRequest $request, string $booking_number): RedirectResponse
     {

@@ -18,7 +18,7 @@
                 <span>Coach Requests</span>
             </a>
 
-            <!-- Matching Queue Shortcut (Primary Action on Right) -->
+            <!-- Matching queue button -->
             <a href="{{ route('admin.coaches.matching') }}" 
                class="btn-primary px-4 py-2 text-sm sm:text-sm font-bold flex items-center gap-2 shadow-2xs">
                 <span>Students Needing Coach</span>
@@ -178,7 +178,7 @@
                     </span>
                 </div>
 
-                <!-- 2x2 Data Grid (Matching Reference Picture Styling) -->
+                <!-- Details (2x2) -->
                 <div class="grid grid-cols-2 gap-x-4 gap-y-3 pt-3 border-t border-[#F2F2F7]">
                     <div>
                         <span class="text-xs font-bold uppercase tracking-wider text-[#8E8E93] block">UPCOMING ACTIVE DATES</span>

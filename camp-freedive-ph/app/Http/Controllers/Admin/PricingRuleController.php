@@ -18,7 +18,7 @@ use App\Http\Requests\Admin\Pricing\StorePricingRuleRequest;
 class PricingRuleController extends Controller
 {
     /**
-     * Page 1 - Pricing Rules List
+     * Page 1: pricing rules list
      */
     public function index(Request $request): View
     {
@@ -47,7 +47,7 @@ class PricingRuleController extends Controller
 
         $rules = $query->paginate(15)->withQueryString();
 
-        // Metrics Summary Cards
+        // Numbers for the summary cards
         $totalRules = PricingRule::count();
         $activeRules = PricingRule::where('status', 'active')->count();
         $totalTriggered = BookingPriceAdjustment::count();
@@ -63,7 +63,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Page 2 - Rule Builder (Create)
+     * Page 2: create rule
      */
     public function create(): View
     {
@@ -71,7 +71,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Store newly created pricing rule.
+     * Save a new pricing rule.
      */
     public function store(StorePricingRuleRequest $request): RedirectResponse
     {
@@ -95,7 +95,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Page 2 - Rule Builder (Edit)
+     * Page 2: edit rule
      */
     public function edit(PricingRule $rule): View
     {
@@ -103,7 +103,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Update an existing pricing rule.
+     * Save changes to a pricing rule.
      */
     public function update(UpdatePricingRuleRequest $request, PricingRule $rule): RedirectResponse
     {
@@ -126,7 +126,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Inline Toggle Status (Active / Inactive)
+     * Switch a rule on/off
      */
     public function toggleStatus(Request $request, PricingRule $rule): JsonResponse|RedirectResponse
     {
@@ -153,7 +153,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Soft delete rule (Preserves historical booking audit breakdowns).
+     * Soft delete a rule (old bookings still show which rule was used).
      */
     public function destroy(Request $request, PricingRule $rule): RedirectResponse
     {
@@ -178,7 +178,7 @@ class PricingRuleController extends Controller
     }
 
     /**
-     * Page 3 - Bookings Triggered by Rule
+     * Page 3: bookings that used this rule
      */
     public function triggered(Request $request, PricingRule $rule): View
     {

@@ -22,7 +22,7 @@ class DeactivationController extends Controller
     ) {}
 
     /**
-     * Display the pending deactivation requests queue.
+     * Pending deactivation requests page.
      */
     public function index(Request $request): View
     {
@@ -43,7 +43,7 @@ class DeactivationController extends Controller
 
 
     /**
-     * Propose coach deactivation (Admin or Owner).
+     * Ask to deactivate a coach (admin or owner).
      */
     public function propose(ProposeDeactivationRequest $request, Coach $coach): RedirectResponse
     {
@@ -69,7 +69,7 @@ class DeactivationController extends Controller
     }
 
     /**
-     * Confirm coach deactivation (Owner only).
+     * Confirm the deactivation (owner only).
      */
     public function confirm(Request $request, DeactivationRequest $deactivationRequest): RedirectResponse
     {
@@ -95,7 +95,7 @@ class DeactivationController extends Controller
     }
 
     /**
-     * Dismiss coach deactivation request (Owner only).
+     * Dismiss a deactivation request (owner only).
      */
     public function dismiss(Request $request, DeactivationRequest $deactivationRequest): RedirectResponse
     {

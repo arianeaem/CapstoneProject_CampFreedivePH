@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 class VerifyMLToken
 {
     /**
-     * Handle an incoming request for ML API endpoints.
+     * Check the token for the ML API routes.
      *
      * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
@@ -17,7 +17,7 @@ class VerifyMLToken
     {
         $expectedToken = config('services.ml.token', '');
 
-        // Extract token from Bearer header, X-ML-Secret-Key header, or request parameter
+        // Token can be in the Bearer header, X-ML-Secret-Key header or a request param
         $token = $request->bearerToken() 
             ?: $request->header('X-ML-Secret-Key') 
             ?: $request->input('token') 

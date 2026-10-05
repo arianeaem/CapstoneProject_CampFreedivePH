@@ -64,7 +64,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 1. BACKEND NAME VALIDATION
+    // 1. Name validation
     // =========================================================================
 
     public function test_booking_accepts_valid_names(): void
@@ -145,7 +145,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 2. BOOKING DATE VALIDATION (ALL 7 CONSECUTIVE 2D1N SCHEDULES)
+    // 2. Booking dates (all 7 two-day schedules)
     // =========================================================================
 
     public function test_all_seven_consecutive_day_transitions_are_valid(): void
@@ -231,7 +231,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 3. TERMS & CONDITIONS AND CONFIRMATION ACKNOWLEDGMENT
+    // 3. Terms and confirmation checkboxes
     // =========================================================================
 
     public function test_booking_rejects_missing_or_unaccepted_confirmation(): void
@@ -269,7 +269,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 4. PICKUP LOCATION ALLOWLIST
+    // 4. Allowed pickup locations
     // =========================================================================
 
     public function test_pickup_location_allowlist_enforcement(): void
@@ -310,7 +310,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 5. SUFFIX VALIDATION
+    // 5. Suffix
     // =========================================================================
 
     public function test_suffix_validation_allows_valid_and_rejects_arbitrary(): void
@@ -350,7 +350,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 6. PAYMENT METHOD VALIDATION
+    // 6. Payment method
     // =========================================================================
 
     public function test_payment_method_validation(): void
@@ -368,7 +368,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 7. PRICING QUOTE VALIDATION
+    // 7. Price quote
     // =========================================================================
 
     public function test_pricing_quote_endpoint_validates_class_type(): void
@@ -396,7 +396,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 8. FUNDIVE CERTIFICATION FIELD
+    // 8. Fundive certification field
     // =========================================================================
 
     public function test_fundive_certification_field_validation(): void
@@ -436,7 +436,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 9. MANAGE BOOKING INPUT VALIDATION (BOOKING NUMBER & PIN)
+    // 9. Manage Booking input (booking number and PIN)
     // =========================================================================
 
     public function test_manage_booking_pin_and_number_validation(): void
@@ -489,7 +489,7 @@ class BookingValidationTest extends TestCase
     }
 
     // =========================================================================
-    // 10. RESCHEDULE VALIDATION (ALL 7 DAY TRANSITIONS & REJECTIONS)
+    // 10. Reschedule (all 7 day changes and rejections)
     // =========================================================================
 
     public function test_reschedule_accepts_all_seven_consecutive_day_transitions(): void

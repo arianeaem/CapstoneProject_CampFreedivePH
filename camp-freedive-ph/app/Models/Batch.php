@@ -12,13 +12,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 
 /**
- * Batch Model representing a discrete 2D1N Freediving Camp weekend.
+ * A batch is one 2-day camp weekend (Saturday to Sunday) in Mabini, Batangas.
  *
- * Business & Capacity Context:
- * - Batches run on fixed weekend cycles (Saturday to Sunday) in Mabini, Batangas.
- * - Maximum capacity is strictly capped at 45 participants per batch based on outrigger banca
- *   licensing and Philippine Coast Guard safety rules.
- * - Minimum coach staffing follows a 1:4 coach-to-diver ratio (45 divers = up to 12 coaches).
+ * - max 45 people per batch (boat limit / Coast Guard rules)
+ * - 1 coach for every 4 divers (45 divers = up to 12 coaches)
  *
  * @property int $id
  * @property string $name
@@ -27,7 +24,7 @@ use Illuminate\Support\Collection;
  * @property Carbon $end_date Sunday end date
  * @property string $lifecycle_status open, closing_soon, sold_out, completed, archived
  * @property string $risk_classification very_safe, safe, moderate, high_risk, critical_risk
- * @property int $max_capacity Batch capacity ceiling (default 45)
+ * @property int $max_capacity max people (default 45)
  * @property string $status confirmed, open, completed, rescheduled, cancelled_by_camp
  */
 class Batch extends Model
@@ -155,7 +152,7 @@ class Batch extends Model
     }
 
     /**
-     * Display name of the batch (Batch Number as primary).
+     * Name shown for the batch (uses the batch number).
      */
     public function getDisplayNameAttribute(): string
     {
@@ -163,11 +160,11 @@ class Batch extends Model
     }
 
     /**
-     * Distinct coaches assigned to this batch.
+     * Coaches assigned to this batch (no duplicates).
      */
     public function getAssignedCoachesAttribute(): Collection
     {
-        // Reuse eager-loaded assignments (list pages) instead of querying per batch
+        // Use the already loaded assignments if we have them (saves queries on list pages)
         $assignments = $this->relationLoaded('activeParticipantAssignments')
             ? $this->activeParticipantAssignments->loadMissing('coach')
             : $this->activeParticipantAssignments()->with('coach')->get();
@@ -177,7 +174,7 @@ class Batch extends Model
             ->unique('id')
             ->filter();
 
-        // Also detect coaches assigned for this batch date when participants are 0
+        // Also get coaches set for this date even if there are no participants yet
         $startDateStr = $this->start_date ? $this->start_date->format('Y-m-d') : null;
         if ($startDateStr && $this->preloadedAvailabilityCoaches !== null) {
             return $fromAssignments->merge($this->preloadedAvailabilityCoaches)->unique('id')->values();
@@ -202,12 +199,12 @@ class Batch extends Model
         return $fromAssignments;
     }
 
-    /** Set by preloadAssignedCoaches() so list pages avoid one availability query per batch. */
+    /** Filled by preloadAssignedCoaches() so list pages don't run one query per batch. */
     protected ?Collection $preloadedAvailabilityCoaches = null;
 
     /**
-     * Load the availability-based coaches for many batches with one query
-     * (same matching rules as getAssignedCoachesAttribute()).
+     * Load the coaches for many batches in one query
+     * (same rules as getAssignedCoachesAttribute()).
      */
     public static function preloadAssignedCoaches(iterable $batches): void
     {
@@ -249,7 +246,7 @@ class Batch extends Model
     }
 
     /**
-     * Compute batch operational capacity: 45 pax ceiling.
+     * Max people per batch (45).
      */
     public function getComputedCapacityAttribute(): int
     {
@@ -257,7 +254,7 @@ class Batch extends Model
     }
 
     /**
-     * Check if coach staffing is pending (has participants/bookings but 0 coaches assigned).
+     * True if the batch has bookings but no coach yet.
      */
     public function getIsCoachPendingAttribute(): bool
     {
@@ -269,18 +266,18 @@ class Batch extends Model
     }
 
     /**
-     * Total participants in active confirmed bookings.
+     * Total participants in active bookings.
      */
     public const INACTIVE_BOOKING_STATUSES = ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'];
 
     public function getTotalParticipantsCountAttribute(): int
     {
-        // 1. Precomputed by scopeWithActiveParticipantsTotal() (one query for a whole list)
+        // 1. Already computed by scopeWithActiveParticipantsTotal()
         if (array_key_exists('active_participants_total', $this->attributes)) {
             return (int) $this->attributes['active_participants_total'];
         }
 
-        // 2. Eager-loaded bookings.participants (avoids one query per batch on list pages)
+        // 2. Already loaded bookings.participants (saves one query per batch)
         if ($this->relationLoaded('bookings') && $this->bookings->every(fn ($b) => $b->relationLoaded('participants'))) {
             return (int) $this->bookings
                 ->whereNotIn('status', self::INACTIVE_BOOKING_STATUSES)
@@ -295,7 +292,7 @@ class Batch extends Model
     }
 
     /**
-     * Adds an 'active_participants_total' column so total_participants_count needs no extra query.
+     * Adds an active_participants_total column so we don't need another query.
      */
     public function scopeWithActiveParticipantsTotal(Builder $query): Builder
     {
@@ -307,7 +304,7 @@ class Batch extends Model
     }
 
     /**
-     * Remaining student slots (out of 45).
+     * Slots left (out of 45).
      */
     public function getRemainingCapacityAttribute(): int
     {
@@ -315,7 +312,7 @@ class Batch extends Model
     }
 
     /**
-     * Occupancy percentage out of 45 max capacity.
+     * How full the batch is in % (out of 45).
      */
     public function getOccupancyPercentageAttribute(): ?int
     {
@@ -327,10 +324,10 @@ class Batch extends Model
     }
 
     /**
-     * Standardized date range format:
-     * - Same year: Oct 12 - Oct 13, 2026
-     * - Cross year: Dec 31, 2026 - Jan 1, 2027
-     * - Single date: Oct 12, 2026
+     * Date range text:
+     * - same year: Oct 12 - Oct 13, 2026
+     * - different year: Dec 31, 2026 - Jan 1, 2027
+     * - one day: Oct 12, 2026
      */
     public function getFormattedDateRangeAttribute(): string
     {
@@ -350,7 +347,7 @@ class Batch extends Model
     }
 
     /**
-     * Total expected revenue from active bookings.
+     * Total expected income from active bookings.
      */
     public function getTotalRevenueAttribute(): float
     {
@@ -360,7 +357,7 @@ class Batch extends Model
     }
 
     /**
-     * Verified collected amount for bookings in this batch.
+     * Amount already paid for bookings in this batch.
      */
     public function getCollectedRevenueAttribute(): float
     {
@@ -384,7 +381,7 @@ class Batch extends Model
     }
 
     /**
-     * Total collected amount for bookings in this batch (alias).
+     * Same as the one above.
      */
     public function getTotalCollectedAmountAttribute(): float
     {
@@ -392,7 +389,7 @@ class Batch extends Model
     }
 
     /**
-     * Active bookings with an outstanding balance.
+     * Active bookings that still have a balance.
      */
     public function getOutstandingBalanceBookingsAttribute(): Collection
     {
@@ -403,7 +400,7 @@ class Batch extends Model
     }
 
     /**
-     * Outstanding balance bookings count.
+     * Number of bookings with a balance.
      */
     public function getOutstandingBalanceBookingsCountAttribute(): int
     {
@@ -411,7 +408,7 @@ class Batch extends Model
     }
 
     /**
-     * Pending refunds count for bookings in this batch.
+     * Number of pending refunds in this batch.
      */
     public function getPendingRefundsCountAttribute(): int
     {
@@ -421,7 +418,7 @@ class Batch extends Model
     }
 
     /**
-     * Check if weather is High or Critical risk.
+     * True if the weather is High or Critical Risk.
      */
     public function getIsCriticalOrHighRiskAttribute(): bool
     {
@@ -429,7 +426,7 @@ class Batch extends Model
     }
 
     /**
-     * Needs attention flag (Critical weather OR approaching soon with 0 coaches).
+     * True if the batch needs attention (Critical weather, or coming up soon with no coach).
      */
     public function getNeedsAttentionAttribute(): bool
     {

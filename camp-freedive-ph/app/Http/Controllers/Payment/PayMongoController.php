@@ -16,17 +16,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * PayMongo Payment Gateway Integration & Webhook Controller.
+ * PayMongo checkout and webhooks.
  *
- * Architecture & Payment Lifecycle:
- * 1. Hosted Checkout v2: Dispatches guests to PayMongo's PCI-DSS compliant checkout session
- *    supporting GCash, Maya, Credit/Debit cards, and GrabPay.
- * 2. Dual-Verification Protocol:
- *    - Synchronous Return (Success Route): Reconciles payment status immediately upon browser redirect.
- *    - Asynchronous Webhook (Webhook Route): Verifies cryptographic HMAC signatures (`Paymongo-Signature`)
- *      with Redis/Cache-backed 24-hour idempotency deduplication to safely discard duplicate retry payloads.
- * 3. Automated State Machine: Updates booking status from `pending_downpayment` -> `confirmed`,
- *    records transaction fee audits, and dispatches customer confirmation emails.
+ * - sends the guest to the PayMongo checkout page (GCash, Maya, cards, GrabPay)
+ * - when the guest comes back on the success page we check the payment right away
+ * - the webhook also confirms the payment (signature is checked, and the same event
+ *   is ignored if it comes again within 24 hours)
+ * - when paid: booking goes from pending_downpayment to confirmed and the email is sent
  */
 class PayMongoController extends Controller
 {
@@ -40,13 +36,13 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Initiate a PayMongo Checkout Session for a booking's required downpayment.
+     * Start the PayMongo checkout for the downpayment.
      *
      * POST /booking/{booking}/paymongo/checkout
      */
     public function checkout(Request $request, Booking $booking): JsonResponse|RedirectResponse
     {
-        // 1. Calculate required downpayment
+        // 1. Get the downpayment amount
         $amount = (float) ($booking->downpayment_amount ?? $booking->total_price ?? 3000);
 
         if ($amount <= 0) {
@@ -54,7 +50,7 @@ class PayMongoController extends Controller
         }
 
         try {
-            // 2. Call Gateway to create PayMongo Checkout Session
+            // 2. Create the checkout session
             $result = $this->gateway->createCheckoutSession($booking, $amount);
 
             if (!$result['success']) {
@@ -69,7 +65,7 @@ class PayMongoController extends Controller
             $checkoutUrl = $result['checkout_url'];
             $checkoutId = $result['checkout_id'];
 
-            // 3. Record or update pending payment record
+            // 3. Save or update the pending payment
             DB::transaction(function () use ($booking, $amount, $checkoutId, $result) {
                 Payment::updateOrCreate(
                     [
@@ -96,7 +92,7 @@ class PayMongoController extends Controller
                 );
             });
 
-            // 4. Return response
+            // 4. Return the result
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => true,
@@ -114,7 +110,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Handle Customer Return upon Successful PayMongo Checkout.
+     * Guest comes back after paying.
      *
      * GET /booking/{booking}/paymongo/success
      */
@@ -122,7 +118,7 @@ class PayMongoController extends Controller
     {
         try {
             DB::transaction(function () use ($booking) {
-                // Find latest pending downpayment
+                // Get the latest pending downpayment
                 $payment = Payment::where('booking_id', $booking->id)
                     ->where('payment_type', 'downpayment')
                     ->latest()
@@ -132,7 +128,7 @@ class PayMongoController extends Controller
                 $feeAmount = 0.00;
                 $paymentMethodType = 'paymongo';
 
-                // Query PayMongo Checkout Session to retrieve actual payment details if available
+                // Get the checkout session from PayMongo to see the payment details
                 if ($payment && $payment->paymongo_resource_id) {
                     $sessionData = app(\App\Services\PayMongoService::class)->getCheckoutSession($payment->paymongo_resource_id);
                     $paymentsList = $sessionData['data']['attributes']['payments'] ?? [];
@@ -165,7 +161,7 @@ class PayMongoController extends Controller
                     ]);
                 }
 
-                // Confirm booking status
+                // Confirm the booking
                 if ($booking->status === 'pending_downpayment' || $booking->status === 'pending') {
                     $booking->update([
                         'status' => 'confirmed',
@@ -191,7 +187,7 @@ class PayMongoController extends Controller
                 );
             });
 
-            // Send confirmation email
+            // Send the confirmation email
             try {
                 \Illuminate\Support\Facades\Mail::to($booking->contact_email)->send(
                     new \App\Mail\BookingConfirmedMail($booking->fresh()->load('participants', 'payments'))
@@ -200,7 +196,7 @@ class PayMongoController extends Controller
                 Log::warning("Email send failed for booking #{$booking->booking_number}: " . $e->getMessage());
             }
 
-            // Authenticate session for self-service portal
+            // Log the guest in to the Manage Booking page
             session([
                 'auth_booking_id' => $booking->id,
                 'auth_booking_pin' => $booking->pin,
@@ -227,7 +223,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Handle Customer Return when Checkout is Cancelled.
+     * Guest cancelled the checkout.
      *
      * GET /booking/{booking}/paymongo/cancel
      */
@@ -245,7 +241,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Webhook Entry Point for asynchronous PayMongo events.
+     * PayMongo webhook.
      *
      * POST /api/webhooks/paymongo
      */
@@ -265,9 +261,8 @@ class PayMongoController extends Controller
         $eventType = $processed['event_type'];
         $eventData = $processed['data'];
 
-        // Webhook Idempotency Deduplication:
-        // PayMongo operates on an at-least-once delivery model, which may retry sending the exact same payload.
-        // Cache::add() is atomic and returns true ONLY if the event has not been processed within the 24-hour TTL window.
+        // PayMongo can send the same event more than once.
+        // Cache::add() only returns true the first time, so we skip repeats for 24 hours.
         $eventId = $processed['raw']['data']['id'] ?? ($eventData['id'] ?? null);
         $dedupKey = $eventId ? "paymongo_webhook_evt:{$eventId}" : 'paymongo_webhook_payload:' . hash('sha256', $payload);
 
@@ -312,7 +307,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Process 'payment.paid' and 'checkout_session.payment.paid' events.
+     * Handle 'payment.paid' and 'checkout_session.payment.paid'.
      */
     protected function handlePaymentPaidEvent(array $eventData): void
     {
@@ -381,7 +376,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Process 'payment.failed' event.
+     * Handle 'payment.failed'.
      */
     protected function handlePaymentFailedEvent(array $eventData): void
     {
@@ -402,7 +397,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Process refund events from PayMongo.
+     * Handle refund events.
      */
     protected function handleRefundEvent(array $eventData): void
     {

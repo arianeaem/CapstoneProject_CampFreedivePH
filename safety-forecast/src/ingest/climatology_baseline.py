@@ -1,24 +1,24 @@
 """
-Climatology and Persistence Baselines for Camp FreedivePH (PRD 3: "Beats Climatology").
+Climatology and persistence baselines (PRD 3: the model must beat climatology).
 
-Evaluates:
-1. Smooth Day-of-Year (+/- 15-day rolling window) + Diurnal (PHT hour) Climatology:
-   - Fit strictly on Training split (never holdout).
-   - Evaluated on EXACT identical sample timestamps for each horizon.
-2. Operational Persistence Baseline:
-   - Lead time indexing:
+Checks:
+1. Climatology by day of year (+/- 15 days) and hour of day (PHT):
+   - fit on the training split only (never the holdout)
+   - scored on the same timestamps for every horizon
+2. Persistence:
+   - lead time:
      * horizon_from_issue: h in [1, 3, 6, 12, 24, 48, 72, 120, 168, 192, 240] hours
      * lead_from_last_obs: h + operational_lag (PRD 7.4)
-   - Lookback formula: y_persist(t) = y(t - (h + lag))
-3. Statistical Rigor:
-   - Paired Moving Block-Bootstrap (168h / 7d blocks, 1,000 resamples) on:
+   - formula: y_persist(t) = y(t - (h + lag))
+3. Statistics:
+   - block bootstrap (168h / 7 day blocks, 1,000 samples) on
      Delta_MAE = |err_candidate| - |err_clim|
-   - 95% Confidence Intervals for Delta_MAE. (Significance when CI upper < 0).
-   - Skill Score = 1 - MAE_candidate / MAE_climatology_exact.
-4. Tidal Physics Clarification:
-   - In currents, persistence MAE drops at 1h (lookback 25h ~ 2 tidal cycles), 12h (36h ~ 3 cycles),
-     and 24h (48h ~ 4 cycles), while spiking at 6h (lookback 30h ~ 2.5 cycles, out-of-phase).
-   - This non-monotonic pattern is an aliasing artifact of the semi-diurnal tide, NOT true ML skill.
+   - 95% CI for Delta_MAE (significant if the upper end < 0)
+   - skill = 1 - MAE_candidate / MAE_climatology
+4. Note about tides:
+   - for currents, persistence MAE drops at 1h (lookback 25h ~ 2 tide cycles), 12h (36h ~ 3 cycles)
+     and 24h (48h ~ 4 cycles), but jumps at 6h (lookback 30h ~ 2.5 cycles, out of phase).
+   - this up-and-down pattern comes from the tide, not real skill.
 """
 
 from typing import Dict, List, Tuple, Any
@@ -39,13 +39,13 @@ OUT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def circular_angular_difference(deg1: np.ndarray, deg2: np.ndarray) -> np.ndarray:
-    """Computes acute absolute angular error between two angle arrays in degrees [0, 180]."""
+    """Absolute angle error in degrees [0, 180]."""
     diff = np.abs(deg1 - deg2) % 360.0
     return np.where(diff > 180.0, 360.0 - diff, diff)
 
 
 def block_bootstrap_mae(errors: np.ndarray, block_size: int = 168, n_boot: int = 1000) -> Tuple[float, float, float]:
-    """Computes moving block-bootstrap 95% confidence interval for individual MAE."""
+    """Block bootstrap 95% CI for one MAE."""
     n = len(errors)
     point_mae = float(np.mean(np.abs(errors)))
     if n < block_size * 2:
@@ -74,10 +74,10 @@ def paired_block_bootstrap_mae(
     n_boot: int = 1000
 ) -> Tuple[float, float, float, float, float]:
     """
-    Computes paired moving block-bootstrap 95% CI on Delta_MAE = |err_cand| - |err_base|.
+    Paired block bootstrap 95% CI on Delta_MAE = |err_cand| - |err_base|.
     Returns:
     (mae_cand, mae_base, delta_mae, ci_lower_delta, ci_upper_delta)
-    If ci_upper_delta < 0, cand is statistically significantly superior to base at p < 0.05.
+    If ci_upper_delta < 0, cand is significantly better than base (p < 0.05).
     """
     assert len(err_cand) == len(err_base)
     n = len(err_cand)
@@ -110,7 +110,7 @@ def paired_block_bootstrap_mae(
 
 class SmoothClimatologyModel:
     """
-    Fits smoothed day-of-year (+/- 15 day circular window) and hour-of-day climatology on training set.
+    Fit the day-of-year (+/- 15 days) and hour-of-day climatology on the training set.
     """
     def __init__(self, window_days: int = 15):
         self.window_days = window_days
@@ -173,7 +173,7 @@ def evaluate_baselines_for_source(source: str, targets: List[str], dir_var: str 
     print(f"EVALUATING BASELINES FOR {source.upper()} ON HOLDOUT SPLIT")
     print("=" * 80)
 
-    # 1. Load data from frozen snapshot rev2
+    # 1. Load the snapshot rev2 data
     df_raw = load_snapshot_dataset(source)
     train_df, holdout_df = get_train_holdout_split(df_raw)
     
@@ -181,12 +181,12 @@ def evaluate_baselines_for_source(source: str, targets: List[str], dir_var: str 
     print(f"Training: {len(train_df):,} rows ({train_df.index.min().tz_convert('UTC')} to {train_df.index.max().tz_convert('UTC')})")
     print(f"Holdout:  {len(holdout_df):,} rows ({holdout_df.index.min().tz_convert('UTC')} to {holdout_df.index.max().tz_convert('UTC')})")
 
-    # 2. Fit Climatology strictly on Training
+    # 2. Fit climatology on training only
     clim_model = SmoothClimatologyModel(window_days=15)
     clim_model.fit(train_df, targets)
     clim_preds_holdout = clim_model.predict(holdout_df)
 
-    # 3. Evaluate Persistence across Horizon Grid
+    # 3. Persistence for each horizon
     lag = OPERATIONAL_LAGS[source.lower()]
     lag_hours = int(lag.total_seconds() / 3600)
 
@@ -220,7 +220,7 @@ def evaluate_baselines_for_source(source: str, targets: List[str], dir_var: str 
             p_cand = persist_vals[var].values
             p_clim = clim_preds_holdout[var].values
 
-            # Exact sample alignment: filter to timestamps where actual, persist, AND clim are valid
+            # Only the timestamps where actual, persistence and climatology all have values
             valid = ~np.isnan(actual) & ~np.isnan(p_cand) & ~np.isnan(p_clim)
             
             err_cand = actual[valid] - p_cand[valid]
@@ -257,7 +257,7 @@ def evaluate_baselines_for_source(source: str, targets: List[str], dir_var: str 
     res_df.to_csv(csv_out, index=False)
     print(f"[Saved Metrics CSV]  -> {csv_out}")
     
-    # Save predictions parquet
+    # Save the predictions (parquet)
     pred_df = pd.DataFrame(predictions_record).set_index("time_utc")
     parquet_out = OUT_BASELINES_DIR / f"{source}_baseline_predictions.parquet"
     pred_df.to_parquet(parquet_out)

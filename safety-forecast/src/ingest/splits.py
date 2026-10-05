@@ -1,19 +1,19 @@
 """
-Canonical Train/Validation/Holdout Split and Walk-Forward Fold Definition for Camp FreedivePH.
+Train / validation / holdout split and the walk-forward folds.
 
-Adheres strictly to PRD 4 & 11:
-1. Holdout Split: 2025-10-01 00:00:00 UTC to 2026-10-03 00:00:00 UTC (strictly non-provisional).
-   Reserved strictly for final one-shot benchmark evaluation and untouched during training/tuning.
-2. Max Training Origin: 2025-09-30 00:00:00 UTC - 240h (2025-09-20 00:00:00 UTC).
-   Guarantees no 240h prediction horizon from training can reach or overlap the holdout.
-3. Source-Specific Walk-Forward Expanding Folds:
-   - Waves (3.0 years): 4 folds. Fold 4 includes Habagat 2025 (May-Sep 2025) for conformal calibration.
-   - Currents (5.0 years): 6 folds. Spans 2020-11 through 2025-09 across multiple monsoon cycles.
-   - Purge gap: >= 240h between every train and validation split.
-4. Option B Trigger Governance:
-   - Evaluated strictly on CV fold skill stability vs climatology (NOT raw MAE variance,
-     which is naturally confounded between Amihan and Habagat seasons).
-   - Extreme wave evaluation (Hs > 2.0m) performed across CV folds, never in holdout.
+Based on PRD sections 4 and 11:
+1. Holdout: 2025-10-01 00:00 UTC to 2026-10-03 00:00 UTC (no provisional rows).
+   Only used once for the final test, never during training or tuning.
+2. Last training origin: 2025-09-30 00:00 UTC minus 240h (2025-09-20 00:00 UTC),
+   so a 240h forecast from training can't reach the holdout.
+3. Walk-forward folds (each one adds more data):
+   - Waves (3 years): 4 folds. Fold 4 has Habagat 2025 (May-Sep 2025) for the conformal calibration.
+   - Currents (5 years): 6 folds, from 2020-11 to 2025-09, several monsoon seasons.
+   - At least 240h gap between train and validation.
+4. When to use Option B:
+   - Based on skill vs climatology in the CV folds (not raw MAE, because MAE is
+     naturally different between Amihan and Habagat).
+   - Big waves (Hs > 2.0 m) are checked in the CV folds, never in the holdout.
 """
 
 from typing import List, Dict, Any, Tuple, Optional
@@ -23,14 +23,14 @@ import pandas as pd
 
 from config import TARGET_TIMEZONE
 
-# Strict UTC timestamps for all split boundaries
+# All split dates are in UTC
 HOLDOUT_START_UTC = pd.Timestamp("2025-10-01 00:00:00", tz="UTC")
 HOLDOUT_END_UTC   = pd.Timestamp("2026-10-03 00:00:00", tz="UTC")
 
 PURGE_MARGIN_HOURS = 240  # 10 days
 TRAIN_MAX_ORIGIN_UTC = pd.Timestamp("2025-09-30 00:00:00", tz="UTC") - pd.Timedelta(hours=PURGE_MARGIN_HOURS)
 
-# 4 Canonical Walk-Forward Expanding Folds for CMEMS Waves (Nov 2022 to Sep 2025)
+# 4 walk-forward folds for CMEMS waves (Nov 2022 to Sep 2025)
 WAVES_WALK_FORWARD_FOLDS = [
     {
         "fold": 1,
@@ -74,7 +74,7 @@ WAVES_WALK_FORWARD_FOLDS = [
     }
 ]
 
-# 6 Canonical Walk-Forward Expanding Folds for CMEMS Currents (Nov 2020 to Sep 2025)
+# 6 walk-forward folds for CMEMS currents (Nov 2020 to Sep 2025)
 CURRENTS_WALK_FORWARD_FOLDS = [
     {
         "fold": 1,
@@ -141,10 +141,9 @@ CURRENTS_WALK_FORWARD_FOLDS = [
 
 def get_train_holdout_split(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Splits a DataFrame into training and holdout subsets.
-    Guarantees:
-    - Training subset strictly ends at TRAIN_MAX_ORIGIN_UTC (240h before holdout).
-    - Holdout subset begins at HOLDOUT_START_UTC and excludes provisional rows.
+    Split the data into training and holdout.
+    - training ends at TRAIN_MAX_ORIGIN_UTC (240h before the holdout)
+    - holdout starts at HOLDOUT_START_UTC and has no provisional rows
     """
     idx_utc = df.index if df.index.tz is not None and df.index.tz.zone == "UTC" else df.index.tz_convert("UTC")
 
@@ -169,8 +168,8 @@ def get_train_holdout_split(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFram
 
 def get_walk_forward_folds(df: pd.DataFrame, source: str = "waves") -> List[Dict[str, Any]]:
     """
-    Yields trained and validation DataFrames for expanding walk-forward folds.
-    Selects WAVES_WALK_FORWARD_FOLDS (4 folds) or CURRENTS_WALK_FORWARD_FOLDS (6 folds).
+    Gives the train and validation data for each walk-forward fold.
+    Uses WAVES_WALK_FORWARD_FOLDS (4) or CURRENTS_WALK_FORWARD_FOLDS (6).
     """
     idx_utc = df.index if df.index.tz is not None and df.index.tz.zone == "UTC" else df.index.tz_convert("UTC")
     fold_configs = WAVES_WALK_FORWARD_FOLDS if source.lower() == "waves" else CURRENTS_WALK_FORWARD_FOLDS
@@ -212,15 +211,13 @@ def get_walk_forward_folds(df: pd.DataFrame, source: str = "waves") -> List[Dict
 
 def check_option_b_trigger_criteria(cv_results: pd.DataFrame) -> Dict[str, Any]:
     """
-    Evaluates whether Option B (0.2 deg WAVERYS Reanalysis) should be triggered.
-    
-    CRITICAL METHODOLOGICAL CORRECTION:
-    - Raw Hs MAE naturally varies by > 25% across folds purely due to seasonal wave power
-      (Amihan gale waves vs flat summer doldrums). Thus, raw MAE variance is invalid.
-    - True trigger criterion: Stability of Skill vs Climatology across all validation folds.
-      Option B is triggered if:
-      1. Skill vs Climatology drops below 0.0 in any seasonal fold.
-      2. Extreme wave (Hs > 2.0m) MAE across CV folds exceeds 0.50m.
+    Check if we should switch to Option B (0.2 deg WAVERYS reanalysis).
+
+    Raw Hs MAE changes by more than 25% between folds just because of the season
+    (big Amihan waves vs flat summer), so we don't use it.
+    Instead Option B is used if:
+      1. skill vs climatology goes below 0.0 in any fold, or
+      2. MAE for big waves (Hs > 2.0 m) in the CV folds is more than 0.50 m.
     """
     skills = cv_results.get("skill_vs_climatology", pd.Series(dtype=float))
     min_skill = float(skills.min()) if len(skills) > 0 else 0.0

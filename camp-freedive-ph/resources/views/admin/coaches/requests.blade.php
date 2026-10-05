@@ -42,7 +42,7 @@
                             {{ $batch->batch_number ?? ($batch->batch_code ?? 'Batch ' . $batch->id) }}
                         </h2>
 
-                        <!-- 2x2 Key Details Grid Matching Picture -->
+                        <!-- Details (2x2) -->
                         <div class="grid grid-cols-2 gap-3.5 mt-3.5">
                             <div>
                                 <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">DIVE DATE</span>
@@ -187,7 +187,7 @@
                         </div>
                     </div>
 
-                    <!-- Accordion: Clean Borderless Coaches List Without Avatar -->
+                    <!-- Coach list -->
                     <div x-show="open" x-cloak class="pt-3 mt-3 border-t border-[#F2F2F7] space-y-2">
                         <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">APPLIED COACHES</span>
                         <div class="space-y-1.5">

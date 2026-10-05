@@ -394,7 +394,7 @@ class MLSafetyServiceIntegrationTest extends TestCase
 
     public function test_forecast_confidently_above_or_below_every_ceiling_evaluates_to_high_confidence(): void
     {
-        // 1. Confidently calm (cleanly below every Coast Guard ceiling)
+        // 1. Clearly calm (below every Coast Guard limit)
         $calmForecast = [
             'physics' => [
                 'significant_wave_height_m' => ['p10' => 0.35, 'p50' => 0.50, 'p90' => 0.75], // ceiling 1.80m
@@ -415,7 +415,7 @@ class MLSafetyServiceIntegrationTest extends TestCase
         $this->assertEquals('high', $calmResult['confidence']);
         $this->assertFalse($calmResult['is_physical_breach']);
 
-        // 2. Confidently severe (cleanly above ceiling across entire [p10, p90] interval)
+        // 2. Clearly bad (above the limit for the whole [p10, p90] range)
         $severeForecast = [
             'physics' => [
                 'significant_wave_height_m' => ['p10' => 2.20, 'p50' => 2.60, 'p90' => 3.10], // entirely above 1.80m

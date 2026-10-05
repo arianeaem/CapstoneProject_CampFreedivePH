@@ -1,16 +1,16 @@
 """
-Total Current Model Benchmark and Evaluation Across 6 Walk-Forward CV Folds.
+Tests the total current model over the 6 walk-forward CV folds.
 
-Physical Decomposition:
-  V_total = Eulerian Forecast + Harmonic Tide + Stokes Climatology
+Split into parts:
+  V_total = Eulerian forecast + harmonic tide + Stokes climatology
 
-Vector formulation:
+As vectors:
   u_total = u_eul + u_tide + u_stokes
   v_total = v_eul + v_tide + v_stokes
   Speed = sqrt(u_total^2 + v_total^2)
 
-Evaluated in BOTH m/s and knots (kt = m/s * 1.943844) across 6 walk-forward folds
-with strict 240h purge margin and zero data leakage.
+Scored in m/s and knots (kt = m/s * 1.943844) over the 6 folds
+with a 240h gap and no data leakage.
 """
 
 import sys
@@ -42,11 +42,11 @@ def run_total_current_benchmark():
     df = pd.read_parquet(currents_path)
     df = df[~df["is_provisional"]].copy()
 
-    # Pre-generate features available at t (lagged by 24h operational lead time)
+    # Features known at t (24h late)
     idx = df.index
     feat_df = pd.DataFrame(index=idx)
 
-    # Eulerian velocity lags (strictly >= 24h lag)
+    # Eulerian velocity lags (lag >= 24h)
     feat_df["eul_u_lag_24h"] = df["eulerian_u"].shift(24)
     feat_df["eul_v_lag_24h"] = df["eulerian_v"].shift(24)
     feat_df["eul_u_lag_48h"] = df["eulerian_u"].shift(48)
@@ -57,7 +57,7 @@ def run_total_current_benchmark():
     # Total speed lag (24h)
     feat_df["curr_speed_lag_24h"] = df["current_speed"].shift(24)
 
-    # Calendar harmonics
+    # Date sin/cos features
     feat_df["doy_sin"] = np.sin(2 * np.pi * idx.dayofyear / 365.25)
     feat_df["doy_cos"] = np.cos(2 * np.pi * idx.dayofyear / 365.25)
     feat_df["hod_sin"] = np.sin(2 * np.pi * idx.hour / 24.0)
@@ -68,7 +68,7 @@ def run_total_current_benchmark():
         "eul_u_roll_24h", "eul_v_roll_24h", "doy_sin", "doy_cos", "hod_sin", "hod_cos"
     ]
 
-    # Pre-fit tidal and climatological models per fold once
+    # Fit the tide and climatology models once per fold
     print("Fitting tidal & climatological models across 6 folds...", flush=True)
     fold_models = {}
     for f_info in CURRENTS_WALK_FORWARD_FOLDS:
@@ -78,7 +78,7 @@ def run_total_current_benchmark():
         v_start = pd.Timestamp(f_info["val_start"], tz="UTC")
         v_end = pd.Timestamp(f_info["val_end"], tz="UTC")
 
-        # Verify purge margin
+        # Check the gap
         purge_h = (v_start - t_end).total_seconds() / 3600.0
         assert purge_h >= 240, f"Purge violation in fold {fold_id}: {purge_h} < 240"
 
@@ -88,7 +88,7 @@ def run_total_current_benchmark():
         tide_model = HarmonicTideModel()
         tide_model.fit(train_df)
 
-        # Climatologies fitted strictly on fold training data
+        # Climatology fit on the fold's training data only
         stk_u_clim = train_df.groupby([train_df.index.month, train_df.index.hour])["stokes_u"].mean().to_dict()
         stk_v_clim = train_df.groupby([train_df.index.month, train_df.index.hour])["stokes_v"].mean().to_dict()
         eul_u_clim = train_df.groupby([train_df.index.month, train_df.index.hour])["eulerian_u"].mean().to_dict()
@@ -132,7 +132,7 @@ def run_total_current_benchmark():
             y_u_train = y_u_eul_train.loc[c_train_idx]
             y_v_train = y_v_eul_train.loc[c_train_idx]
 
-            # Val targets at t + h
+            # Validation targets at t + h
             y_u_eul_val = val_df["eulerian_u"].shift(-h).dropna()
             y_v_eul_val = val_df["eulerian_v"].shift(-h).dropna()
             c_val_idx = y_u_eul_val.index.intersection(y_v_eul_val.index)
@@ -140,23 +140,23 @@ def run_total_current_benchmark():
             target_timestamps = c_val_idx + pd.Timedelta(hours=h)
             true_total_speed = df.loc[target_timestamps, "current_speed"].values
 
-            # Harmonic tide prediction at target_timestamps
+            # Tide prediction at the target times
             val_target_df = pd.DataFrame(index=target_timestamps)
             u_tide_pred, v_tide_pred = fm["tide_model"].predict(val_target_df)
 
-            # Stokes clim
+            # Stokes climatology
             stk_u_map = fm["stk_u_clim"]
             stk_v_map = fm["stk_v_clim"]
             u_stk_pred = np.array([stk_u_map.get((ts.month, ts.hour), 0.0) for ts in target_timestamps])
             v_stk_pred = np.array([stk_v_map.get((ts.month, ts.hour), 0.0) for ts in target_timestamps])
 
-            # Eulerian clim
+            # Eulerian climatology
             eul_u_map = fm["eul_u_clim"]
             eul_v_map = fm["eul_v_clim"]
             u_eul_clim = np.array([eul_u_map.get((ts.month, ts.hour), 0.0) for ts in target_timestamps])
             v_eul_clim = np.array([eul_v_map.get((ts.month, ts.hour), 0.0) for ts in target_timestamps])
 
-            # Eulerian ML model (Vector Ridge alpha=100.0)
+            # Eulerian ML model (Ridge, alpha=100.0)
             X_val = feat_df.loc[c_val_idx, eul_features].fillna(0)
             reg_u = Ridge(alpha=100.0, random_state=42)
             reg_v = Ridge(alpha=100.0, random_state=42)
@@ -166,38 +166,38 @@ def run_total_current_benchmark():
             u_eul_ml = reg_u.predict(X_val)
             v_eul_ml = reg_v.predict(X_val)
 
-            # Eulerian Persistence (lag 24h from forecast origin t)
+            # Eulerian persistence (24h before the forecast time t)
             u_eul_pers = feat_df.loc[c_val_idx, "eul_u_lag_24h"].values
             v_eul_pers = feat_df.loc[c_val_idx, "eul_v_lag_24h"].values
 
-            # Vector sum: Total Current Model = Eulerian ML + Harmonic Tide + Stokes Clim
+            # Total current model = Eulerian ML + tide + Stokes clim
             u_tot_ml = u_eul_ml + u_tide_pred + u_stk_pred
             v_tot_ml = v_eul_ml + v_tide_pred + v_stk_pred
             speed_tot_ml = np.sqrt(u_tot_ml**2 + v_tot_ml**2)
 
-            # Vector sum: Decomposed Climatology = Eulerian Clim + Harmonic Tide + Stokes Clim
+            # Split climatology = Eulerian clim + tide + Stokes clim
             u_tot_clim = u_eul_clim + u_tide_pred + u_stk_pred
             v_tot_clim = v_eul_clim + v_tide_pred + v_stk_pred
             speed_tot_clim = np.sqrt(u_tot_clim**2 + v_tot_clim**2)
 
-            # Vector sum: Decomposed Persistence = Eulerian Persist + Harmonic Tide + Stokes Clim
+            # Split persistence = Eulerian persistence + tide + Stokes clim
             u_tot_pers = u_eul_pers + u_tide_pred + u_stk_pred
             v_tot_pers = v_eul_pers + v_tide_pred + v_stk_pred
             speed_tot_pers = np.sqrt(u_tot_pers**2 + v_tot_pers**2)
 
-            # Direct Baselines
+            # Simple baselines
             tot_speed_map = fm["tot_speed_clim"]
             direct_speed_clim = np.array([tot_speed_map.get((ts.month, ts.hour), np.nan) for ts in target_timestamps])
             direct_speed_pers = feat_df.loc[c_val_idx, "curr_speed_lag_24h"].values
 
-            # Accumulate errors
+            # Collect the errors
             all_err_decomp_ml_ms.append(np.abs(speed_tot_ml - true_total_speed))
             all_err_decomp_clim_ms.append(np.abs(speed_tot_clim - true_total_speed))
             all_err_decomp_pers_ms.append(np.abs(speed_tot_pers - true_total_speed))
             all_err_direct_clim_ms.append(np.abs(direct_speed_clim - true_total_speed))
             all_err_total_pers_ms.append(np.abs(direct_speed_pers - true_total_speed))
 
-        # Concatenate across all 6 folds
+        # Join all 6 folds
         err_ml = np.concatenate(all_err_decomp_ml_ms)
         err_dclim = np.concatenate(all_err_decomp_clim_ms)
         err_dpers = np.concatenate(all_err_decomp_pers_ms)
@@ -246,7 +246,7 @@ def run_total_current_benchmark():
     ]
     print(res_df[headers].to_string(index=False, float_format=lambda x: f"{x:.4f}"), flush=True)
 
-    # Save output to reports
+    # Save to reports
     out_dir = SAFETY_DIR / "reports" / "baselines"
     out_dir.mkdir(parents=True, exist_ok=True)
     res_df.to_json(out_dir / "total_current_model_cv_results.json", orient="records", indent=2)

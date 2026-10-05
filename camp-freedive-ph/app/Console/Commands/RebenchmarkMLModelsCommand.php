@@ -75,7 +75,7 @@ class RebenchmarkMLModelsCommand extends Command
             $process->setTimeout($timeout);
             $process->setIdleTimeout(600);
 
-            // Set working directory to ML project root if directory exists
+            // Run from the ML project folder if it exists
             $workingDir = dirname($scriptPath, 3);
             if (is_dir($workingDir)) {
                 $process->setWorkingDirectory($workingDir);
@@ -99,7 +99,7 @@ class RebenchmarkMLModelsCommand extends Command
                 return self::FAILURE;
             }
 
-            // Execute Scoped Incremental Pipeline (export, router and latency checks for changed cells only)
+            // Run the incremental pipeline (only for the cells that changed)
             $incrementalScript = base_path('../safety-forecast/src/serve/incremental_pipeline.py');
             if (file_exists($incrementalScript)) {
                 $this->info("\nRunning Scoped Incremental Pipeline (changed cells only)...");

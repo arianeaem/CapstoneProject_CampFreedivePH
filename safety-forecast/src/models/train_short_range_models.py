@@ -1,15 +1,14 @@
 """
-train_short_range_models.py -- Trains short-range gradient boosting models for hs and current_speed.
+train_short_range_models.py -- trains short-range gradient boosting models for hs and current_speed.
 
-Specifications:
 - Targets: hs (12h lag), current_speed (24h lag)
 - Horizons: hs = [6, 12, 24, 36, 48, 60, 72] h; current_speed = [24, 48, 72, 120, 168, 240] h
-- Strict fold climatology fit only on training origins with purge margin H + 168 + max_lag.
-- Conformal prediction intervals: signed q10, q90 of (y - pred) from out-of-fold CV residuals.
-- One-time holdout: 2025-04-01 to 2025-09-30 (last 6 months of verified data).
-- Rigorous future-row leakage prevention test.
-- Final refit on all clean verified data (2022-11-01 to 2025-09-30).
-- Models exported as joblib with full manifest in models/short_range/.
+- Climatology is fit only on training origins, with a gap of H + 168 + max_lag.
+- Conformal ranges: q10 and q90 of (y - pred) from the out-of-fold CV errors.
+- Holdout (used once): 2025-04-01 to 2025-09-30 (last 6 months of checked data).
+- Test that no future rows are used.
+- Final training on all clean data (2022-11-01 to 2025-09-30).
+- Models are saved with joblib and a manifest in models/short_range/.
 """
 
 import argparse
@@ -87,7 +86,7 @@ def load_dataset() -> pd.DataFrame:
         df["current_speed"] = np.hypot(df["current_u"], df["current_v"])
     if "wind_speed" not in df and {"wind_u", "wind_v"} <= set(df.columns):
         df["wind_speed"] = np.hypot(df["wind_u"], df["wind_v"])
-    # Strictly filter to clean training window (no provisional)
+    # Only the clean training range (no provisional rows)
     df = df.loc[TRAIN_START:TRAIN_END]
     return df
 
@@ -138,8 +137,8 @@ def get_feature_names(target: str, aux_names: list) -> list:
 def verify_no_future_leakage(df: pd.DataFrame, target: str, H: int, aux_cols: list):
     """
     Test na walang future rows:
-    Extracts features for 5 test origins from the full dataset vs a dataset truncated at o - lag.
-    Asserts exact numerical equality.
+    Builds the features for 5 origins from the full data and from data cut at o - lag,
+    and checks they are exactly the same.
     """
     lag_t = LAGS_MAP.get(target, 0)
     lag_a = {c: LAGS_MAP.get(c, 0) for c in aux_cols}
@@ -174,7 +173,7 @@ def verify_no_future_leakage(df: pd.DataFrame, target: str, H: int, aux_cols: li
     for o in test_origins:
         feat_full = feats(np.array([o]))[0]
 
-        # Truncate dataset at origin timestamp o
+        # Cut the data at origin o
         ts_o = idx[o]
         df_trunc = df.loc[:ts_o].copy()
         idx_tr = df_trunc.index
@@ -183,7 +182,7 @@ def verify_no_future_leakage(df: pd.DataFrame, target: str, H: int, aux_cols: li
         x_tr = df_trunc[target].to_numpy(float)
         aux_tr = {col: df_trunc[col].to_numpy(float) for col in aux_cols}
 
-        # Truncated rolls & lags up to o
+        # Rolls and lags up to o
         c_tr = sm[doy_tr - 1] + hod[hour_tr]
         a_tr = x_tr - c_tr
         rolls_tr = {w: pd.Series(a_tr).rolling(w, min_periods=int(w * 0.7)).mean().to_numpy() for w in ROLLS}
@@ -244,7 +243,7 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
     print(f"Features count: {len(feature_names)} features")
     print(f"Data lags: target={lag_t}h, aux={lag_a}")
 
-    # Partition: Development (pre-holdout) vs Holdout
+    # Split: development (before holdout) and holdout
     holdout_idx = idx.get_loc(idx[idx >= HOLDOUT_START][0])
     print(f"Partition split: Pre-holdout [0:{holdout_idx}] ({idx[0]} to {idx[holdout_idx-1]})")
     print(f"                 Holdout     [{holdout_idx}:{n}] ({idx[holdout_idx]} to {idx[-1]})")
@@ -253,7 +252,7 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
     dev_origins = all_origins[all_origins + max(horizons) < holdout_idx]
     holdout_origins = all_origins[(all_origins >= holdout_idx) & (all_origins + max(horizons) < n)]
 
-    # Leakage test on first horizon
+    # Leakage test on the first horizon
     verify_no_future_leakage(df, target, horizons[0], aux_cols)
 
     rng = np.random.default_rng(0)
@@ -264,7 +263,7 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
         margin = H + MAX_LOOKBACK + max_lag
 
         # -------------------------------------------------------------------
-        # 1. Blocked CV on Development Partition (Conformal Residuals & Tuning)
+        # 1. Blocked CV on the development data (conformal errors and tuning)
         # -------------------------------------------------------------------
         valid_dev = dev_origins[dev_origins + H < holdout_idx]
         fold_dev = np.minimum((np.arange(len(valid_dev)) * K_FOLDS) // len(valid_dev), K_FOLDS - 1)
@@ -325,13 +324,13 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
         cv_p = np.concatenate(cv_pers)
         cv_orig = np.concatenate(cv_t0)
 
-        # Compute Signed Conformal Residuals e = y - pred
+        # Conformal errors e = y - pred
         cv_residuals = cv_y - cv_pred
         q10 = float(np.percentile(cv_residuals, 10))
         q50 = float(np.percentile(cv_residuals, 50))
         q90 = float(np.percentile(cv_residuals, 90))
 
-        # Check CV coverage on out-of-fold residuals
+        # Check the CV coverage
         in_band_cv = (cv_y >= (cv_pred + q10)) & (cv_y <= (cv_pred + q90))
         cv_cov = float(np.mean(in_band_cv)) * 100.0
 
@@ -345,10 +344,10 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
         print(f"  Conformal residuals: q10={q10:+.4f}, q90={q90:+.4f}, out-of-fold coverage={cv_cov:.1f}%")
 
         # -------------------------------------------------------------------
-        # 2. One-Time Holdout Evaluation (Fit on Dev, Test on 2025-04 to 2025-09)
+        # 2. Holdout test (fit on dev, test on 2025-04 to 2025-09)
         # -------------------------------------------------------------------
         pos_all = np.arange(n)
-        # Purge dev origins within margin of holdout start
+        # Remove dev origins that are too close to the holdout start
         dev_clean_origins = dev_origins[dev_origins + H < (holdout_idx - margin)]
         train_hours_ho = pos_all < (holdout_idx - margin)
 
@@ -397,10 +396,10 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
         ho_mae_c = float(np.mean(np.abs(ho_c - ho_y)))
         ho_mae_p = float(np.mean(np.abs(ho_p - ho_y)))
 
-        # Evaluate conformal band on Holdout using CV q10 and q90
+        # Check the conformal band on the holdout using the CV q10 and q90
         ho_p10 = ho_pred + q10
         ho_p90 = ho_pred + q90
-        # Physical floor at 0
+        # Can't be below 0
         ho_p10 = np.maximum(0.0, ho_p10)
         in_band_ho = (ho_y >= ho_p10) & (ho_y <= ho_p90)
         ho_cov = float(np.mean(in_band_ho)) * 100.0
@@ -411,7 +410,7 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
         print(f"    Holdout Conformal Coverage: {ho_cov:.1f}%")
 
         # -------------------------------------------------------------------
-        # 3. Final Production Refit on 100% Verified Window (2022-11 to 2025-09)
+        # 3. Final training on all checked data (2022-11 to 2025-09)
         # -------------------------------------------------------------------
         print("  Refitting production model on 100% verified historical partition...")
         sm_prod, hod_prod = fit_clim(x, doy, hour, np.ones(n, dtype=bool))
@@ -443,7 +442,7 @@ def train_target_pipeline(df: pd.DataFrame, target: str, horizons: list):
         )
         prod_model.fit(X_prod[keep_prod], y_prod[keep_prod])
 
-        # Save production model
+        # Save the model
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         model_filename = f"{target}_h{H}.joblib"
         model_path = OUTPUT_DIR / model_filename
@@ -495,7 +494,7 @@ def main():
 
     # 1. Process hs
     hs_results, hs_features = train_target_pipeline(df, "hs", GRID_CONFIG["hs"])
-    # Determine hs cutoff: If H=72 has holdout lower bound <= 0, cutoff is 48h
+    # hs cutoff: if H=72 has a holdout lower bound <= 0, use 48h
     hs_72_lo = hs_results["h72"]["holdout_ci_lo"]
     hs_cutoff = 72 if hs_72_lo > 0 else 48
     print(f"\n==================================================")

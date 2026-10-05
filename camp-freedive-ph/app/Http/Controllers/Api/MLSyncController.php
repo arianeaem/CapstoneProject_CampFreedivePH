@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 class MLSyncController extends Controller
 {
     /**
-     * Export completed historical batch summaries for ML training pipeline.
+     * Send the completed batches to the ML training script.
      * GET /api/v1/ml/training-data
      */
     public function exportTrainingData(Request $request): JsonResponse
@@ -30,7 +30,7 @@ class MLSyncController extends Controller
         if ($statusFilter) {
             $query->where('status', $statusFilter);
         } elseif (!$includeAll) {
-            // Only export completed historical batches with recorded completion timestamps
+            // Only completed batches that have a completion date
             $query->whereNotNull('completed_at');
         }
 
@@ -51,7 +51,7 @@ class MLSyncController extends Controller
             $carpoolFees = (float) $validBookings->sum(fn($b) => (float) ($b->carpool_fee ?? 0));
             $boatDiveFees = (float) $validBookings->sum(fn($b) => (float) ($b->boat_dive_fee ?? 0));
 
-            // Pure freediving class revenue only (excluding carpool transportation, boat dive add-on, LGU pass, and environmental fees)
+            // Class income only (no carpool, boat dive, LGU or environmental fees)
             $pureClassRevenue = (float) $validBookings->sum(fn($b) => (float) ($b->subtotal ?? 0));
             if ($pureClassRevenue <= 0 && $grossRevenue > 0) {
                 $pureClassRevenue = max(0, $grossRevenue - ($lguFees + $envFees + $carpoolFees + $boatDiveFees));
@@ -79,7 +79,7 @@ class MLSyncController extends Controller
             $endDate = $batch->end_date ? Carbon::parse($batch->end_date) : null;
             $month = $startDate ? $startDate->month : null;
 
-            // Season comes from the single source of truth (config/demand.php), not a hardcoded month list
+            // Season comes from config/demand.php
             $seasonPeriod = $month ? DemandRules::seasonForMonth((int) $month) : DemandRules::SHOULDER;
 
             $assignedCoachesCount = $batch->coachAssignments->unique('coach_id')->count();
@@ -119,7 +119,7 @@ class MLSyncController extends Controller
     }
 
     /**
-     * Real upcoming scheduled batches, so the ML pipeline forecasts each one (never invents batches).
+     * Upcoming scheduled batches, so the ML script makes a forecast for each one.
      * GET /api/v1/ml/scheduled-batches
      */
     public function scheduledBatches(Request $request): JsonResponse
@@ -155,12 +155,12 @@ class MLSyncController extends Controller
     }
 
     /**
-     * Ingest and store 90-day demand & revenue predictions from the ML pipeline.
+     * Save the 90-day demand and income forecast sent by the ML script.
      * POST /api/v1/ml/sync-forecast
      */
     public function importForecast(Request $request): JsonResponse
     {
-        // Support either raw array of forecasts or structured object with horizon summaries
+        // Can be a plain array of forecasts or an object with summaries
         $rawPayload = $request->all();
 
         $forecastList = [];
@@ -193,7 +193,7 @@ class MLSyncController extends Controller
             $metadata['monthly_forecasts'] = $monthlyForecasts;
         }
 
-        // Support CSV raw text upload if provided
+        // Can also be CSV text
         if (empty($forecastList) && $request->has('csv_data')) {
             $forecastList = $this->parseCsvForecast($request->input('csv_data'));
         } elseif ($request->hasFile('file')) {
@@ -221,7 +221,7 @@ class MLSyncController extends Controller
             $predictedParticipants = (float) ($item['predicted_participants'] ?? 0);
             $predictedBookings = (float) ($item['predicted_bookings'] ?? 0);
             $predictedRevenue = (float) ($item['predicted_revenue_php'] ?? $item['predicted_revenue'] ?? 0);
-            // Use the ML pipeline's labels; if one is missing/invalid, derive it from the shared rules (never hardcoded here)
+            // Use the ML labels. If one is missing or wrong, compute it with the same rules
             $demandLevel = DemandRules::normalizeLevel($item['demand_level'] ?? null)
                 ?? DemandRules::demandLevel($predictedParticipants);
             $seasonPeriod = (string) ($item['season_period'] ?? DemandRules::seasonForDate($forecastDate));
@@ -251,7 +251,7 @@ class MLSyncController extends Controller
             ], 422);
         }
 
-        // Per-batch forecasts (one row per REAL scheduled batch). Only touched when the payload carries the key.
+        // Batch forecasts (one row per scheduled batch). Only changed if the key is sent.
         $batchRows = null;
         if (array_key_exists('batch_forecasts', $rawPayload) && is_array($rawPayload['batch_forecasts'])) {
             $batchRows = [];
@@ -289,7 +289,7 @@ class MLSyncController extends Controller
         }
 
         DB::transaction(function () use ($recordsToInsert, $batchRows) {
-            // Replace existing forecast records with fresh sync run
+            // Replace the old forecast rows with the new ones
             DemandForecast::query()->delete();
             DemandForecast::insert($recordsToInsert);
 
@@ -301,7 +301,7 @@ class MLSyncController extends Controller
             }
         });
 
-        // Invalidate cached forecast so UI immediately updates
+        // Clear the cache so the page shows the new forecast
         \Illuminate\Support\Facades\Cache::forget('ml_demand_forecast');
 
         Log::info('ML Forecast successfully synced', [
@@ -325,7 +325,7 @@ class MLSyncController extends Controller
     }
 
     /**
-     * Retrieve latest demand forecast data including monthly classifications.
+     * Get the latest demand forecast with the monthly levels.
      * GET /api/v1/ml/forecast
      */
     public function getForecast(Request $request): JsonResponse
@@ -340,7 +340,7 @@ class MLSyncController extends Controller
     }
 
     /**
-     * Helper to parse CSV forecast content.
+     * Read the forecast CSV.
      */
     protected function parseCsvForecast(string $csvContent): array
     {

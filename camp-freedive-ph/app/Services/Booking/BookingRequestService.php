@@ -119,8 +119,8 @@ class BookingRequestService
     }
 
     /**
-     * Cancel the booking and refund what the chosen option allows:
-     * 'full_refund', 'forfeit', or 'policy_refund' (the cancellation policy amount, optionally overridden).
+     * Cancel the booking and refund based on the option picked:
+     * 'full_refund', 'forfeit', or 'policy_refund' (policy amount, can be changed by staff).
      *
      * @return array{refund_amount: float, forfeited: bool}
      */
@@ -140,7 +140,7 @@ class BookingRequestService
             })(),
         };
 
-        // Pay the refund through PayMongo first; only record it once the money has gone out
+        // Do the PayMongo refund first, only save it once the money is sent
         $paymongoRefundId = null;
         if (!$isForfeited && $refundAmount > 0) {
             foreach ($booking->payments()->whereIn('status', ['completed', 'paid'])->get() as $payment) {

@@ -23,7 +23,7 @@ class EnsureUserRole
         }
 
         if (!in_array($user->role, $roles)) {
-            // Smart redirection for owner accessing /admin/*
+            // Owner opened an /admin/* page, send them to the owner version
             if ($user->role === 'owner' && ($request->is('admin') || $request->is('admin/*'))) {
                 $path = $request->path();
                 $newPath = preg_replace('#^admin#', 'owner', $path);
@@ -31,7 +31,7 @@ class EnsureUserRole
                 return redirect('/' . $newPath . ($qs ? '?' . $qs : ''), 307);
             }
 
-            // Smart redirection for admin accessing /owner/* (except audit logs)
+            // Admin opened an /owner/* page (except audit logs), send them to the admin version
             if ($user->role === 'admin' && ($request->is('owner') || $request->is('owner/*'))) {
                 if ($request->is('owner/audit-logs*') || $request->is('owner/settings/audit-logs*')) {
                     abort(403, 'Unauthorized access. You do not have permission to view this section.');

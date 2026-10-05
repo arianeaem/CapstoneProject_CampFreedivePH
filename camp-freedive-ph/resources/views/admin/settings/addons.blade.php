@@ -196,7 +196,7 @@
                             <!-- Left: Reorder arrows + Sequence number + Title -->
                             <div class="flex items-center gap-3 min-w-0 flex-1">
                                 
-                                <!-- Reorder Arrows (Up/Down) -->
+                                <!-- Move up/down -->
                                 <div class="flex flex-col gap-0.5 opacity-60 hover:opacity-100 transition-opacity shrink-0">
                                     <button type="button" 
                                             @click.stop="moveUp(index)" 
@@ -224,9 +224,9 @@
                                 </div>
                             </div>
 
-                            <!-- Right: Action Icons (Pencil & Trash) -->
+                            <!-- Right: edit and delete -->
                             <div class="flex items-center gap-1 shrink-0">
-                                <!-- Edit Button (No Background Color) -->
+                                <!-- Edit button -->
                                 <button type="button" 
                                         @click="editingIndex = (editingIndex === index ? null : index)" 
                                         class="p-2 rounded-lg text-[#6E6E73] hover:text-[#780000] transition-colors cursor-pointer"
@@ -238,7 +238,7 @@
                                     </svg>
                                 </button>
 
-                                <!-- Delete Button (No Background Color) -->
+                                <!-- Delete button -->
                                 <button type="button" 
                                         @click="removeLocation(index)" 
                                         class="p-2 rounded-lg text-[#6E6E73] hover:text-[#D70015] transition-colors cursor-pointer"
@@ -254,7 +254,7 @@
                             </div>
                         </div>
 
-                        <!-- Inline Editor Panel (White Background) -->
+                        <!-- Edit panel -->
                         <div x-show="editingIndex === index" x-cloak class="px-6 py-4 bg-white border-t border-[#E5E5EA] space-y-3">
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div class="sm:col-span-2 space-y-1">

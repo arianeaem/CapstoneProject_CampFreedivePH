@@ -47,7 +47,7 @@ class RetrainDemandCommandTest extends TestCase
     }
 
     /**
-     * Test that demand:retrain fails gracefully when given an invalid script path.
+     * demand:retrain should fail cleanly when the script path is wrong.
      */
     public function test_demand_retrain_handles_invalid_script_path(): void
     {

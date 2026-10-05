@@ -20,13 +20,13 @@ use App\Http\Requests\Coach\RequestReleaseRequest;
 class AvailabilityController extends Controller
 {
     /**
-     * Page 2: Coach Availability Calendar.
+     * Page 2: coach availability calendar.
      */
     public function index(Request $request): View
     {
         $coach = Auth::user();
 
-        // Month Navigation (Default to current month or requested year/month)
+        // Month to show (current month by default)
         $year = (int) $request->input('year', Carbon::now()->year);
         $month = (int) $request->input('month', Carbon::now()->month);
 
@@ -37,13 +37,13 @@ class AvailabilityController extends Controller
         $startOfCalendar = $currentMonth->copy()->startOfWeek(Carbon::SUNDAY);
         $endOfCalendar = $currentMonth->copy()->endOfMonth()->endOfWeek(Carbon::SATURDAY);
 
-        // Fetch all availabilities for this coach within calendar window
+        // This coach's availability for the month
         $availabilities = CoachAvailability::where('coach_id', $coach->id)
             ->whereBetween('date', [$startOfCalendar->format('Y-m-d'), $endOfCalendar->format('Y-m-d')])
             ->get()
             ->keyBy(fn($a) => $a->date->format('Y-m-d'));
 
-        // Fetch all active assignments for this coach in calendar window
+        // This coach's assignments for the month
         $rawAssignments = ParticipantAssignment::with('batch')
             ->where('coach_id', $coach->id)
             ->where('status', 'assigned')
@@ -56,7 +56,7 @@ class AvailabilityController extends Controller
             })
             ->get();
 
-        // Map assignments to every date covered by the batch (e.g. Saturday + Sunday for 2D1N batches)
+        // Put the assignment on every day of the batch (e.g. Saturday and Sunday)
         $assignmentsByDate = collect();
         foreach ($rawAssignments as $assignment) {
             $batch = $assignment->batch;
@@ -95,13 +95,13 @@ class AvailabilityController extends Controller
             }
         }
 
-        // Fetch active release requests
+        // Release requests
         $releaseRequests = AssignmentReleaseRequest::where('coach_id', $coach->id)
             ->whereIn('status', ['pending', 'approved'])
             ->get()
             ->keyBy(fn($r) => $r->dive_date->format('Y-m-d'));
 
-        // Build calendar grid days
+        // Build the calendar days
         $calendarDays = [];
         $dayCursor = $startOfCalendar->copy();
 
@@ -113,7 +113,7 @@ class AvailabilityController extends Controller
             $firstAssignment = is_array($firstAssignedEntry) ? ($firstAssignedEntry['assignment'] ?? null) : $firstAssignedEntry;
             $batch = $firstAssignment?->batch;
 
-            // Also check if CoachAvailability is explicitly marked as assigned
+            // Also check if the availability itself says assigned
             $availRecord = $availabilities->get($dateStr);
             if (!$isAssigned && $availRecord && $availRecord->status === 'assigned') {
                 $isAssigned = true;
@@ -142,7 +142,7 @@ class AvailabilityController extends Controller
                 $status = $availRecord->status;
             }
 
-            // Emergency release requests remain available regardless of lead time.
+            // Emergency release can be requested any time
             $diveStart = $dayCursor->copy()->setTime(6, 30);
             $hoursUntilDive = max(0, Carbon::now()->diffInHours($diveStart, false));
             $canRequestRelease = $isAssigned && !$hasReleaseRequest;
@@ -181,14 +181,14 @@ class AvailabilityController extends Controller
     }
 
     /**
-     * Toggle a single 2D1N date pair availability.
+     * Turn availability on/off for a weekend (2 days).
      */
     public function toggle(ToggleAvailabilityRequest $request): JsonResponse|RedirectResponse
     {
         $coach = Auth::user();
         $startDate = Carbon::parse($request->input('date'))->startOfDay();
 
-        // Prevent modifying past dates
+        // Can't change past dates
         if ($startDate->isPast() && !$startDate->isToday()) {
             if ($request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => 'Cannot modify past dates.'], 422);
@@ -196,7 +196,7 @@ class AvailabilityController extends Controller
             return back()->with('error', 'Cannot modify availability for past dates.');
         }
 
-        // 2D1N Auto-Pairing: If Saturday -> Sunday, if Sunday -> Saturday, otherwise Day + (Day + 1)
+        // Get the pair day: Saturday -> Sunday, Sunday -> Saturday, otherwise the next day
         if ($startDate->isSaturday()) {
             $day1 = $startDate->copy();
             $day2 = $startDate->copy()->addDay();
@@ -210,7 +210,7 @@ class AvailabilityController extends Controller
 
         $datesToUpdate = [$day1->format('Y-m-d'), $day2->format('Y-m-d')];
 
-        // Check if either date is already assigned via ParticipantAssignment or CoachAvailability
+        // Check if either day is already assigned
         $hasAssignment = ParticipantAssignment::where('coach_id', $coach->id)
             ->where('status', 'assigned')
             ->where(function ($q) use ($datesToUpdate) {
@@ -243,12 +243,12 @@ class AvailabilityController extends Controller
             return back()->with('error', $msg);
         }
 
-        // Check current status of day 1 to determine toggle target
+        // Look at day 1 to know what to switch to
         $currentRecord = CoachAvailability::where('coach_id', $coach->id)
             ->where('date', $day1->format('Y-m-d'))
             ->first();
 
-        // If currently 'available' -> remove availability (unselect); otherwise -> set to 'available'
+        // If 'available' -> remove it, otherwise -> set to 'available'
         if ($currentRecord && $currentRecord->status === 'available') {
             CoachAvailability::where('coach_id', $coach->id)
                 ->whereIn('date', $datesToUpdate)
@@ -287,7 +287,7 @@ class AvailabilityController extends Controller
     }
 
     /**
-     * Bulk Edit Mode: Apply availability status across multiple selected date pairs.
+     * Bulk edit: set the availability for several weekends at once.
      */
     public function bulkUpdate(BulkUpdateAvailabilityRequest $request): JsonResponse|RedirectResponse
     {
@@ -302,7 +302,7 @@ class AvailabilityController extends Controller
                 continue;
             }
 
-            // 2D1N pairing
+            // Pair day
             if ($d->isSaturday()) {
                 $expandedDates[] = $d->format('Y-m-d');
                 $expandedDates[] = $d->copy()->addDay()->format('Y-m-d');
@@ -317,7 +317,7 @@ class AvailabilityController extends Controller
 
         $uniqueDates = array_values(array_unique($expandedDates));
 
-        // Filter out locked assigned dates
+        // Skip assigned dates (locked)
         $assignedDatesFromAssignments = ParticipantAssignment::with('batch')
             ->where('coach_id', $coach->id)
             ->where('status', 'assigned')
@@ -348,7 +348,7 @@ class AvailabilityController extends Controller
         $updatedCount = 0;
         foreach ($uniqueDates as $d) {
             if (in_array($d, $lockedAssignedDates)) {
-                continue; // Skip locked assigned dates
+                continue; // skip assigned dates
             }
 
             if ($targetStatus === 'available') {
@@ -385,8 +385,8 @@ class AvailabilityController extends Controller
     }
 
     /**
-     * Submit an Emergency Release Request for an assigned batch/date.
-     * Emergency releases may be requested at any time.
+     * Ask to be released from an assigned batch/date (emergency).
+     * This can be sent any time.
      */
     public function requestRelease(RequestReleaseRequest $request): RedirectResponse
     {
@@ -394,7 +394,7 @@ class AvailabilityController extends Controller
         $batch = Batch::findOrFail($request->input('batch_id'));
         $diveDate = Carbon::parse($request->input('dive_date'))->startOfDay();
 
-        // Check if existing pending request
+        // Is there already a pending request?
         $existing = AssignmentReleaseRequest::where('coach_id', $coach->id)
             ->where('batch_id', $batch->id)
             ->where('status', 'pending')

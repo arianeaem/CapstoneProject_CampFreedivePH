@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Per-batch ML demand forecast: one row per REAL scheduled batch.
-     * Kept separate from batches/bookings so a forecast can never be mistaken for actual data.
+     * ML demand forecast per batch (one row per scheduled batch).
+     * Separate table so a forecast is never mixed up with real data.
      */
     public function up(): void
     {

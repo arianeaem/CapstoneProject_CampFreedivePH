@@ -157,7 +157,7 @@
 
     </div>
 
-    <!-- Transaction Audit Trail (Placed at bottom for clean mobile flow) -->
+    <!-- Payment history -->
     <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-6 space-y-4 shadow-2xs">
         <h3 class="text-base font-bold text-[#1D1D1F] border-b border-[#E5E5EA] pb-3">Transaction Lifecycle & Audit Trail</h3>
 

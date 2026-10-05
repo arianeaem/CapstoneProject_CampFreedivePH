@@ -44,13 +44,13 @@ class AssessWeatherBatchesCommand extends Command
         $this->line("Timezone: {$timezone} | Current Date: {$today->toDateString()}");
         $this->line("Target Window: Today ({$today->toDateString()}) to {$maxDate->toDateString()} ({$daysAhead} days horizon)");
 
-        // Query eligible batches
+        // Get the batches to check
         $query = Batch::query();
 
         if ($specificBatchId) {
             $query->where('id', $specificBatchId);
         } elseif (!$force) {
-            // Rule: Include today's ongoing batches (end_date >= today) AND upcoming batches starting within 16 days
+            // Batches still going today (end_date >= today) and batches starting within 16 days
             $query->whereNotIn('status', ['cancelled'])
                   ->where('end_date', '>=', $today->toDateString())
                   ->where('start_date', '<=', $maxDate->toDateString());

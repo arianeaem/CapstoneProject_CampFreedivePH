@@ -129,7 +129,7 @@
                                     $dateStr = $day['date_str'];
                                     $hasRelease = $day['has_release_request'];
 
-                                    // Determine whole card background color & typography (No badges, full date color)
+                                    // Card background and text color
                                     if ($isAssigned) {
                                         if ($assignedDayNumber === 1) {
                                             $cellBg = 'bg-[#780000] text-white border-transparent';
@@ -207,7 +207,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Middle: Direct Status Text on Colored Card (No badges) -->
+                                    <!-- Status text -->
                                     <div class="my-auto py-1">
                                         @if($isAssigned)
                                             <div class="space-y-0.5">

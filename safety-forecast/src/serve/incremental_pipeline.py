@@ -1,12 +1,12 @@
 """
-Incremental Pipeline Runner: Scoped Re-Export & Scoped Testing for Changed Cells
-================================================================================
-Triggered automatically after quarterly re-benchmarking (ml:rebenchmark).
-Detects cells where the winning model changed and cleared the promotion margin / TFT guardrail rules.
-Runs three scoped stages ONLY for the changed cells:
-  1. Export:   serving path assignment + ONNX smoke check
-  2. Router:   router cache refresh + quantile verification
-  3. Latency:  p95 latency SLA regression test
+Incremental pipeline: re-export and re-test only the cells that changed
+========================================================================
+Runs after the quarterly re-benchmark (ml:rebenchmark).
+Finds cells where the best model changed and passed the margin / TFT rules.
+Then runs 3 steps only for those cells:
+  1. Export:   pick the serving path + ONNX smoke check
+  2. Router:   refresh the router cache + check the quantiles
+  3. Latency:  check the p95 latency
 """
 
 import sys
@@ -40,8 +40,8 @@ ProdMap = Dict[Tuple[str, int], Dict[str, Any]]
 
 def detect_changed_cells(margin_threshold: float = 0.02, tft_margin_threshold: float = 0.05) -> Tuple[List[Dict[str, Any]], ProdMap]:
     """
-    Compares latest leaderboard against production_model_selection.json.
-    Returns only cells that qualify for promotion under the margin / TFT guardrail rules.
+    Compare the latest leaderboard with production_model_selection.json.
+    Returns only the cells that pass the margin / TFT rules.
     """
     if not LB_PATH.exists() or not PROD_JSON_PATH.exists():
         print("[IncrementalPipeline] Error: Leaderboard or production config not found.")
@@ -68,11 +68,11 @@ def detect_changed_cells(margin_threshold: float = 0.02, tft_margin_threshold: f
         top_model = top_row["model"]
         top_mase = float(top_row["mase"])
 
-        # Climatology fallback preserve rule
+        # Keep climatology cells as they are
         if "climatology" in str(serving_path).lower() or "climatology" in str(incumbent_model).lower() or pd.isna(incumbent_mase):
             continue
 
-        # TFT Guardrail check
+        # TFT rule
         if "TemporalFusionTransformer" in top_model:
             runner_up = sorted_cell.iloc[1] if len(sorted_cell) > 1 else top_row
             tft_margin = float(runner_up["mase"]) - top_mase
@@ -112,7 +112,7 @@ def detect_changed_cells(margin_threshold: float = 0.02, tft_margin_threshold: f
 
 def run_scoped_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Scoped export: serving path assignment and ONNX smoke check for a single changed cell.
+    Export step: pick the serving path and run the ONNX smoke check for one cell.
     """
     var = changed_cell["variable"]
     h = changed_cell["horizon"]
@@ -120,12 +120,12 @@ def run_scoped_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
 
     print(f"\n[SCOPED EXPORT] Processing ({var}, H={h}h) -> {new_model}")
 
-    # Determine serving path
+    # Pick the serving path
     if "XGBoost" in new_model or "DirectTabular" in new_model or "GBDT" in new_model:
-        # Check if ONNX exportable
+        # Can it be exported to ONNX?
         target_onnx = ONNX_DIR / f"{var}_H{h}.onnx"
         if not target_onnx.exists():
-            # Fall back to root ONNX forecaster target
+            # Use the main ONNX forecaster file instead
             target_onnx = ONNX_DIR / f"xgb_wave_forecaster_{var}.onnx" if "wave" in var or var in ["hs", "tp", "swell_height", "wind_wave_height"] else ONNX_DIR / f"xgb_wind_forecaster_{var}.onnx"
 
         if target_onnx.exists():
@@ -138,8 +138,8 @@ def run_scoped_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
         serving_path = "python_native"
         print(f"  Serving Branch: Python Native ({new_model})")
 
-    # Smoke check: the exported ONNX graph loads and returns one output per input row.
-    # This verifies the artifact runs; it does not compare against the native model.
+    # Smoke check: the ONNX file loads and gives one output per input row.
+    # It only checks that it runs, it doesn't compare with the native model.
     parity_passed = True
     if serving_path != "python_native" and Path(PROJECT_ROOT / serving_path).exists():
         import onnxruntime as ort
@@ -163,27 +163,27 @@ def run_scoped_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
 
 def run_scoped_router_update(changed_cell: Dict[str, Any]) -> bool:
     """
-    Scoped router update: invalidate the router session cache and verify quantile outputs for the changed cell.
+    Router step: clear the router cache and check the quantiles for the changed cell.
     """
     var = changed_cell["variable"]
     h = changed_cell["horizon"]
     print(f"\n[SCOPED ROUTER & QUANTILES] Validating ({var}, H={h}h)")
 
-    # Invalidate session cache
+    # Clear the cache
     clear_router_caches()
     router = ModelRouter()
 
-    # Generate dummy features
+    # Random input
     np.random.seed(42)
     dummy_feat = np.random.uniform(0.1, 5.0, size=(get_expected_feature_count(),)).astype(np.float32)
 
-    # Scoped single-variable routed prediction
+    # Prediction for this variable
     val_pred = router.route_forecast(var, h, dummy_feat)
     if val_pred is None or "value" not in val_pred:
         raise RuntimeError(f"Prediction failed for ({var}, {h})")
     print(f"  Prediction Output: {val_pred['value']:.4f} | Serving Source: {val_pred.get('source', 'unknown')}")
 
-    # End-to-end multihorizon quantile verification for the affected horizon
+    # Check the quantiles for this horizon
     forecast, metadata = router.generate_physics_forecast(h, dummy_feat)
     if forecast is None or metadata is None:
         raise RuntimeError(f"Multihorizon forecast failed for horizon {h}h")
@@ -195,7 +195,7 @@ def run_scoped_router_update(changed_cell: Dict[str, Any]) -> bool:
 
 def run_scoped_latency_check(changed_cell: Dict[str, Any]) -> float:
     """
-    Scoped latency SLA test (<350ms p95 budget) on the changed cell's horizon.
+    Latency step: p95 must be under 350ms for the changed cell's horizon.
     """
     h = changed_cell["horizon"]
     print(f"\n[SCOPED LATENCY SLA] Benchmarking Horizon {h}h")
@@ -203,7 +203,7 @@ def run_scoped_latency_check(changed_cell: Dict[str, Any]) -> float:
     router = ModelRouter()
     dummy_feat = np.random.uniform(0.1, 5.0, size=(get_expected_feature_count(),)).astype(np.float32)
 
-    # Warmup
+    # Warm up
     for _ in range(5):
         router.generate_physics_forecast(h, dummy_feat)
 
@@ -224,7 +224,7 @@ def run_scoped_latency_check(changed_cell: Dict[str, Any]) -> float:
 
 def run_incremental_pipeline(forced_cells: Optional[List[Tuple[str, int]]] = None) -> Dict[str, Any]:
     """
-    Orchestrates the scoped export, router and latency stages for changed cells only.
+    Runs the export, router and latency steps for the changed cells only.
     """
     print("=" * 80)
     print("INCREMENTAL ML RE-SERVING & REGRESSION PIPELINE (EXPORT / ROUTER / LATENCY)")

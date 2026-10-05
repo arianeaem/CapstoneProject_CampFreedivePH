@@ -70,7 +70,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Get assigned students count for a specific dive date.
+     * Number of students assigned on a dive date.
      */
     public function assignedCountForDate($date): int
     {
@@ -101,7 +101,7 @@ class User extends Authenticatable
         return $this->status === 'active';
     }
 
-    /** Removed accounts are archived (never deleted) so their history is kept. */
+    /** Removed accounts are archived (not deleted) so we keep their history. */
     public function isArchived(): bool
     {
         return $this->status === 'archived';

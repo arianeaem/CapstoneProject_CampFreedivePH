@@ -12,10 +12,10 @@ class StoreBookingRequest extends FormRequest
         return true; // access is checked by route middleware
     }
 
-    /** Clean up the raw form input before the rules run. */
+    /** Clean up the form input before validation. */
     protected function prepareForValidation(): void
     {
-        // Merge lead contact first_name, middle_name, last_name, and suffix if present
+        // Combine the contact's first, middle, last name and suffix
         if ($this->filled('first_name') || $this->filled('last_name')) {
             $cfn = trim($this->input('first_name') ?? '');
             $cmn = $this->boolean('no_middle_name') ? '' : trim($this->input('middle_name') ?? '');
@@ -30,7 +30,7 @@ class StoreBookingRequest extends FormRequest
             }
         }
 
-        // Merge participant first_name, middle_name, last_name, and suffix if present
+        // Combine each participant's first, middle, last name and suffix
         if ($this->has('participants') && is_array($this->input('participants'))) {
             $participants = $this->input('participants');
             foreach ($participants as $i => $p) {
@@ -51,7 +51,7 @@ class StoreBookingRequest extends FormRequest
             $this->merge(['participants' => $participants]);
         }
 
-        // Sanitize phone number spacing/dashes before validation
+        // Remove spaces and dashes from the phone number
         if ($this->has('contact_phone')) {
             $cleanedPhone = preg_replace('/[\s\-]/', '', (string)$this->input('contact_phone'));
             $this->merge(['contact_phone' => $cleanedPhone]);

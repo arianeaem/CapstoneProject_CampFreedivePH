@@ -1,17 +1,12 @@
 """
-FastAPI inference service. Wraps the 12 ONNX models (wave/wind/current
-regressors + safety classifier) and the deterministic hard-gate layer behind
-one HTTP endpoint — this is the boundary WeatherForecastService.php and
-WeatherSafetyService.php call into from Laravel.
+FastAPI service for the ML models. Loads the 12 ONNX models (wave/wind/current
+models + safety classifier) and the hard limits. Laravel calls this from
+WeatherForecastService.php and WeatherSafetyService.php.
 
-INPUT DESIGN — worth understanding, not just accepting: the request does NOT
-include raw wave data (hs, tp, swell_height, wind_wave_height). Every
-regressor's feature set was built to predict wave/wind/current state FROM
-current + wind + pressure + rain + time — never from wave data itself (wave
-is only ever a target, never an input, anywhere in this pipeline). So the
-live boundary conditions Laravel already pulls from CMEMS/ECMWF/GFS (current,
-wind, pressure, rain) are the entire input; wave state is always something
-this service PRODUCES, never something the caller needs to already know.
+Note about the input: the request does NOT have wave data (hs, tp, swell_height,
+wind_wave_height). The models predict the waves FROM current, wind, pressure, rain
+and time. Wave data is only ever an output, never an input. So Laravel only sends
+what it already has (current, wind, pressure, rain) and this service gives back the waves.
 
 Run: uvicorn src.serve.main:app --host 127.0.0.1 --port 8001
 """
@@ -40,15 +35,11 @@ from src.serve.model_router import QuantileValue, PhysicsForecast, router as mul
 from src.features.lagged_features import build_lagged_features
 
 # ---------------------------------------------------------------------------
-# Load all 12 ONNX sessions ONCE at startup, not per-request — this is what
-# keeps inference in the sub-millisecond range confirmed during export.
+# Load the 12 ONNX models once at startup, not on every request, so it stays fast.
 #
-# FEATURE ORDER: loaded from the JSON manifests export_onnx.py saves at
-# export time, NOT recomputed via wave_feature_columns()/etc against a live
-# request DataFrame. ONNX models are purely positional — a freshly-built
-# DataFrame's column order has no guaranteed relationship to what the model
-# was trained on, and a mismatch would silently produce wrong predictions
-# with no error. The saved manifest is the single source of truth for order.
+# Column order comes from the JSON files that export_onnx.py saves.
+# We don't rebuild it from the request, because ONNX only looks at column
+# positions. If the order is wrong the predictions are wrong and there is no error.
 # ---------------------------------------------------------------------------
 SESSIONS = {}
 FEATURE_ORDER = {}
@@ -108,12 +99,9 @@ def run_onnx(session_name: str, X: np.ndarray) -> np.ndarray:
 
 
 def run_classifier_onnx(X: np.ndarray, n_classes: int = 5) -> np.ndarray:
-    """The classifier's ONNX export can return its outputs in either order
-    ([labels, probabilities] or [probabilities, labels] depending on
-    onnxmltools version — export_onnx.py's own verification step had to try
-    output[1] as a fallback for exactly this reason. Rather than assume a
-    fixed index here too, find whichever output array's last dimension
-    actually matches n_classes — robust regardless of ordering."""
+    """The classifier can return [labels, probabilities] or [probabilities, labels]
+    depending on the onnxmltools version (export_onnx.py had the same problem).
+    So we pick the output whose last dimension is n_classes."""
     session = SESSIONS["xgb_safety_classifier"]
     outputs = session.run(None, {"input": X.astype(np.float32)})
     for out in outputs:
@@ -176,7 +164,7 @@ class HourlyPrediction(BaseModel):
     ml_risk_tier: str
     final_risk_tier: str
     safety_threshold_triggered: bool = False
-    hard_gate_triggered: bool = False  # Backward-compatible alias
+    hard_gate_triggered: bool = False  # old name, same as safety_threshold_triggered
     override_reasons: List[str]
 
 
@@ -185,7 +173,7 @@ class ForecastResponse(BaseModel):
     skipped_leading_rows: int
 
 
-# --- Booking Assessment Schemas (Laravel Boundary Interface) ---
+# --- /assess-booking request and response (used by Laravel) ---
 class BookingAssessmentRequest(BaseModel):
     planned_date: str = Field(..., description="Date of dive session (YYYY-MM-DD), e.g. '2026-09-15'")
     dive_start: str = Field("08:00", description="Start time of dive session (HH:MM), e.g. '08:00'")
@@ -211,7 +199,7 @@ class HourlyAssessmentDetail(BaseModel):
     final_tier: int
     final_tier_name: str
     safety_threshold_triggered: bool = False
-    hard_gate_triggered: bool = False  # Backward-compatible alias
+    hard_gate_triggered: bool = False  # old name, same as safety_threshold_triggered
     override_reasons: List[str]
     advisory_message: str
     current_source: str
@@ -238,7 +226,7 @@ class WorstHourSummary(BaseModel):
     final_tier: int
     final_tier_name: str
     safety_threshold_triggered: bool = False
-    hard_gate_triggered: bool = False  # Backward-compatible alias
+    hard_gate_triggered: bool = False  # old name, same as safety_threshold_triggered
     override_reasons: List[str]
     primary_hazard: str
     advisory_message: str
@@ -259,7 +247,7 @@ class BookingAssessmentResponse(BaseModel):
     displayed_risk_name: str
     safety_threshold_triggered: bool = False
     overall_safety_threshold_triggered: bool = False
-    overall_hard_gate_triggered: bool = False  # Backward-compatible alias
+    overall_hard_gate_triggered: bool = False  # old name
     worst_hour: WorstHourSummary
     hourly_assessments: List[HourlyAssessmentDetail]
     generated_at: str
@@ -287,7 +275,7 @@ class MultiHorizonForecastResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Feature engineering — matches training EXACTLY
+# Features (must be the same as in training)
 # ---------------------------------------------------------------------------
 def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values("timestamp").reset_index(drop=True)
@@ -296,7 +284,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     if "delta_p_3h" not in df.columns or df["delta_p_3h"].isna().all():
         df["delta_p_3h"] = df["slp"].diff(3).bfill().fillna(0.0)
 
-    # Compute wind components if missing
+    # Make the wind u/v columns if they are missing
     if "wind_u" not in df.columns or df["wind_u"].isna().all():
         rad = np.radians(df["wind_dir"])
         df["wind_u"] = -df["wind_speed"] * np.sin(rad)
@@ -318,11 +306,10 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 @app.get("/health")
 def health():
     """
-    Service health check and model registry status.
+    Health check.
 
     Returns:
-        dict: Service metadata, status ('ok'), count of loaded ONNX sessions,
-              and list of active model names.
+        dict: status ('ok'), number of loaded ONNX models and their names.
     """
     return {
         "status": "ok",
@@ -334,43 +321,39 @@ def health():
 
 def _run_inference_pipeline(raw_df: pd.DataFrame, pagasa_dict: Optional[dict]):
     """
-    Core internal inference execution engine.
+    Runs the models on the input.
 
-    Pipeline Architecture:
-        1. Current Vector Enrichment: If ocean currents are missing from boundary payload,
-           retrieves Copernicus CMEMS hourly vectors (or climatological fallback).
-        2. Feature Engineering: Matches exact sine/cosine temporal and barometric delta
-           transforms constructed during model training.
-        3. Multi-Model Regressors: Runs wave, wind, and current ONNX regressors.
-        4. Physics Feature Derivation: Computes non-linear wave steepness and swell ratios.
-        5. 5-Tier Safety Classifier: Evaluates predicted oceanographic state into risk probabilities.
+    1. If the current is missing, get it from the CMEMS cache (or climatology).
+    2. Build the same features as in training (sin/cos time, pressure change).
+    3. Run the wave, wind and current models.
+    4. Compute wave steepness and swell ratio.
+    5. Run the 5-level safety classifier.
 
     Parameters:
-        raw_df (pd.DataFrame): Input hourly atmospheric readings.
-        pagasa_dict (dict | None): Optional active PAGASA warnings.
+        raw_df (pd.DataFrame): hourly weather readings
+        pagasa_dict (dict | None): PAGASA warnings
 
     Returns:
         tuple[pd.DataFrame, dict, np.ndarray]:
-            - valid (pd.DataFrame): Fully engineered feature table.
-            - preds (dict): Regressor predictions for hs, tp, wind_speed, current_speed, etc.
-            - ml_preds (np.ndarray): Argmax class predictions (0-4) from safety classifier.
+            - valid: feature table
+            - preds: predictions for hs, tp, wind_speed, current_speed, etc.
+            - ml_preds: classifier classes (0-4)
     """
 
 
-# TODO: Implement Redis-backed inference response caching for high-concurrency booking traffic during typhoons.
+# TODO: cache responses in Redis for busy times (e.g. during typhoons)
 
 
 @app.post("/forecast/predict", response_model=ForecastResponse)
 def predict(request: ForecastRequest):
     """
-    Raw multi-horizon physics forecasting and safety classification endpoint.
+    Raw forecast and safety level for each hour.
 
     Parameters:
-        request (ForecastRequest): Hourly atmospheric readings and optional PAGASA advisories.
+        request (ForecastRequest): hourly weather readings and PAGASA warnings
 
     Returns:
-        ForecastResponse: Hourly predictions including predicted wave height, period, swell,
-                          wind components, current speed/direction, and deterministic safety thresholds.
+        ForecastResponse: predicted waves, period, swell, wind, current and the hard limit results.
     """
     if len(SESSIONS) == 0:
         raise HTTPException(status_code=503, detail="Models not loaded yet")
@@ -419,13 +402,13 @@ def predict(request: ForecastRequest):
 
 def _run_inference_pipeline(raw_df: pd.DataFrame, pagasa_dict: dict = None):
     """
-    Internal inference pipeline helper:
-    1. Injects CMEMS currents if missing.
-    2. Runs feature engineering.
-    3. Runs 11 wave/wind/current XGBoost ONNX regressors.
-    4. Runs xgb_safety_classifier ONNX model.
+    Steps:
+    1. Add the CMEMS current if it's missing.
+    2. Build the features.
+    3. Run the 11 wave/wind/current ONNX models.
+    4. Run the xgb_safety_classifier ONNX model.
     """
-    # Check if ocean currents are missing or unpopulated; if so, inject from CMEMS cache/climatology
+    # If the current is missing, get it from the CMEMS cache or climatology
     needs_currents = (
         "current_u" not in raw_df.columns
         or raw_df["current_u"].isna().any()
@@ -449,19 +432,19 @@ def _run_inference_pipeline(raw_df: pd.DataFrame, pagasa_dict: dict = None):
 
     valid = engineer_features(raw_df)
 
-    # 1. Wave Regressors
+    # 1. Wave models
     wave_feats = FEATURE_ORDER["wave"]
     X_wave = valid[wave_feats].values
     preds = {}
     for target in WAVE_TARGETS:
         preds[target] = run_onnx(f"xgb_wave_regressor_{target}", X_wave)
 
-    # 2. Derive wave-dependent physics features
+    # 2. Features that need the waves
     g = 9.80665
     valid["wave_steepness"] = (2 * np.pi * preds["hs"]) / (g * np.maximum(preds["tp"], 0.5) ** 2)
     valid["swell_ratio"] = preds["swell_height"] / (preds["hs"] + 1e-5)
 
-    # 3. Wind and Current Regressors
+    # 3. Wind and current models
     wind_feats = FEATURE_ORDER["wind"]
     current_feats = FEATURE_ORDER["current"]
     X_wind = valid[wind_feats].values
@@ -477,7 +460,7 @@ def _run_inference_pipeline(raw_df: pd.DataFrame, pagasa_dict: dict = None):
     preds["current_speed"] = np.sqrt(preds["current_u"] ** 2 + preds["current_v"] ** 2)
     preds["current_dir"] = (np.degrees(np.arctan2(preds["current_v"], preds["current_u"]))) % 360.0
 
-    # 4. Safety Classifier
+    # 4. Safety classifier
     pred_by_name = {
         "pred_hs": preds["hs"], "pred_tp": preds["tp"],
         "pred_swell_height": preds["swell_height"], "pred_wind_wave_height": preds["wind_wave_height"],
@@ -542,17 +525,17 @@ def predict(request: ForecastRequest):
 
 
 # ===========================================================================
-# /assess-booking: The Core Laravel Integration Endpoint
+# /assess-booking: main endpoint used by Laravel
 # ===========================================================================
 @app.post("/assess-booking", response_model=BookingAssessmentResponse)
 def assess_booking(request: BookingAssessmentRequest):
     """
-    Evaluates a planned freediving booking session for Laravel:
-    1. Injects live CMEMS ocean currents (or climatological fallback).
-    2. Runs multi-horizon physics forecasting for waves, winds, and currents.
-    3. Evaluates 9-variable PHP-aligned safety rules & deterministic hard-gates.
-    4. Enforces the 3-Tier Operational Cutoff Policy based on query horizon.
-    5. Resolves the worst_hour across the dive window and returns the overall Go/No-Go verdict.
+    Check a planned dive session for Laravel:
+    1. Add the CMEMS current (or climatology).
+    2. Forecast waves, wind and current.
+    3. Apply the 9-value rules (same as PHP) and the hard limits.
+    4. Apply the horizon bands.
+    5. Find the worst hour in the dive window and return the overall result.
     """
     if len(SESSIONS) == 0:
         raise HTTPException(status_code=503, detail="Inference models not loaded yet")
@@ -567,7 +550,7 @@ def assess_booking(request: BookingAssessmentRequest):
     from datetime import datetime, timezone
     now_utc = datetime.now(timezone.utc)
 
-    # Parse session time boundaries (e.g. 08:00 to 12:00 on planned_date)
+    # Session start and end (e.g. 08:00 to 12:00 on planned_date)
     try:
         start_hour_int = int(request.dive_start.split(":")[0])
         end_hour_int = int(request.dive_end.split(":")[0])
@@ -581,7 +564,7 @@ def assess_booking(request: BookingAssessmentRequest):
         ts_dt = pd.to_datetime(valid.loc[i, "timestamp"])
         hour_int = ts_dt.hour
 
-        # Calculate forecast horizon in hours relative to current time
+        # Hours from now until this hour
         if ts_dt.tzinfo is None:
             ts_utc = ts_dt.replace(tzinfo=timezone.utc)
         else:
@@ -601,10 +584,10 @@ def assess_booking(request: BookingAssessmentRequest):
             "slp": float(valid.loc[i, "slp"]),
         }
 
-        # Apply deterministic safety threshold and operational cutoff policy
+        # Apply the hard limits and horizon bands
         op_result = evaluate_operational_safety(horizon_hours, int(ml_preds[i]), telemetry, pagasa_dict)
 
-        # Calibrated wave height quantiles (PRD 5.3 sigma scaling across lead horizon)
+        # Wave height p10/p50/p90 (gets wider the further ahead it is)
         scale_h = np.sqrt(1.0 + max(0, horizon_hours - 1) // 24)
         hs_sigma = 0.12 * scale_h
         hs_point = float(preds["hs"][i])
@@ -645,15 +628,15 @@ def assess_booking(request: BookingAssessmentRequest):
         )
 
         all_hourly_details.append(detail)
-        # Check if hour belongs to the planned dive session window
+        # Is this hour inside the dive window?
         if start_hour_int <= hour_int <= end_hour_int:
             session_hourly_details.append(detail)
 
-    # Use session hours if present, otherwise evaluate all submitted hours
+    # Use the session hours if there are any, otherwise all hours
     target_hours = session_hourly_details if len(session_hourly_details) > 0 else all_hourly_details
 
-    # --- Identify the WORST HOUR in the session ---
-    # Sort key: 1. safety_threshold_triggered (True first), 2. final_tier (highest first), 3. predicted_hs, 4. predicted_wind_speed
+    # --- Find the worst hour in the session ---
+    # Sort by: limit broken first, then highest tier, then wave height, then wind
     worst = max(
         target_hours,
         key=lambda h: (1 if h.safety_threshold_triggered else 0, h.final_tier, h.predicted_hs, h.predicted_wind_speed)
@@ -675,13 +658,13 @@ def assess_booking(request: BookingAssessmentRequest):
         routed_horizon_bucket=worst.routed_horizon_bucket,
     )
 
-    # --- Overall Session Verdict ---
+    # --- Overall result ---
     any_threshold_breach = any(h.safety_threshold_triggered for h in target_hours)
     max_tier = max(h.final_tier for h in target_hours)
     min_horizon = min(h.horizon_hours for h in target_hours)
     max_horizon = max(h.horizon_hours for h in target_hours)
 
-    # Determine dominant operational status across session
+    # Most common status in the session
     if max_horizon <= 1:
         overall_op_status = "TACTICAL_CLEARANCE"
     elif max_horizon <= 24:
@@ -689,7 +672,7 @@ def assess_booking(request: BookingAssessmentRequest):
     else:
         overall_op_status = "EXTENDED_TREND_OUTLOOK"
 
-    # Determine 5-tier recommendation directly matching platform safety classifications
+    # Map to our 5 safety levels
     if any_threshold_breach or max_tier == 4:
         overall_recommendation = "Critical Risk"
         operational_action = "NO_GO"
@@ -716,7 +699,7 @@ def assess_booking(request: BookingAssessmentRequest):
 
     session_routed_h = multihorizon_router.snap_to_closest_horizon(min_horizon)
 
-    # Generate multi-horizon physics forecast with quantiles using the routed bucket
+    # Forecast with p10/p50/p90 using the closest horizon
     session_physics = None
     try:
         exp_dim = multihorizon_router.get_expected_feature_count()
@@ -761,8 +744,8 @@ def assess_booking(request: BookingAssessmentRequest):
 @app.post("/forecast/physics", response_model=MultiHorizonForecastResponse)
 def get_multi_horizon_physics(request: MultiHorizonForecastRequest):
     """
-    Multi-Horizon Marine Physics Forecasting Endpoint with Calibrated Quantiles (p10, p50, p90).
-    Routes requests to ONNX C++ engine, Native AutoGluon Python runtime, or Climatology envelope.
+    Forecast with p10, p50 and p90.
+    Uses the ONNX model, the AutoGluon Python model or climatology, depending on the horizon.
     """
     horizon = int(request.horizon_hours)
     now_utc = datetime.now(timezone.utc)
@@ -779,7 +762,7 @@ def get_multi_horizon_physics(request: MultiHorizonForecastRequest):
             raw_df["current_u"] = currents_df["current_u"].values
             raw_df["current_v"] = currents_df["current_v"].values
 
-        # Ensure wave columns exist for lag building
+        # Make sure the wave columns exist for the lag features
         for col in ["hs", "tp", "swell_height", "wind_wave_height"]:
             if col not in raw_df.columns:
                 raw_df[col] = 1.0
@@ -787,10 +770,10 @@ def get_multi_horizon_physics(request: MultiHorizonForecastRequest):
         lagged_df = build_lagged_features(raw_df)
         vec = lagged_df.iloc[-1].values.astype(np.float32)
         if len(vec) != expected_feat_dim:
-            # Pad or truncate cleanly to expected dimension
+            # Pad or cut to the right size
             vec = np.pad(vec, (0, max(0, expected_feat_dim - len(vec))))[:expected_feat_dim]
     else:
-        # Default fallback observation vector sized to expected feature dimension
+        # Default input if we have no data
         vec = np.ones((expected_feat_dim,), dtype=np.float32) * 1.5
 
     target_ts = pd.Timestamp.now(tz="UTC") + pd.Timedelta(hours=horizon)
@@ -819,10 +802,10 @@ class SiteForecastRequest(BaseModel):
 @app.post("/forecast/site")
 def forecast_site_endpoint(request: SiteForecastRequest):
     """
-    Primary Operational Endpoint for Camp FreedivePH Site Forecasting.
-    Implements multi-source horizon cutoffs (hs: 48h, current_speed: 72h),
-    conformal quantile bounds, separate anomaly & quantile interpolation,
-    graceful climatology degradation, and out-of-area guardrails.
+    Main site forecast endpoint.
+    Uses different sources by horizon (hs up to 48h, current_speed up to 72h),
+    conformal p10/p90 ranges, falls back to climatology if needed,
+    and rejects locations outside our area.
     """
     from src.serve.site_forecaster import get_site_forecaster, OutOfAreaError
     forecaster = get_site_forecaster()

@@ -1,23 +1,22 @@
 """
-Observed Store Ingestion & Refresh Module for Camp FreedivePH.
+Updates the observed store (the data the live models read).
 
-Ingests and refreshes the operational Observed Store using the exact dataset IDs,
-coordinates, and processing logic verified during model training:
-1. CMEMS Waves:
-   - Dataset ID: cmems_mod_glo_wav_anfc_0.083deg_PT3H-i
-   - Cell: (13.6667, 120.9167) [3.43 km South-Southeast of site]
-   - Processing: 3-hourly native series resampled to hourly with limit=6 linear interpolation.
-2. CMEMS Currents:
-   - Dataset ID: cmems_mod_glo_phy_anfc_merged-uv_PT1H-i
-   - Cell: (13.6667, 120.8333) [6.86 km South-Southwest of site]
-   - Processing: Decomposed into Eulerian, Tide, and Stokes components, computing total current speed.
-3. ECMWF ERA5 / Atmospheric:
-   - Cell: 2D bilinear at site (13.6874, 120.8931) with peak-preserving 4-corner gust.
-   - Processing: Calculates wind_speed = hypot(u, v), slp in hPa, wind_dir in degrees.
+Uses the same dataset IDs, grid cells and processing as in training:
+1. CMEMS waves:
+   - dataset: cmems_mod_glo_wav_anfc_0.083deg_PT3H-i
+   - cell: (13.6667, 120.9167), 3.43 km SSE of the site
+   - 3-hourly data made hourly with linear interpolation (limit=6)
+2. CMEMS currents:
+   - dataset: cmems_mod_glo_phy_anfc_merged-uv_PT1H-i
+   - cell: (13.6667, 120.8333), 6.86 km SSW of the site
+   - split into Eulerian, tide and Stokes parts, plus the total speed
+3. ECMWF ERA5:
+   - bilinear at the site (13.6874, 120.8931), gust = max of the 4 corners
+   - wind_speed = hypot(u, v), slp in hPa, wind_dir in degrees
 
 Writes:
 - data/store/observed_store.parquet
-- data/store/store_meta.json (recording exact last_observation_at per variable)
+- data/store/store_meta.json (last_observation_at for each variable)
 """
 
 import json
@@ -38,7 +37,7 @@ TARGET_TIMEZONE = "Asia/Manila"
 
 
 def _default_source(interim_name: str, snapshot_name: str) -> Path:
-    """Prefer the latest ingestion output; use the sealed snapshot only as fallback."""
+    """Use the latest download if there is one, otherwise the snapshot."""
     live_path = INTERIM_DIR / interim_name
     if live_path.exists():
         return live_path
@@ -81,7 +80,7 @@ DATASET_IDS = {
 
 
 def load_and_process_waves(source_file: Optional[Path] = None) -> pd.DataFrame:
-    """Loads 3-hourly waves and interpolates to hourly grid identically to training."""
+    """Load the 3-hourly waves and make them hourly (same as training)."""
     path = source_file or _default_source("cmems_waves.parquet", "cmems_waves.parquet")
     df = pd.read_parquet(path)
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -91,14 +90,14 @@ def load_and_process_waves(source_file: Optional[Path] = None) -> pd.DataFrame:
                 break
     df = df.sort_index()
     df = df[~df.index.duplicated()]
-    # Interpolate 3-hourly to 1-hourly
+    # 3-hourly to hourly
     df = df.asfreq("h").interpolate(method="linear", limit=6)
     cols = ["hs", "tp", "swell_height", "wind_wave_height"]
     return df[cols]
 
 
 def load_and_process_currents(source_file: Optional[Path] = None) -> pd.DataFrame:
-    """Loads currents and computes speed / decomposition components identically to training."""
+    """Load the currents and compute the speed and parts (same as training)."""
     path = source_file or _default_source("cmems_currents.parquet", "cmems_currents.parquet")
     df = pd.read_parquet(path)
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -110,7 +109,7 @@ def load_and_process_currents(source_file: Optional[Path] = None) -> pd.DataFram
     df = df[~df.index.duplicated()]
     df = df.asfreq("h").interpolate(method="linear", limit=6)
 
-    # Compute speeds if missing
+    # Compute the speeds if they are missing
     if "current_speed" not in df and {"current_u", "current_v"} <= set(df.columns):
         df["current_speed"] = np.hypot(df["current_u"], df["current_v"])
     if "eulerian_speed" not in df and {"eulerian_u", "eulerian_v"} <= set(df.columns):
@@ -131,7 +130,7 @@ def load_and_process_currents(source_file: Optional[Path] = None) -> pd.DataFram
 
 
 def load_and_process_atmosphere(source_file: Optional[Path] = None) -> pd.DataFrame:
-    """Loads atmospheric reanalysis identically to training."""
+    """Load the atmosphere data (same as training)."""
     path = source_file or _default_source("era5_wind_pressure.parquet", "era5_wind_pressure.parquet")
     df = pd.read_parquet(path)
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -160,8 +159,8 @@ def refresh_observed_store(
     store_dir: Optional[Path] = None
 ) -> pd.DataFrame:
     """
-    Refreshes the observed store by combining waves, currents, and atmosphere datasets.
-    Records metadata with exact last_observation_at timestamps per variable.
+    Update the observed store with the waves, currents and atmosphere data.
+    Saves the last_observation_at time for each variable.
     """
     out_dir = store_dir or STORE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -171,8 +170,8 @@ def refresh_observed_store(
     c_df = load_and_process_currents(currents_path)
     a_df = load_and_process_atmosphere(atmosphere_path)
 
-    # Preserve each source's trailing observations. An inner join would
-    # truncate CMEMS data to the older ERA5 tail and hide per-variable lags.
+    # Keep the latest rows of each source. An inner join would cut the CMEMS
+    # data at the older ERA5 end and hide the delay of each variable.
     store_df = w_df.join(c_df, how="outer").join(a_df, how="outer")
     store_df = store_df.sort_index()
 
@@ -185,7 +184,7 @@ def refresh_observed_store(
             f"raw gust={gust:.3f} m/s -> {gust * 3.6:.2f} km/h"
         )
 
-    # Track last valid observation timestamp per variable
+    # Last time with a value for each variable
     last_obs_at = {}
     for col in store_df.columns:
         valid_series = store_df[col].dropna()
@@ -199,7 +198,7 @@ def refresh_observed_store(
     store_df.to_parquet(out_parquet)
     print(f"Saved Observed Store ({len(store_df)} rows, {store_df.shape[1]} cols) to {out_parquet}")
 
-    # Build metadata manifest
+    # Build the metadata
     meta = {
         "store_name": "Camp FreedivePH Operational Observed Store",
         "refreshed_at": str(pd.Timestamp.now(tz=TARGET_TIMEZONE)),

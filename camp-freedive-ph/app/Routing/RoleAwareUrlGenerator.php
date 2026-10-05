@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Auth;
 class RoleAwareUrlGenerator extends UrlGenerator
 {
     /**
-     * Generate a url for a named route, automatically mapping between
-     * admin and owner route namespaces based on the active user role.
+     * Make a URL for a route name. Switches between admin and owner routes
+     * based on the logged in user's role.
      *
      * @param  string  $name
      * @param  mixed  $parameters

@@ -472,7 +472,7 @@
                     <span class="font-medium text-[#1D1D1F]">Checking sea safety &amp; weather conditions for selected dates...</span>
                 </div>
 
-                <!-- Weather Forecast Check (shared design: components/dive-safety/live-evaluation) -->
+                <!-- Weather check (uses components/dive-safety/live-evaluation) -->
                 <template x-if="rescheduleForecast && rescheduleForecast.day1 && !weatherLoading">
                     <x-dive-safety.live-evaluation forecast="rescheduleForecast" />
                 </template>

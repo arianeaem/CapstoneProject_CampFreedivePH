@@ -31,9 +31,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// =========================================================================
-// 1. PUBLIC CUSTOMER PORTAL
-// =========================================================================
+// ---------------------------------------------------------------
+// 1. Public pages (customers)
+// ---------------------------------------------------------------
 Route::get('/', [LandingController::class, 'index'])->name('landing');
 Route::get('/terms-and-conditions', [LegalController::class, 'terms'])->name('legal.terms');
 Route::redirect('/terms', '/terms-and-conditions', 301);
@@ -52,70 +52,70 @@ Route::get('/manage-booking/{booking_number}', [ManageBookingController::class, 
 Route::post('/manage-booking/{booking_number}/reschedule', [ManageBookingController::class, 'reschedule'])->name('manage.reschedule')->middleware('throttle:manage_requests');
 Route::post('/manage-booking/{booking_number}/cancel', [ManageBookingController::class, 'cancel'])->name('manage.cancel')->middleware('throttle:manage_requests');
 
-// Weather Safety Forecast Instant Preview (Client date selection)
+// Weather preview for the date picked on the booking page
 Route::get('/api/weather/preview', [\App\Http\Controllers\Api\WeatherPreviewController::class, 'preview'])->name('api.weather.preview')->middleware('throttle:booking_quote_weather');
 
-// PayMongo Customer Payment Integration
+// PayMongo checkout
 Route::post('/booking/{booking}/paymongo/checkout', [\App\Http\Controllers\Payment\PayMongoController::class, 'checkout'])->name('paymongo.checkout')->middleware('throttle:paymongo_checkout');
 Route::get('/booking/{booking}/paymongo/success', [\App\Http\Controllers\Payment\PayMongoController::class, 'success'])->name('paymongo.success');
 Route::get('/booking/{booking}/paymongo/cancel', [\App\Http\Controllers\Payment\PayMongoController::class, 'cancel'])->name('paymongo.cancel');
 
-// PayMongo Webhook Endpoints
+// PayMongo webhook
 Route::post('/api/webhooks/paymongo', [\App\Http\Controllers\Payment\PayMongoController::class, 'webhook'])->name('paymongo.webhook.api')->middleware('throttle:paymongo_webhook');
 Route::post('/webhooks/paymongo', [\App\Http\Controllers\Payment\PayMongoController::class, 'webhook'])->name('paymongo.webhook')->middleware('throttle:paymongo_webhook');
 
-// =========================================================================
-// 2. INTERNAL AUTHENTICATION (STAFF ROUTES)
-// =========================================================================
+// ---------------------------------------------------------------
+// 2. Staff login
+// ---------------------------------------------------------------
 Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
 Route::get('/admin/login', [LoginController::class, 'showLoginForm']);
 Route::get('/staff/login', [LoginController::class, 'showLoginForm']);
 Route::get('/staff', [LoginController::class, 'showLoginForm']);
 Route::post('/login', [LoginController::class, 'login'])->name('login.post')->middleware('throttle:login');
 
-// Password Reset Routes
+// Password reset
 Route::get('/forgot-password', [PasswordResetController::class, 'showForgotForm'])->name('password.request');
 Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])->name('password.email')->middleware('throttle:password_reset');
 
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'showResetForm'])->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'resetPassword'])->name('password.update')->middleware('throttle:password_reset');
 
-// =========================================================================
-// 3. AUTHENTICATED STAFF ROUTES (SHARED)
-// =========================================================================
+// ---------------------------------------------------------------
+// 3. Logged in staff (all roles)
+// ---------------------------------------------------------------
 Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
 
-    // First-login mandatory password change
+    // Change password on first login
     Route::get('/force-password-change', [ForcePasswordChangeController::class, 'show'])->name('password.force_change');
     Route::post('/force-password-change', [ForcePasswordChangeController::class, 'update'])->name('password.force_change.update')->middleware('throttle:password_reset');
 });
 
-// =========================================================================
-// 4. ADMIN & OWNER PORTAL (PROTECTED)
-// =========================================================================
+// ---------------------------------------------------------------
+// 4. Admin and owner pages
+// ---------------------------------------------------------------
 $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('', [AdminDashboardController::class, 'index'])->name('dashboard');
 
-    // Booking Management
+    // Bookings
     Route::get('/bookings', [AdminBookingController::class, 'index'])->name('bookings.index');
     Route::get('/bookings/create', [AdminBookingController::class, 'create'])->name('bookings.create');
     Route::post('/bookings', [AdminBookingController::class, 'store'])->name('bookings.store');
     
-    // Pending Customer Requests Queue
+    // Pending customer requests
     Route::get('/bookings/requests', [BookingRequestController::class, 'index'])->name('bookings.requests');
     Route::post('/bookings/requests/reschedule/{rescheduleRequest}/approve', [BookingRequestController::class, 'approveReschedule'])->name('bookings.requests.reschedule.approve');
     Route::post('/bookings/requests/reschedule/{rescheduleRequest}/reject', [BookingRequestController::class, 'rejectReschedule'])->name('bookings.requests.reschedule.reject');
     Route::post('/bookings/requests/cancellation/{cancellationRequest}/approve', [BookingRequestController::class, 'approveCancellation'])->name('bookings.requests.cancellation.approve');
     Route::post('/bookings/requests/cancellation/{cancellationRequest}/reject', [BookingRequestController::class, 'rejectCancellation'])->name('bookings.requests.cancellation.reject');
 
-    // Booking Details, Status, and Edit
+    // Booking details, status and edit
     Route::get('/bookings/{booking}', [AdminBookingController::class, 'show'])->name('bookings.show');
     Route::get('/bookings/{booking}/edit', [AdminBookingController::class, 'edit'])->name('bookings.edit');
     Route::put('/bookings/{booking}', [AdminBookingController::class, 'update'])->name('bookings.update');
     Route::patch('/bookings/{booking}/status', [AdminBookingController::class, 'updateStatus'])->name('bookings.status.update');
 
-    // Batch Management Module
+    // Batches
     Route::get('/batches', [BatchManagementController::class, 'index'])->name('batches.index');
     Route::get('/batches/create', [BatchManagementController::class, 'create'])->name('batches.create');
     Route::post('/batches', [BatchManagementController::class, 'store'])->name('batches.store');
@@ -125,7 +125,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::post('/batches/{batch}/move-booking', [BatchManagementController::class, 'moveBooking'])->name('batches.move_booking');
     Route::post('/batches/{batch}/assign-participant', [BatchManagementController::class, 'assignParticipant'])->name('batches.assign_participant');
 
-    // Payments & Refunds Module
+    // Payments and refunds
     Route::get('/payments', [AdminPaymentController::class, 'index'])->name('payments.index');
     Route::get('/payments/create', [AdminPaymentController::class, 'create'])->name('payments.create');
     Route::post('/payments', [AdminPaymentController::class, 'store'])->name('payments.store');
@@ -136,7 +136,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/payments/{payment}', [AdminPaymentController::class, 'show'])->name('payments.show');
     Route::post('/payments/{payment}/settle-balance', [AdminPaymentController::class, 'settleBalance'])->name('payments.settle_balance');
 
-    // Coaches Module
+    // Coaches
     Route::get('/coaches', [CoachRosterController::class, 'index'])->name('coaches.index');
     Route::get('/coaches/matching', [CoachMatchingController::class, 'matching'])->name('coaches.matching');
     Route::post('/coaches/matching/assign', [CoachMatchingController::class, 'assign'])->name('coaches.matching.assign');
@@ -151,7 +151,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/coaches/{coach}', [CoachRosterController::class, 'show'])->name('coaches.show');
     Route::post('/coaches/{coach}/reassign-student', [CoachRosterController::class, 'reassignStudent'])->name('coaches.reassign_student');
 
-    // Weather & Marine Safety Monitoring Module
+    // Weather and safety
     Route::get('/safety-monitoring', [\App\Http\Controllers\Admin\WeatherSafetyController::class, 'index'])->name('weather.index');
     Route::get('/weather', [\App\Http\Controllers\Admin\WeatherSafetyController::class, 'index']);
     Route::post('/safety-monitoring/sync-cache', [\App\Http\Controllers\Admin\WeatherSafetyController::class, 'syncCache'])->name('weather.sync_cache')->middleware('throttle:weather_sync');
@@ -165,7 +165,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::post('/safety-monitoring/{batch}/cancel', [\App\Http\Controllers\Admin\WeatherSafetyController::class, 'cancel'])->name('weather.cancel');
     Route::post('/weather/{batch}/cancel', [\App\Http\Controllers\Admin\WeatherSafetyController::class, 'cancel']);
 
-    // Dynamic Pricing Management Module
+    // Pricing rules
     Route::get('/dynamic-pricing', [\App\Http\Controllers\Admin\PricingRuleController::class, 'index'])->name('pricing.index');
     Route::get('/pricing', [\App\Http\Controllers\Admin\PricingRuleController::class, 'index']);
     Route::get('/dynamic-pricing/create', [\App\Http\Controllers\Admin\PricingRuleController::class, 'create'])->name('pricing.create');
@@ -183,10 +183,10 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/dynamic-pricing/{rule}/triggered', [\App\Http\Controllers\Admin\PricingRuleController::class, 'triggered'])->name('pricing.triggered');
     Route::get('/pricing/{rule}/triggered', [\App\Http\Controllers\Admin\PricingRuleController::class, 'triggered']);
 
-    // Demand Forecast module
+    // Demand forecast
     Route::get('/demand-forecast', [\App\Http\Controllers\Admin\DemandForecastController::class, 'index'])->name('demand.index');
 
-    // Reports & Analytics Module
+    // Reports
     Route::get('/reports-and-analytics', [ReportsController::class, 'index'])->name('reports.index');
     Route::get('/reports', [ReportsController::class, 'index']);
     Route::get('/reports-and-analytics/export', [ReportsController::class, 'export'])->name('reports.export');
@@ -194,7 +194,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/reports-and-analytics/print-summary', [ReportsController::class, 'printSummary'])->name('reports.print');
     Route::get('/reports/print', [ReportsController::class, 'printSummary']);
 
-    // User Management
+    // Users
     Route::get('/users', [UserManagementController::class, 'index']);
     Route::get('/settings/users', [UserManagementController::class, 'index'])->name('users.index');
     Route::post('/settings/users', [UserManagementController::class, 'store'])->name('users.store');
@@ -204,7 +204,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::patch('/settings/users/{user}/toggle-status', [UserManagementController::class, 'toggleStatus'])->name('users.toggle_status');
     Route::delete('/settings/users/{user}', [UserManagementController::class, 'destroy'])->name('users.destroy');
 
-    // Audit Logs & System Settings (Owner Exclusive)
+    // Audit logs and settings (owner only)
     if ($portalRole === 'owner') {
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
         Route::get('/settings/audit-logs', [AuditLogController::class, 'index'])->name('audit_logs.index');
@@ -238,7 +238,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     }
 };
 
-// Owner Portal Routes
+// Owner routes
 Route::middleware(['auth', 'active', 'must_change_password', 'role:owner'])
     ->prefix('owner')
     ->name('owner.')
@@ -246,7 +246,7 @@ Route::middleware(['auth', 'active', 'must_change_password', 'role:owner'])
         $registerBackofficeRoutes('owner');
     });
 
-// Admin Portal Routes
+// Admin routes
 Route::middleware(['auth', 'active', 'must_change_password', 'role:admin'])
     ->prefix('admin')
     ->name('admin.')
@@ -254,28 +254,28 @@ Route::middleware(['auth', 'active', 'must_change_password', 'role:admin'])
         $registerBackofficeRoutes('admin');
     });
 
-// =========================================================================
-// 5. COACH PORTAL (PROTECTED)
-// =========================================================================
+// ---------------------------------------------------------------
+// 5. Coach pages
+// ---------------------------------------------------------------
 Route::middleware(['auth', 'active', 'must_change_password', 'role:coach'])
     ->prefix('coach')
     ->name('coach.')
     ->group(function () {
-        // Page 1: Dashboard
+        // Page 1: dashboard
         Route::get('/', [CoachPortalController::class, 'index'])->name('dashboard');
 
-        // Page 2: Availability Calendar
+        // Page 2: availability calendar
         Route::get('/availability-calendar', [AvailabilityController::class, 'index'])->name('availability.index');
         Route::get('/availability', [AvailabilityController::class, 'index']);
         Route::post('/availability/toggle', [AvailabilityController::class, 'toggle'])->name('availability.toggle');
         Route::post('/availability/bulk', [AvailabilityController::class, 'bulkUpdate'])->name('availability.bulk');
         Route::post('/availability/release', [AvailabilityController::class, 'requestRelease'])->name('availability.release');
 
-        // Page 3: My Schedule & History
+        // Page 3: my schedule
         Route::get('/my-schedule', [ScheduleController::class, 'index'])->name('schedule.index');
         Route::get('/schedule', [ScheduleController::class, 'index']);
 
-        // Page 4: Open Slot Requests
+        // Page 4: open slot requests
         Route::get('/open-slot-requests', [CoachRequestController::class, 'index'])->name('requests.index');
         Route::get('/open-requests', [CoachRequestController::class, 'index']);
         Route::post('/open-slot-requests/{opening}/apply', [CoachRequestController::class, 'store'])->name('requests.store');

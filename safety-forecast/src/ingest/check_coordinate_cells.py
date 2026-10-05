@@ -1,13 +1,13 @@
 """
-Verify geographic coordinates against CMEMS Wave, CMEMS Current, ERA5, and GPM IMERG grids.
-Uses the EXACT same functions from spatial_extraction.py as the ingestion pipeline.
+Checks which grid cells are used for CMEMS waves, CMEMS currents, ERA5 and GPM IMERG.
+Uses the same functions from spatial_extraction.py as the download.
 
-Evaluation logic (per PRD):
-1. Target site is kept at the real coordinate: Lat = 13.6874° N, Lon = 120.8931° E.
-2. CMEMS Wave (001_027, 1/12° analysis): evaluates nearest non-NaN ocean cell.
-3. CMEMS Current (001_024, 1/12° analysis): evaluates nearest non-NaN ocean cell.
-4. ERA5 (0.25° atmosphere): uses 2D bilinear interpolation from 4 surrounding grid corners.
-5. NASA GPM IMERG (0.1° precipitation): uses 2D bilinear interpolation from surrounding grid.
+Rules (PRD):
+1. Site: Lat = 13.6874 N, Lon = 120.8931 E.
+2. CMEMS waves (001_027, 1/12 deg analysis): closest ocean cell that isn't NaN.
+3. CMEMS currents (001_024, 1/12 deg analysis): closest ocean cell that isn't NaN.
+4. ERA5 (0.25 deg): bilinear interpolation from the 4 corners.
+5. NASA GPM IMERG (0.1 deg rain): bilinear interpolation.
 """
 
 from pathlib import Path
@@ -23,7 +23,7 @@ from spatial_extraction import (
     haversine_distance_km
 )
 
-# Candidate search paths for the raw NetCDF data files
+# Folders where the raw NetCDF files might be
 SEARCH_DIRS = [
     Path.cwd(),
     Path(__file__).resolve().parents[2] / "data" / "cache",
@@ -59,7 +59,7 @@ def inspect_site(lat: float = SITE_LAT, lon: float = SITE_LON):
     }
 
     # -------------------------------------------------------------------------
-    # 1. CMEMS Wave: 1/12° Analysis Product (cmems_mod_glo_wav_anfc_0.083deg_PT3H-i)
+    # 1. CMEMS waves: 1/12 deg analysis (cmems_mod_glo_wav_anfc_0.083deg_PT3H-i)
     # -------------------------------------------------------------------------
     try:
         wave_path = find_file("test_wave_083.nc")
@@ -97,7 +97,7 @@ def inspect_site(lat: float = SITE_LAT, lon: float = SITE_LON):
     }
 
     # -------------------------------------------------------------------------
-    # 2. CMEMS Current: 1/12° Physics Grid (GLOBAL_ANALYSISFORECAST_PHY_001_024)
+    # 2. CMEMS currents: 1/12 deg (GLOBAL_ANALYSISFORECAST_PHY_001_024)
     # -------------------------------------------------------------------------
     curr_path = find_file("cmems_currents.nc")
     ds_curr = xr.open_dataset(curr_path)
@@ -126,7 +126,7 @@ def inspect_site(lat: float = SITE_LAT, lon: float = SITE_LON):
     }
 
     # -------------------------------------------------------------------------
-    # 3. ERA5 Atmospheric: Bilinear Interpolation from 4 Surrounding Cells
+    # 3. ERA5: bilinear from the 4 corners
     # -------------------------------------------------------------------------
     era5_path = find_file("era5_wind_pressure/era5_2022_01.nc")
     ds_era5 = xr.open_dataset(era5_path)
@@ -166,7 +166,7 @@ def inspect_site(lat: float = SITE_LAT, lon: float = SITE_LON):
     }
 
     # -------------------------------------------------------------------------
-    # 4. NASA GPM IMERG: 0.1° Precipitation Grid
+    # 4. NASA GPM IMERG: 0.1 deg rain grid
     # -------------------------------------------------------------------------
     gpm_path = find_file("gpm_precip/gpm_precip_raw.nc")
     ds_gpm = xr.open_dataset(gpm_path)
@@ -174,7 +174,7 @@ def inspect_site(lat: float = SITE_LAT, lon: float = SITE_LON):
     interp_gpm, gpm_meta = extract_imerg(ds_gpm, target_lat=lat, target_lon=lon)
     sample_rain = float(interp_gpm["precipitation"].values.flat[0])
 
-    # Also compute nearest grid cell distance for reference
+    # Also the distance to the closest cell
     nearest_gpm_lat = float(ds_gpm.lat.sel(lat=lat, method="nearest").values)
     nearest_gpm_lon = float(ds_gpm.lon.sel(lon=lon, method="nearest").values)
     gpm_dist_km = haversine_distance_km(lat, lon, nearest_gpm_lat, nearest_gpm_lon)
@@ -199,7 +199,7 @@ def inspect_site(lat: float = SITE_LAT, lon: float = SITE_LON):
     print("ALL 4 DATASETS (WAVE, CURRENT, ERA5, GPM IMERG) VERIFIED NON-NAN AND CONSISTENT")
     print("=" * 85 + "\n")
 
-    # Save to cells_used.json in both locations
+    # Save cells_used.json in both places
     out_paths = [
         Path(__file__).resolve().parent / "cells_used.json",
         Path(__file__).resolve().parents[1] / "cells_used.json",

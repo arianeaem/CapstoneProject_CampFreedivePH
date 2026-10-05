@@ -1,19 +1,18 @@
 """
-Unified Training & Serving Eligibility Module for Camp FreedivePH.
+Decides which rows can be used for training and serving.
 
-Guarantees 100% strict adherence to:
-1. Operational lag boundaries:
-   - ERA5 Atmosphere:    120 hours (5 days)
-   - CMEMS Currents:     24 hours
-   - NASA GPM IMERG:     14 hours
-   - CMEMS Waves:        12 hours
-2. Native resolution purity:
-   - Waves: only native 3-hourly observations (wave_is_interpolated == False)
-   - Currents: hourly instantaneous analysis
-3. Strict tz-awareness:
-   - All internal comparisons and filtering performed in UTC.
-   - PHT (Asia/Manila, UTC+08:00) provided for diurnal features and presentation.
-4. Issue time boundary:
+1. Delay of each data source:
+   - ERA5 atmosphere:  120 hours (5 days)
+   - CMEMS currents:   24 hours
+   - NASA GPM IMERG:   14 hours
+   - CMEMS waves:      12 hours
+2. Only real data points:
+   - Waves: only the real 3-hourly values (wave_is_interpolated == False)
+   - Currents: hourly values
+3. Time zones:
+   - All checks are done in UTC.
+   - PHT (Asia/Manila, UTC+8) is only used for time-of-day features and display.
+4. Provisional rows:
    - is_provisional = time_utc > (issue_time_utc - operational_lag)
 """
 
@@ -28,7 +27,7 @@ DEFAULT_SNAPSHOT_DIR = DATA_ROOT / "snapshots" / "2026-10-04_rev2"
 
 def get_source_cutoff(source: str, issue_time_utc: Optional[pd.Timestamp] = None) -> pd.Timestamp:
     """
-    Computes the strict operational cutoff in UTC for a given source:
+    Cutoff time in UTC for a source:
     cutoff_utc = issue_time_utc - operational_lag
     """
     if issue_time_utc is None:
@@ -51,13 +50,12 @@ def evaluate_provisional_status(
     issue_time_utc: Optional[pd.Timestamp] = None
 ) -> pd.Series:
     """
-    Evaluates whether each row is provisional based on source operational lag.
-    A row is provisional if its observation timestamp (UTC) is greater than
-    (issue_time_utc - operational_lag).
+    Mark each row as provisional or not, based on the source delay.
+    A row is provisional if its time (UTC) is after (issue_time_utc - operational_lag).
     """
     cutoff = get_source_cutoff(source, issue_time_utc)
     
-    # Ensure index is tz-aware UTC
+    # Make sure the index is in UTC
     idx_utc = df.index
     if idx_utc.tzinfo is None:
         idx_utc = idx_utc.tz_localize("UTC")
@@ -73,29 +71,29 @@ def filter_training_eligible(
     issue_time_utc: Optional[pd.Timestamp] = None
 ) -> pd.DataFrame:
     """
-    Filters a dataset to only rows eligible for model training.
+    Keep only the rows that can be used for training.
 
     Rules:
-    - All sources: is_provisional == False (strictly <= issue_time_utc - operational_lag)
-    - Waves: wave_is_interpolated == False (native 3-hourly observations only)
+    - all sources: is_provisional == False (time <= issue_time_utc - operational_lag)
+    - waves: wave_is_interpolated == False (real 3-hourly values only)
     """
     source_lower = source.lower()
     df_clean = df.copy()
 
-    # Re-evaluate provisional flag based on explicit issue_time_utc if provided
+    # Recompute the provisional flag if issue_time_utc is given
     if issue_time_utc is not None or "is_provisional" not in df_clean.columns:
         df_clean["is_provisional"] = evaluate_provisional_status(df_clean, source_lower, issue_time_utc)
 
-    # Base filter: Non-provisional
+    # Remove provisional rows
     mask = ~df_clean["is_provisional"]
 
-    # Wave-specific filter: Native observations only (no interpolated rows in training targets/features)
+    # Waves: remove interpolated rows
     if source_lower == "waves" and "wave_is_interpolated" in df_clean.columns:
         mask = mask & (~df_clean["wave_is_interpolated"])
 
     eligible_df = df_clean.loc[mask].copy()
 
-    # Ensure canonical time columns
+    # Make sure the time columns exist
     if "time_utc" not in eligible_df.columns:
         eligible_df["time_utc"] = eligible_df.index.tz_convert("UTC")
     if "time_pht" not in eligible_df.columns:
@@ -111,8 +109,8 @@ def load_snapshot_dataset(
     issue_time_utc: Optional[pd.Timestamp] = None
 ) -> pd.DataFrame:
     """
-    Canonical loader for snapshot datasets.
-    Reads from snapshot directory (NOT interim), ensuring immutability.
+    Load a snapshot dataset.
+    Reads from the snapshot folder (not interim) so the data doesn't change.
     """
     s_dir = Path(snapshot_dir) if snapshot_dir else DEFAULT_SNAPSHOT_DIR
     filename_map = {

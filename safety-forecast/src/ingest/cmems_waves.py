@@ -1,7 +1,7 @@
 """
 Source: CMEMS Global Ocean Waves Analysis and Forecast (GLOBAL_ANALYSISFORECAST_WAV_001_027)
-Pulls:  Hs, Tp, swell height, wind-wave height — 1/12° (0.083°) resolution, 3-hourly.
-Auth:   `copernicusmarine login` once, interactively, before running this script.
+Gets:   Hs, Tp, swell height, wind wave height - 1/12 deg (0.083 deg), every 3 hours.
+Login:  run `copernicusmarine login` once before running this script.
 """
 
 import sys
@@ -54,7 +54,7 @@ def download(start_date: str = WAVE_ANALYSIS_START_DATE, end_date: str = WAVE_AN
         start_dt = f"{year}-{month:02d}-01T00:00:00"
         end_dt = f"{year}-{month:02d}-{days_in_month:02d}T23:59:59"
 
-        # Cap end_dt at end_date if within same month
+        # Stop at end_date if it's in the same month
         if f"{year}-{month:02d}" == end_date[:7]:
             end_dt = f"{end_date}T23:59:59"
 
@@ -109,7 +109,7 @@ def to_interim(start_date: str = WAVE_ANALYSIS_START_DATE, end_date: str = WAVE_
     
     native_times = set(pd.to_datetime(df_raw["time"]).dt.tz_localize("UTC").dt.tz_convert(TARGET_TIMEZONE))
 
-    # Quadratic combination of primary (SW1) and secondary (SW2) swell partitions
+    # Combine the two swell parts (SW1 and SW2)
     sw1 = df_raw["VHM0_SW1"].fillna(0) if "VHM0_SW1" in df_raw else 0
     sw2 = df_raw["VHM0_SW2"].fillna(0) if "VHM0_SW2" in df_raw else 0
     total_swell = np.sqrt(sw1**2 + sw2**2)
@@ -125,19 +125,19 @@ def to_interim(start_date: str = WAVE_ANALYSIS_START_DATE, end_date: str = WAVE_
     df = df.set_index("time_pht")[["hs", "tp", "swell_height", "wind_wave_height"]]
     df = df[~df.index.duplicated(keep="first")].sort_index()
 
-    # 3-hourly to hourly via linear interpolation (strictly inside native bounds)
+    # 3-hourly to hourly with linear interpolation (only between real values)
     df = df.resample("1h").interpolate(method="linear", limit_area="inside")
 
-    # Clip / reindex to canonical target_hourly_index across full wave window (2022-11-01 03:00:00 to 2026-10-03)
+    # Reindex to the full hourly index of the wave range (2022-11-01 03:00:00 to 2026-10-03)
     full_idx = target_hourly_index(start_date, end_date)
     df = df.reindex(full_idx)
     if df["hs"].isna().any():
         df = df.interpolate(method="time", limit_area="inside").ffill()
 
-    # Explicit flag so downstream ML never confuses interpolated hours with native observations
+    # Flag so the ML code knows which hours are interpolated
     df["wave_is_interpolated"] = [ts not in native_times for ts in df.index]
 
-    # Quarantine provisional rows (last 12 hours of waves: operational lag cutoff T-12h)
+    # Mark the last 12 hours as provisional (waves are 12h late)
     df["is_provisional"] = False
     if len(df) >= 12:
         df.iloc[-12:, df.columns.get_loc("is_provisional")] = True

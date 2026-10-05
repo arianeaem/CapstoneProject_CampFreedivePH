@@ -30,13 +30,13 @@ class CoachMatchingController extends Controller
     ) {}
 
     /**
-     * Coach Assignment & Matching Queue.
+     * Coach assignment page.
      */
     public function matching(): View
     {
         $today = Carbon::today();
 
-        // 1. Fetch upcoming active batches with registered participants
+        // 1. Upcoming active batches with participants
         $batches = Batch::with(['bookings.participants', 'activeParticipantAssignments.coach'])
             ->whereNotIn('status', ['completed', 'cancelled_by_camp'])
             ->orderBy('start_date', 'asc')
@@ -46,13 +46,13 @@ class CoachMatchingController extends Controller
                     || ($batch->start_date && !$batch->end_date && $batch->start_date->lt($today))
                     || in_array($batch->status, ['completed', 'cancelled_by_camp']);
 
-                // Only include active batches that have at least 1 participant
+                // Only batches with at least 1 participant
                 return !$isDone && ($batch->total_participants_count > 0);
             })
             ->values();
         Batch::preloadAssignedCoaches($batches);
 
-        // 2. Fetch all active coaches with availability
+        // 2. Active coaches and their availability
         $activeCoaches = User::where('role', 'coach')
             ->where('status', 'active')
             ->with(['coachAvailabilities'])
@@ -75,7 +75,7 @@ class CoachMatchingController extends Controller
         $settingService = app(\App\Services\SystemSettingService::class);
         $coachRatio = (int) ($settingService->get('camp_operations.coach_student_ratio', 4) ?? 4);
 
-        // Open coach broadcasts for all listed batches in one query (first per batch)
+        // Open slot posts for these batches in one query (first one per batch)
         $openBroadcasts = CoachOpening::whereIn('batch_id', $batches->pluck('id'))
             ->where('status', 'open')
             ->orderBy('id')
@@ -83,7 +83,7 @@ class CoachMatchingController extends Controller
             ->unique('batch_id')
             ->keyBy('batch_id');
 
-        // 3. Build simplified batch staffing data
+        // 3. Build the staffing data for each batch
         $batchData = $batches->map(function ($batch) use ($activeCoaches, $coachRatio, $recentStudentCounts, $lastAssignedDates, $openBroadcasts) {
             $totalParticipants = (int) $batch->total_participants_count;
             $neededCoaches = $totalParticipants > 0 ? (int) ceil($totalParticipants / $coachRatio) : 0;
@@ -93,10 +93,10 @@ class CoachMatchingController extends Controller
             $startDateStr = $batch->start_date->format('Y-m-d');
             $endDateStr = $batch->end_date ? $batch->end_date->format('Y-m-d') : $startDateStr;
 
-            // Fetch Demand Forecast staffing suggestion for batch's start date
+            // Staffing suggestion from the demand forecast
             $mlRecommendation = $this->forecastService->getStaffingRecommendationForDate($batch->start_date);
 
-            // Only include coaches who are available on this batch's dates (and NOT already assigned to this batch)
+            // Only coaches who are free on this batch's dates and not already assigned to it
             $availableCoaches = $activeCoaches->filter(function ($coach) use ($startDateStr, $endDateStr, $assignedCoachIds) {
                 if (in_array($coach->id, $assignedCoachIds)) {
                     return false;
@@ -139,7 +139,7 @@ class CoachMatchingController extends Controller
                 return $coach;
             });
 
-            // Check if open broadcast exists
+            // Is there already an open slot post?
             $openBroadcast = $openBroadcasts[$batch->id] ?? null;
 
             return [
@@ -154,7 +154,7 @@ class CoachMatchingController extends Controller
             ];
         });
 
-        // Pending Coach Requests count
+        // Number of pending coach requests
         $pendingRequestsCount = CoachRequest::where('status', 'pending')->count();
 
         return view('admin.coaches.matching', [
@@ -165,7 +165,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Batch Assignment: Assign one or multiple coaches to a batch.
+     * Assign one or more coaches to a batch.
      */
     public function batchAssign(AssignCoachesRequest $request): RedirectResponse
     {
@@ -206,11 +206,11 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Assign selected coach(es) to a batch.
+     * Assign the selected coaches to a batch.
      */
     public function assign(AssignCoachesRequest $request): RedirectResponse
     {
-        // Support legacy single-student assignment if participant_ids provided
+        // Old way: assign single students if participant_ids is sent
         if ($request->has('participant_ids')) {
             $validated = $request->validated();
 
@@ -235,7 +235,7 @@ class CoachMatchingController extends Controller
             }
         }
 
-        // New clean Batch Coach Assignment
+        // Assign coaches to the batch
         $validated = $request->validated();
 
         $batch = Batch::findOrFail($validated['batch_id']);
@@ -269,7 +269,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Unassign a coach from a batch.
+     * Remove a coach from a batch.
      */
     public function unassign(UnassignCoachRequest $request): RedirectResponse
     {
@@ -288,7 +288,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Broadcast an open slot to the Coach Portal when no coach is available.
+     * Post an open slot on the Coach Portal when no coach is available.
      */
     public function broadcastOpening(BroadcastOpeningRequest $request): RedirectResponse
     {
@@ -311,7 +311,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Page 4: Review Coach Requests queue.
+     * Page 4: coach requests.
      */
     public function requests(): View
     {
@@ -323,7 +323,7 @@ class CoachMatchingController extends Controller
         $pendingRequests = $requests->where('status', 'pending')->groupBy('batch_id');
         $reviewedRequests = $requests->where('status', '!=', 'pending');
 
-        // Approved coaches per batch (from the list already loaded, so the view needs no queries)
+        // Approved coaches per batch (from the list we already have, so no extra queries in the view)
         $approvedByBatch = $requests->where('status', 'approved')->countBy('batch_id');
         $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
 
@@ -336,7 +336,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Approve a coach request for an open slot.
+     * Approve a coach request.
      */
     public function approveRequest($coachRequest): RedirectResponse
     {
@@ -352,7 +352,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Bulk approve selected coach requests.
+     * Approve several coach requests at once.
      */
     public function bulkApproveRequests(BulkApproveCoachRequestsRequest $request): RedirectResponse
     {
@@ -381,7 +381,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Approve an emergency assignment release request.
+     * Approve a coach's emergency release request.
      */
     public function approveReleaseRequest(Request $request, $releaseRequest): RedirectResponse
     {
@@ -398,17 +398,17 @@ class CoachMatchingController extends Controller
                     'review_notes' => $request->input('notes', 'Approved by Camp Administration.'),
                 ]);
 
-                // Unassign the coach's students for that batch
+                // Remove the coach's students for that batch
                 \App\Models\ParticipantAssignment::where('coach_id', $reqModel->coach_id)
                     ->where('batch_id', $reqModel->batch_id)
                     ->delete();
 
-                // Set coach availability for that date to unavailable
+                // Mark the coach as unavailable on that date
                 \App\Models\CoachAvailability::where('coach_id', $reqModel->coach_id)
                     ->where('date', $reqModel->dive_date)
                     ->update(['status' => 'unavailable']);
 
-                // Pair date
+                // The other day of the weekend
                 $pairDate = $reqModel->dive_date->isSaturday() 
                     ? $reqModel->dive_date->copy()->addDay() 
                     : $reqModel->dive_date->copy()->subDay();
@@ -425,7 +425,7 @@ class CoachMatchingController extends Controller
     }
 
     /**
-     * Reject an emergency assignment release request.
+     * Reject a coach's emergency release request.
      */
     public function rejectReleaseRequest(Request $request, $releaseRequest): RedirectResponse
     {

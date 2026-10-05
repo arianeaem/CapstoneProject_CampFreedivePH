@@ -20,15 +20,11 @@ use App\Http\Requests\Admin\Batches\UpdateBatchStatusRequest;
 use App\Http\Requests\Admin\Batches\MoveBookingRequest;
 
 /**
- * Administrative Batch Management & Logistics Controller.
+ * Admin pages for batches.
  *
- * Operational Responsibilities:
- * 1. Batch Lifecycle Management: Handles creation, confirmation, active execution,
- *    and completion of weekend freediving batches.
- * 2. Passenger Manifest & Roster Generation: Groups confirmed bookings into coherent batch rosters
- *    ensuring coach-to-student ratios (1:4) and van seating capacities are balanced.
- * 3. Demand Forecasting & Capacity Allocation: Integrates demand predictions to recommend
- *    opening additional weekend slots or allocating extra safety divers during peak seasons.
+ * - create, confirm, run and complete weekend batches
+ * - group confirmed bookings into batches (1 coach for every 4 students)
+ * - shows the demand forecast to help decide on extra slots or staff
  */
 class BatchManagementController extends Controller
 {
@@ -37,24 +33,24 @@ class BatchManagementController extends Controller
         protected DemandForecastService $forecastService
     ) {}
 
-    // TODO: Implement iCal / Google Calendar synchronization feed for coaches to import scheduled batches directly to mobile devices.
+    // TODO: calendar feed (iCal / Google Calendar) for coaches
 
     /**
-     * Page 1: Batch List Roster.
+     * Page 1: batch list.
      *
-     * @param Request $request Filter parameters (status, date_from, date_to, search, sort).
-     * @return View Renders the batch management index table.
+     * @param Request $request filters: status, date_from, date_to, search, sort
+     * @return View
      */
     public function index(Request $request): View
     {
         $query = Batch::with(['bookings.participants', 'activeParticipantAssignments.coach']);
 
-        // Filter: Status
+        // Filter by status
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
 
-        // Filter: Date Range
+        // Filter by date range
         if ($request->filled('date_from')) {
             $query->whereDate('start_date', '>=', $request->input('date_from'));
         }
@@ -63,7 +59,7 @@ class BatchManagementController extends Controller
         }
 
 
-        // Sort options
+        // Sorting
         $sort = $request->input('sort', 'date_asc');
         match ($sort) {
             'date_desc' => $query->orderBy('start_date', 'desc')->orderBy('created_at', 'desc'),
@@ -78,7 +74,7 @@ class BatchManagementController extends Controller
         $batches = $query->get();
         Batch::preloadAssignedCoaches($batches);
 
-        // Search: batch number / code / name / notes, or an assigned coach's name (case-insensitive)
+        // Search by batch number / code / name / notes, or coach name
         if ($request->filled('search')) {
             $needle = mb_strtolower(trim($request->input('search')));
             $batches = $batches->filter(function ($b) use ($needle) {
@@ -95,13 +91,13 @@ class BatchManagementController extends Controller
             })->values();
         }
 
-        // Filter: batches a specific coach is assigned to
+        // Filter by coach
         if ($request->filled('coach')) {
             $coachId = (int) $request->input('coach');
             $batches = $batches->filter(fn ($b) => $b->assigned_coaches->pluck('id')->contains($coachId))->values();
         }
 
-        // Staffing Status Filter (in-memory computed)
+        // Filter by staffing status (done in PHP, not SQL)
         if ($request->filled('staffing')) {
             if ($request->input('staffing') === 'pending') {
                 $batches = $batches->filter(fn($b) => $b->is_coach_pending);
@@ -110,17 +106,17 @@ class BatchManagementController extends Controller
             }
         }
 
-        // Capacity-based sorting (in-memory computed)
+        // Sort by capacity (done in PHP, not SQL)
         if ($sort === 'capacity_desc') {
             $batches = $batches->sortByDesc(fn($b) => $b->total_participants_count)->values();
         } elseif ($sort === 'capacity_asc') {
             $batches = $batches->sortBy(fn($b) => $b->total_participants_count)->values();
         }
 
-        // Needs Attention count
+        // Number of batches that need attention
         $attentionCount = $batches->filter(fn($b) => $b->needs_attention)->count();
 
-        // Confirmed Bookings that don't have an assigned batch yet (sorted newest first)
+        // Confirmed bookings with no batch yet (newest first)
         $unbatchedBookings = Booking::whereNull('batch_id')
             ->where('status', 'confirmed')
             ->with('participants')
@@ -129,7 +125,7 @@ class BatchManagementController extends Controller
         $unbatchedCount = $unbatchedBookings->count();
         $unbatchedPaxCount = $unbatchedBookings->sum(fn($b) => $b->participants->count());
 
-        // Paginate batches collection
+        // Paginate
         $page = (int) $request->input('page', 1);
         $perPage = max(4, min(100, (int) $request->input('per_page', 12)));
         $total = $batches->count();
@@ -158,7 +154,7 @@ class BatchManagementController extends Controller
 
 
     /**
-     * Page 2: Create Batch Form.
+     * Page 2: create batch form.
      */
     public function create(Request $request): View
     {
@@ -213,7 +209,7 @@ class BatchManagementController extends Controller
     }
 
     /**
-     * AJAX endpoint to fetch unbatched bookings when date changes in create form.
+     * AJAX: get the bookings with no batch when the date is changed on the create form.
      */
     public function unbatchedBookings(Request $request): JsonResponse
     {
@@ -258,7 +254,7 @@ class BatchManagementController extends Controller
     }
 
     /**
-     * Store a newly created Batch.
+     * Save a new batch.
      */
     public function store(StoreBatchRequest $request): RedirectResponse
     {
@@ -276,7 +272,7 @@ class BatchManagementController extends Controller
         $validated['batch_code'] = $batchIdentifier;
         $validated['name'] = $batchIdentifier;
 
-        // Check if an existing batch already exists for the same start date to prevent duplicate date batches
+        // Don't allow two batches with the same start date
         $existingBatch = Batch::whereDate('start_date', $validated['start_date'])->first();
         if ($existingBatch) {
             $bookingIds = $request->input('booking_ids', []);
@@ -303,7 +299,7 @@ class BatchManagementController extends Controller
     }
 
     /**
-     * Page 3: Batch Detail View.
+     * Page 3: batch details.
      */
     public function show(Batch $batch): View
     {
@@ -314,15 +310,15 @@ class BatchManagementController extends Controller
             'creator',
         ]);
 
-        // Pre-trip assigned coaches for this batch
+        // Coaches assigned to this batch
         $assignedCoaches = $batch->assigned_coaches;
 
-        // Unassigned students count in this batch
+        // Students with no coach yet
         $unassignedStudentsCount = $batch->bookings->flatMap->participants
             ->filter(fn($p) => !$p->activeAssignment)
             ->count();
 
-        // Other existing batches for "Move Booking" modal
+        // Other batches for the "Move Booking" popup
         $otherBatches = Batch::where('id', '!=', $batch->id)
             ->orderBy('start_date', 'desc')
             ->get();
@@ -336,7 +332,7 @@ class BatchManagementController extends Controller
     }
 
     /**
-     * Quick on-site pod assignment for a participant using the batch's pre-trip assigned coaches.
+     * Quickly assign a participant to one of the batch's coaches.
      */
     public function assignParticipant(AssignParticipantRequest $request, Batch $batch): RedirectResponse
     {
@@ -408,7 +404,7 @@ class BatchManagementController extends Controller
     }
 
     /**
-     * Update whole-batch status with cascade behavior.
+     * Change the batch status (also updates its bookings).
      */
     public function updateStatus(UpdateBatchStatusRequest $request, Batch $batch): RedirectResponse
     {
@@ -436,7 +432,7 @@ class BatchManagementController extends Controller
     }
 
     /**
-     * Move an individual booking from this batch to another batch.
+     * Move a booking from this batch to another one.
      */
     public function moveBooking(MoveBookingRequest $request, Batch $batch): RedirectResponse
     {

@@ -1,15 +1,15 @@
 """
-Contract Tests for POST /forecast/site Endpoint.
-Validates:
-1. Monotonicity: p10 <= p50 <= p90 across all variables and horizons.
-2. Complete hours: exactly 240 continuous hours for 10-day forecast.
-3. Operational Cutoff & Source correctness:
-   - hs: model for H <= 48, climatology for H > 48
-   - current_speed: model for H <= 72, climatology for H > 72
-   - other variables: climatology for all H
-4. Daily aggregates: rain_daily_mm, p_wet with Wilson CI, p_high_gust with Wilson CI (no 'squall' naming).
-5. Stale Store Graceful Degradation: returns degraded: true and all sources climatology.
-6. Out of Area Guardrail: returns HTTP 422 with error: 'out_of_area'.
+Tests for POST /forecast/site.
+Checks:
+1. p10 <= p50 <= p90 for all variables and horizons.
+2. Exactly 240 hours with no gaps for a 10-day forecast.
+3. Right source per horizon:
+   - hs: model for H <= 48, climatology after
+   - current_speed: model for H <= 72, climatology after
+   - other variables: always climatology
+4. Daily values: rain_daily_mm, p_wet with Wilson CI, p_high_gust with Wilson CI (not called 'squall').
+5. Old store: returns degraded: true and everything is climatology.
+6. Outside our area: returns HTTP 422 with error: 'out_of_area'.
 """
 
 import sys
@@ -34,7 +34,7 @@ TEST_ISSUED_AT = "2025-06-15 12:00:00+08:00"
 
 
 def test_forecast_site_contract_and_monotonicity():
-    """Validates complete contract, monotonicity, and continuous timestamps."""
+    """Check the full response, p10 <= p50 <= p90, and no gaps in the hours."""
     payload = {
         "latitude": CAMP_LAT,
         "longitude": CAMP_LON,
@@ -68,17 +68,17 @@ def test_forecast_site_contract_and_monotonicity():
             p50 = var_data["p50"]
             p90 = var_data["p90"]
 
-            # Monotonicity check
+            # p10 <= p50 <= p90
             assert p10 <= p50, f"Monotonicity breach at hour {h_idx+1} for {var}: p10 ({p10}) > p50 ({p50})"
             assert p50 <= p90, f"Monotonicity breach at hour {h_idx+1} for {var}: p50 ({p50}) > p90 ({p90})"
 
-            # Non-negativity for physical physical magnitudes
+            # Values can't be negative
             if var != "slp":
                 assert p10 >= 0.0, f"Negative lower bound at hour {h_idx+1} for {var}: {p10}"
 
 
 def test_source_routing_and_operational_cutoffs():
-    """Validates operational cutoff rules: hs <= 48h model, current_speed <= 72h model."""
+    """Check the cutoffs: hs model up to 48h, current_speed model up to 72h."""
     payload = {
         "latitude": CAMP_LAT,
         "longitude": CAMP_LON,
@@ -104,13 +104,13 @@ def test_source_routing_and_operational_cutoffs():
         else:
             assert step["current_speed"]["source"] == "climatology", f"Expected climatology for current_speed at H={H}"
 
-        # All other variables must be climatology
+        # Everything else must be climatology
         for var in ["wind_speed", "wind_gust", "slp", "tp", "swell_height"]:
             assert step[var]["source"] == "climatology", f"Expected climatology for {var} at H={H}"
 
 
 def test_daily_aggregates_and_high_gust_naming():
-    """Validates daily outputs: rain_mm, p_wet with Wilson CI, and p_high_gust (NOT squall)."""
+    """Check the daily values: rain_mm, p_wet with Wilson CI, and p_high_gust (not squall)."""
     payload = {
         "latitude": CAMP_LAT,
         "longitude": CAMP_LON,
@@ -124,7 +124,7 @@ def test_daily_aggregates_and_high_gust_naming():
     assert len(daily) >= 10
 
     for day in daily:
-        # Check required fields
+        # Required fields
         assert "date" in day
         assert "rain_daily_mm_p50" in day
         assert "rain_daily_mm_p90" in day
@@ -133,11 +133,11 @@ def test_daily_aggregates_and_high_gust_naming():
         assert "p_high_gust" in day
         assert "p_high_gust_ci" in day
 
-        # Explicitly verify 'squall' naming is NOT used
+        # The word 'squall' must not be used
         assert "p_squall" not in day
         assert "squall_probability" not in day
 
-        # Check Wilson CI bounds
+        # Wilson CI bounds
         pw, (w_lo, w_hi) = day["p_wet"], day["p_wet_ci"]
         assert 0.0 <= w_lo <= pw <= w_hi <= 1.0, f"Invalid Wilson CI for p_wet: {w_lo} <= {pw} <= {w_hi}"
 
@@ -146,7 +146,7 @@ def test_daily_aggregates_and_high_gust_naming():
 
 
 def test_stale_store_fallback():
-    """Validates that a stale store degrades all variables to climatology with degraded=True."""
+    """An old store should make everything climatology with degraded=True."""
     payload = {
         "latitude": CAMP_LAT,
         "longitude": CAMP_LON,
@@ -167,8 +167,8 @@ def test_stale_store_fallback():
 
 
 def test_out_of_area_error():
-    """Validates that coordinates outside the service radius return HTTP 422 with out_of_area."""
-    # Manila coordinates (~100km North of site)
+    """Coordinates outside our area should return HTTP 422 with out_of_area."""
+    # Manila (~100 km north of the site)
     payload = {
         "latitude": 14.5995,
         "longitude": 120.9842,
@@ -182,7 +182,7 @@ def test_out_of_area_error():
 
 
 def test_stale_hs_does_not_mark_fresh_current_as_stale():
-    """Per-variable freshness keeps current eligible when hs exceeds its lag."""
+    """Freshness is per variable, so current is still ok when hs is too old."""
     from unittest.mock import patch
     import tempfile
 

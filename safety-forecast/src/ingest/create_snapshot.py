@@ -1,8 +1,8 @@
 """
-Create immutable data snapshot: snapshots/2026-10-04/ (PRD 11: Reproducibility)
+Make a data snapshot: snapshots/2026-10-04/ (PRD 11: so results can be repeated)
 
-Transfers interim parquet files to snapshots directory, calculates cryptographic
-SHA-256 hashes, builds manifest.json, and locks files as read-only.
+Copies the interim parquet files to the snapshots folder, computes SHA-256 hashes,
+writes manifest.json and makes the files read-only.
 """
 
 import hashlib
@@ -31,7 +31,7 @@ def sha256_file(filepath: Path) -> str:
 
 def make_readonly(filepath: Path):
     mode = os.stat(filepath).st_mode
-    # Remove write permissions for user, group, other
+    # Remove write permission for everyone
     os.chmod(filepath, mode & ~stat.S_IWRITE & ~stat.S_IWGRP & ~stat.S_IWOTH)
 
 
@@ -93,14 +93,14 @@ def build_snapshot():
         if not src.exists():
             raise FileNotFoundError(f"Source file {src} does not exist!")
 
-        # Copy to snapshot directory
+        # Copy to the snapshot folder
         print(f"Copying {src.name} -> {dst}...")
-        # If destination exists and is read-only, temporarily allow write to replace
+        # If the file is already there and read-only, allow writing for a moment to replace it
         if dst.exists():
             os.chmod(dst, stat.S_IWRITE)
         shutil.copy2(src, dst)
 
-        # Read metadata from the copied parquet
+        # Read info from the copied parquet
         df = pd.read_parquet(dst)
         file_sha256 = sha256_file(dst)
         start_utc = df.index.min().tz_convert("UTC").isoformat()
@@ -122,7 +122,7 @@ def build_snapshot():
             "file_size_bytes": dst.stat().st_size
         }
 
-        # Lock as read-only
+        # Make it read-only
         make_readonly(dst)
         print(f"  [LOCKED READ-ONLY] {dst.name} (SHA-256: {file_sha256[:12]}..., Rows: {len(df):,})")
 
@@ -135,7 +135,7 @@ def build_snapshot():
     make_readonly(manifest_path)
     print(f"\nManifest successfully sealed -> {manifest_path}")
 
-    # Also update config.py default snapshot path pointer if needed
+    # Also update the default snapshot path in config.py if needed
     print(f"Snapshot {SNAPSHOT_ID} is 100% frozen and verified.")
     return manifest
 

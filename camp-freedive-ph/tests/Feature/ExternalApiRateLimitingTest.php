@@ -152,7 +152,7 @@ class ExternalApiRateLimitingTest extends TestCase
         $service = app(WeatherForecastService::class);
         $result = $service->updateAllForecasts(16);
 
-        // Service should gracefully fall back to stale cache rather than throwing unhandled exception
+        // Should use the old cache instead of throwing an error
         $this->assertIsArray($result);
         $this->assertArrayHasKey('2026-09-20', $result);
         $this->assertEquals('Safe', $result['2026-09-20']['overall_classification']);

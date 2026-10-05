@@ -55,7 +55,7 @@
     <!-- Two-Column Layout: Left Sticky TOC, Right Content -->
     <div class="mt-8 sm:mt-12 lg:grid lg:grid-cols-[280px_1fr] xl:grid-cols-[320px_1fr] gap-8 lg:gap-12 items-start">
         
-        <!-- LEFT: Table of Contents (Sticky on desktop, no border, no line, no arrows) -->
+        <!-- Left: table of contents (sticky on desktop) -->
         <aside class="lg:sticky lg:top-24 space-y-4 mb-8 lg:mb-0" aria-label="Table of Contents">
             <div class="p-5 sm:p-6 bg-[#F2F2F7] rounded-2xl max-h-[calc(100vh-7rem)] overflow-y-auto">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-[#636366] mb-3">Table of Contents</h2>
@@ -131,7 +131,7 @@
             </div>
         </aside>
 
-        <!-- RIGHT: Main Terms Content (No horizontal lines between sections, no banners, no badges) -->
+        <!-- Right: terms -->
         <main class="min-w-0 flex-1 space-y-10">
 
             <!-- Preamble -->

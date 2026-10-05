@@ -23,17 +23,13 @@ use App\Http\Requests\Booking\CheckWeatherRequest;
 use App\Http\Requests\Booking\PricingQuoteRequest;
 
 /**
- * Public Customer Booking & Reservation Controller.
+ * Public booking page for customers.
  *
- * Business Workflow & Safety Policies:
- * - Directs users through the multi-step booking process (`booking.create`).
- * - Real-time Weather Feeds: Integrates live Open-Meteo forecasts and ML safety clearance.
- * - Capacity Bounds: Enforces a strict 45-pax cap per weekend trip across all batches
- *   to ensure adherence to Coast Guard banca vessel limits and a 1:4 instructor-to-student safety ratio.
- * - Distributed Slot Locking: Manages temporary 15-minute slot reservations in cache during checkout step 4
- *   to eliminate race-condition overbooking under concurrent traffic.
- * - Payment Guarantees: Reserves slots in `pending_downpayment` status and releases them if
- *   unpaid within the slot-hold grace period.
+ * - shows the booking form (booking.create)
+ * - checks the weather for the picked dates
+ * - max 45 people per weekend trip (boat limit and 1 coach for every 4 students)
+ * - holds the slots for 15 minutes during checkout so two people can't take the same slots
+ * - new bookings start as pending_downpayment and the slots are released if not paid in time
  */
 class BookingController extends Controller
 {
@@ -44,10 +40,10 @@ class BookingController extends Controller
     ) {}
 
     /**
-     * Display the customer-facing booking form.
+     * Show the booking form.
      *
-     * @param Request $request Query parameters (e.g. `class` pre-selection).
-     * @return View Renders the step-by-step booking interface.
+     * @param Request $request can have ?class= to pre-select a class
+     * @return View
      */
     public function create(Request $request): View
     {
@@ -233,10 +229,10 @@ class BookingController extends Controller
     }
 
     /**
-     * Retrieves weather and marine risk forecast for selected session dates.
+     * Get the weather forecast for the picked dates.
      *
-     * @param Request $request Contains `start_date` and `end_date` (YYYY-MM-DD).
-     * @return JsonResponse Returns standardized 5-tier safety classification and physical readings.
+     * @param Request $request needs start_date and end_date (YYYY-MM-DD)
+     * @return JsonResponse safety rating and weather readings
      */
     public function checkWeather(CheckWeatherRequest $request): JsonResponse
     {
@@ -251,14 +247,11 @@ class BookingController extends Controller
     }
 
     /**
-     * Computes live dynamic pricing quote based on booking parameters.
+     * Get the price quote for the booking form.
+     * Uses PricingRuleEngine for early bird, certified diver and group discounts.
      *
-     * Business Logic:
-     * Applies early-bird discounts, certified diver deductions, and group tiered pricing
-     * via the PricingRuleEngine.
-     *
-     * @param Request $request Contains `class_type`, `start_date`, `is_certified_diver`, and `participants_count`.
-     * @return JsonResponse Breakdown of base price, discounts, subtotal, and regulatory fees.
+     * @param Request $request class_type, start_date, is_certified_diver, participants_count
+     * @return JsonResponse base price, discounts, subtotal and fees
      */
     public function getPricingQuote(PricingQuoteRequest $request): JsonResponse
     {
@@ -275,24 +268,24 @@ class BookingController extends Controller
     }
 
     /**
-     * Validates and creates a new booking reservation in atomic database transaction.
+     * Save a new booking.
      *
-     * Business Workflow:
-     * 1. Validates participant medical disclosures and minimum emergency contact details.
-     * 2. Enforces the 45-pax total weekend batch capacity limit.
-     * 3. Re-evaluates final pricing and assigns municipal LGU & environmental fees.
-     * 4. Allocates a unique booking code (e.g. CFP-2026-XXXXX) and 4-digit guest PIN.
-     * 5. Initializes booking and downpayment records in `pending_downpayment` status.
+     * Steps:
+     * 1. validate the participants and contact details
+     * 2. check the 45 people limit
+     * 3. compute the price and add the LGU and environmental fees
+     * 4. make the booking number (e.g. CFP-2026-1234) and 4-digit PIN
+     * 5. save the booking and payment as pending_downpayment
      *
-     * @param Request $request Complete booking payload.
-     * @return JsonResponse Confirmation containing booking number, PIN, downpayment amount, and payment options.
+     * @param Request $request booking form data
+     * @return JsonResponse booking number, PIN, downpayment and payment link
      */
     public function store(StorePublicBookingRequest $request): JsonResponse
     {
         $validated = $request->validated();
 
-        // Re-check the selected dates server-side. The browser preview is advisory
-        // and must not be able to bypass a critical safety classification.
+        // Check the weather again here. The check on the page can be skipped,
+        // so we don't trust it for Critical Risk.
         $weatherForecast = $this->weatherSafetyService->getForecast(
             $validated['start_date'],
             $validated['end_date']
@@ -338,10 +331,8 @@ class BookingController extends Controller
                 $isCertified,
                 $request
             ) {
-                // Business Logic - Distributed Capacity Enforcement:
-                // Capped at 45 pax per weekend trip to comply with Philippine Coast Guard banca passenger
-                // limits and maintain an instructor-to-diver ratio of 1:4.
-                // Accounts for both confirmed bookings in the database AND active 15-minute checkout holds.
+                // Max 45 people per weekend trip (boat limit and 1 coach for every 4 students).
+                // Counts saved bookings and the 15-minute checkout holds.
                 $availableSlots = $this->slotReservationService->getAvailableSlots($startDate);
 
                 if ($paxCount > $availableSlots) {
@@ -351,8 +342,7 @@ class BookingController extends Controller
                     ], 422);
                 }
 
-                // Pricing Logic:
-                // Evaluates dynamic pricing rules (early-bird discounts, certified diver deductions, group discounts).
+                // Price with discounts (early bird, certified diver, group)
                 $quote = $this->pricingRuleEngine->evaluate(
                     $validated['class_type'],
                     $startDate,
@@ -363,7 +353,7 @@ class BookingController extends Controller
                 $classPrice = $quote['adjusted_price_per_pax'];
                 $subtotal = $quote['subtotal'];
 
-                // Regulatory & Logistics Fees:
+                // Fees:
                 $settingService = app(\App\Services\SystemSettingService::class);
                 $lguFeeRate = (float) ($settingService->get('addons.lgu_tourism_pass_fee', 300.00) ?? 300.00);
                 $envFeeRate = (float) ($settingService->get('addons.environmental_fee', 50.00) ?? 50.00);
@@ -377,7 +367,7 @@ class BookingController extends Controller
 
                 $totalAmount = $subtotal + $lguFee + $envFee + $carpoolFee + $boatDiveFee;
                 
-                // Deposit Policy (Carpool: ₱3,000/head, Own Transpo: ₱2,000/head by default):
+                // Downpayment (default: carpool P3,000/head, own transport P2,000/head):
                 $dpCarpool = (float) ($settingService->get('program_pricing.downpayment_carpool', 3000.00) ?? 3000.00);
                 $dpOwn = (float) ($settingService->get('program_pricing.downpayment_own_transpo', 2000.00) ?? 2000.00);
 
@@ -385,17 +375,15 @@ class BookingController extends Controller
                 $downpaymentAmount = min($totalAmount, $downpaymentPerHead * $paxCount);
                 $balanceAmount = max(0, $totalAmount - $downpaymentAmount);
 
-                // Auto-assign batch roster for this weekend dates
+                // Put the booking in the batch for these dates
                 $batch = app(\App\Services\BatchManagementService::class)->findOrCreateBatchForDates($startDate, $endDate);
 
-                // Security Credentials:
-                // 4-digit PIN enables self-service booking portal lookup without requiring traditional password registration.
+                // 4-digit PIN so the guest can look up the booking without an account
                 $bookingNumber = 'CFP-' . date('Y') . '-' . strtoupper(Str::random(5));
                 $pin = str_pad((string) mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
 
-                // Atomic Transaction:
-                // Guarantees booking, participant rows, dynamic pricing audits, and payment records
-                // are committed in sync; rolls back completely if PayMongo session initialization fails.
+                // Save everything in one transaction. If the PayMongo session fails,
+                // nothing gets saved.
                 DB::beginTransaction();
                 try {
                     $booking = Booking::create([
@@ -424,7 +412,7 @@ class BookingController extends Controller
                         'status' => 'pending_downpayment',
                     ]);
 
-                    // Save individual participant health questionnaires and medical disclosures
+                    // Save each participant's health info
                     foreach ($validated['participants'] as $pData) {
                         $pfn = trim($pData['first_name'] ?? '');
                         $pmn = (!empty($pData['no_middle_name'])) ? '' : trim($pData['middle_name'] ?? '');
@@ -449,9 +437,8 @@ class BookingController extends Controller
                         ]);
                     }
 
-                    // Pricing Audit Trail:
-                    // Persists exact snapshot of active rule adjustments applied at checkout time
-                    // to preserve pricing integrity against future admin rule modifications.
+                    // Save the discounts used at checkout, so later rule changes
+                    // don't change the price of this booking
                     foreach ($quote['adjustments'] as $adj) {
                         $booking->priceAdjustments()->create([
                             'pricing_rule_id' => $adj['rule_id'],
@@ -464,8 +451,7 @@ class BookingController extends Controller
                         ]);
                     }
 
-                    // Payment Session Lifecycle:
-                    // Expires in 24 hours to automatically purge uncompleted reservations.
+                    // Payment link expires in 24 hours
                     $paymentMethod = $validated['payment_method'] ?? 'paymongo';
                     $transactionId = 'PAY-' . strtoupper(Str::random(10));
 
@@ -481,10 +467,10 @@ class BookingController extends Controller
                         'expires_at' => now()->addHours(24),
                     ]);
 
-                    // Register temporary 15-minute slot hold in cache during active checkout
+                    // Hold the slots for 15 minutes during checkout
                     $this->slotReservationService->acquireHold($startDate, $bookingNumber, $paxCount, SlotReservationService::DEFAULT_HOLD_TTL_SECONDS);
 
-                    // Hosted PayMongo Gateway v2: Generates direct GCash, Maya, Card, or GrabPay checkout session
+                    // Create the PayMongo checkout (GCash, Maya, card, GrabPay)
                     $payMongoGateway = app(\App\Services\Gateways\PayMongoGateway::class);
                     $checkoutResult = $payMongoGateway->createCheckoutSession($booking, $downpaymentAmount);
 

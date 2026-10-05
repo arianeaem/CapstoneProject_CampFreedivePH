@@ -1,9 +1,8 @@
 """
-Source: TPXO9 Atlas / FES2014 harmonic constituents, calibrated against NAMRIA
-        Batangas Port / Puerto Galera tide-gauge records.
-Pulls:  nothing over an API — this is computed, not downloaded. NAMRIA gauge
-        history is the one manual acquisition step here (request from NAMRIA
-        or use a published tide-gauge archive for the same station).
+Source: TPXO9 Atlas / FES2014 tide constituents, calibrated with NAMRIA
+        Batangas Port / Puerto Galera tide gauge data.
+Gets:   nothing from an API, this is computed. The NAMRIA gauge data has to be
+        requested by hand (from NAMRIA or a public tide gauge archive for the same station).
 """
 
 import pandas as pd

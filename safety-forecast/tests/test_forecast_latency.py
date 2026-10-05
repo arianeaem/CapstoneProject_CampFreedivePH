@@ -1,7 +1,7 @@
 """
-Latency and SLA Budget Load Tests for Multi-Horizon Marine Physics Forecaster.
-Verifies that end-to-end inference for all 9 horizons stays strictly under the 350ms p95 budget,
-testing both ultra-fast ONNX runtime and Python native / Climatology fallback serving branches.
+Latency tests for the forecaster.
+Checks that a forecast for all 9 horizons takes less than 350ms (p95),
+for both the ONNX models and the Python / climatology ones.
 
 Run with:
     pytest tests/test_forecast_latency.py -v
@@ -39,7 +39,7 @@ def sample_features():
 @pytest.mark.parametrize("horizon", ALL_HORIZONS)
 def test_forecast_all_horizons_response_schema_and_quantiles(horizon, sample_features):
     """
-    Tests that /forecast returns structured quantile-bearing forecasts for all 9 horizons.
+    Check that /forecast returns p10/p50/p90 forecasts for all 9 horizons.
     """
     payload = {
         "horizon_hours": horizon,
@@ -54,7 +54,7 @@ def test_forecast_all_horizons_response_schema_and_quantiles(horizon, sample_fea
     assert "metadata" in data
     
     pf = data["physics_forecast"]
-    # Check that all quantile variables carry p10, p50, p90
+    # Every variable must have p10, p50 and p90
     quantile_keys = [
         "significant_wave_height_m", "peak_period_s", "swell_height_m", "wind_wave_height_m",
         "wind_speed_kmh", "wind_gust_kmh", "wind_direction_deg", "sea_level_pressure_hpa",
@@ -67,7 +67,7 @@ def test_forecast_all_horizons_response_schema_and_quantiles(horizon, sample_fea
         if key not in ["wind_direction_deg", "current_direction_deg", "current_u_ms", "current_v_ms"]:
             assert q["p10"] <= q["p50"] <= q["p90"] or q["p10"] <= q["p90"], f"Quantile order violation in {key}: {q}"
             
-    # Check derived hydrodynamic features
+    # Values computed from the waves
     assert "wave_steepness" in pf
     assert "swell_ratio" in pf
     assert 0.0 <= pf["swell_ratio"] <= 1.0
@@ -76,8 +76,8 @@ def test_forecast_all_horizons_response_schema_and_quantiles(horizon, sample_fea
 @pytest.mark.parametrize("horizon", ALL_HORIZONS)
 def test_forecast_latency_budget(horizon, sample_features):
     """
-    Executes 50 iterations per horizon to measure p50, p95, and max latency.
-    Asserts p95 < 350ms SLA budget.
+    Run 50 times per horizon and measure p50, p95 and max latency.
+    p95 must be under 350ms.
     """
     latencies = []
     req = MultiHorizonForecastRequest(
@@ -89,13 +89,13 @@ def test_forecast_latency_budget(horizon, sample_features):
     for _ in range(5):
         get_multi_horizon_physics(req)
 
-    # 50 measured iterations
+    # 50 timed runs
     for _ in range(50):
         t0 = time.perf_counter()
         resp = get_multi_horizon_physics(req)
         t1 = time.perf_counter()
         assert resp.horizon_hours == horizon
-        latencies.append((t1 - t0) * 1000.0)  # in milliseconds
+        latencies.append((t1 - t0) * 1000.0)  # ms
 
     p50 = np.percentile(latencies, 50)
     p95 = np.percentile(latencies, 95)
@@ -108,11 +108,11 @@ def test_forecast_latency_budget(horizon, sample_features):
 
 def test_native_and_climatology_branches_specifically(sample_features):
     """
-    Specifically tests non-ONNX models (Native Python WeightedEnsemble and Climatology fallback)
-    to confirm that native Python execution overhead stays well within the 350ms latency budget.
+    Test the non-ONNX models (Python WeightedEnsemble and climatology)
+    to make sure they are also well under 350ms.
     """
     native_latencies = []
-    # Test across H=6 (WeightedEnsemble winner) and H=96/144/168 (Climatology Fallback winner)
+    # H=6 (WeightedEnsemble) and H=96/144/168 (climatology)
     test_horizons = [6, 72, 96, 144, 168]
 
     for h in test_horizons:
@@ -139,7 +139,7 @@ def test_native_and_climatology_branches_specifically(sample_features):
     assert p95_native < 350.0, f"Native/Fallback p95 latency {p95_native:.2f}ms exceeds 350ms budget!"
 
 
-# Optional pytest-benchmark hook
+# Optional pytest-benchmark test
 def test_benchmark_forecast_h24(benchmark, sample_features):
     req = MultiHorizonForecastRequest(
         horizon_hours=24,

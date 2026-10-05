@@ -1,24 +1,24 @@
 """
-Ocean Current Live Cache and Climatological Fallback Layer.
+Ocean current cache with a climatology fallback.
 
-Provides fast, sub-millisecond retrieval of ocean current boundary conditions
-(current_u, current_v, current_speed, current_dir) for live serving endpoints.
+Gives the current values (current_u, current_v, current_speed, current_dir)
+quickly to the serving endpoints.
 
-DESIGN ARCHITECTURE (Decoupled Caching & Graceful Fallback):
-1. Separated Ingestion vs Serving:
-   - Live endpoint NEVER blocks on slow 15-20s CMEMS subset API calls.
-   - Reads directly from local pre-fetched cache: data/cache/cmems_forecast_cache.parquet.
-2. Climatological Horizon Extension (Beyond CMEMS 10-day limit):
-   - For requested hours beyond CMEMS forecast horizon (e.g. Day 11 to 16 in a 16-day booking window),
-     the system automatically fills current vectors using historical seasonal climatology.
-3. Defensive Outage Fallback:
-   - If the CMEMS scheduled fetch fails (auth expiry, network loss, API downtime) or cache is stale,
-     it seamlessly falls back to climatology without crashing or returning HTTP 500.
-4. Unit/Sign Parity:
-   - current_u (m/s): Eastward velocity (positive East, negative West).
-   - current_v (m/s): Northward velocity (positive North, negative South).
-   - current_speed (m/s): sqrt(u^2 + v^2).
-   - current_dir (deg): (atan2(v, u) * 180 / pi) % 360.
+How it works:
+1. Download and serving are separate:
+   - the endpoint never waits for the slow CMEMS API (15-20s)
+   - it reads the local cache: data/cache/cmems_forecast_cache.parquet
+2. Past the CMEMS 10-day limit:
+   - for hours after the CMEMS forecast (e.g. day 11 to 16 of a 16-day booking window)
+     it uses the seasonal climatology
+3. If something fails:
+   - if the CMEMS download failed (login expired, no internet, API down) or the cache is old,
+     it uses climatology instead of crashing or returning HTTP 500
+4. Units and signs:
+   - current_u (m/s): east is positive, west is negative
+   - current_v (m/s): north is positive, south is negative
+   - current_speed (m/s): sqrt(u^2 + v^2)
+   - current_dir (deg): (atan2(v, u) * 180 / pi) % 360
 """
 
 import os
@@ -45,30 +45,28 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 
 # ---------------------------------------------------------------------------
-# 1. Climatology Fitting & Lookup Table
+# 1. Climatology table
 # ---------------------------------------------------------------------------
-# TODO: Implement automated daily cron job to pre-fetch Copernicus CMEMS 0.083-degree global ocean current vectors.
+# TODO: daily cron job to download the CMEMS 0.083 deg current data
 
 
 def fit_and_save_climatology(train_features_path: Path = PROCESSED_TRAINING_FILE) -> pd.DataFrame:
     """
-    Fits historical seasonal climatology (hour-of-day, day-of-year) mean vectors
-    for current_u and current_v using the training split.
+    Build the seasonal climatology (hour of day, day of year) averages for
+    current_u and current_v from the training split.
 
-    Business Logic / Rationale:
-        CMEMS marine physics models only forecast up to 10 days ahead. For extended
-        16-day advance booking windows, historical diurnal-seasonal averages provide
-        a physically grounded baseline preventing arbitrary zero-drift assumptions.
+    CMEMS only forecasts 10 days ahead. For the 16-day booking window we use the
+    past averages instead of just assuming zero current.
 
     Parameters:
-        train_features_path (Path): Path to preprocessed feature dataset.
+        train_features_path (Path): path to the feature dataset
 
     Returns:
-        pd.DataFrame: Climatology lookup table indexed by (day_of_year, hour_of_day).
+        pd.DataFrame: table indexed by (day_of_year, hour_of_day)
     """
     if not train_features_path.exists():
         logger.warning(f"Training features file {train_features_path} not found. Using neutral zeros fallback.")
-        # Create a default neutral table if training data is absent
+        # No training data, make a table with zeros
         records = []
         for d in range(1, 367):
             for h in range(24):
@@ -80,7 +78,7 @@ def fit_and_save_climatology(train_features_path: Path = PROCESSED_TRAINING_FILE
     df = pd.read_parquet(train_features_path)
     ts = pd.to_datetime(df.index)
     
-    # 70% chronological split (Train split only to prevent leakage)
+    # First 70% by time (train split only, so no leakage)
     n_train = int(len(df) * 0.70)
     train_df = df.iloc[:n_train].copy()
     train_ts = ts[:n_train]
@@ -99,7 +97,7 @@ def fit_and_save_climatology(train_features_path: Path = PROCESSED_TRAINING_FILE
 
 def get_climatological_currents(timestamps: pd.DatetimeIndex) -> pd.DataFrame:
     """
-    Computes climatological current vectors for any given DatetimeIndex.
+    Get the climatology current for the given times.
     """
     if not CLIMATOLOGY_FILE.exists():
         fit_and_save_climatology()
@@ -111,7 +109,7 @@ def get_climatological_currents(timestamps: pd.DatetimeIndex) -> pd.DataFrame:
 
     keys = list(zip(doys, hours))
     
-    # Fast reindexing / lookup
+    # Look up the values
     u_vals = []
     v_vals = []
     global_u_mean = float(df_clim["current_u"].mean()) if len(df_clim) > 0 else 0.05
@@ -142,26 +140,26 @@ def get_climatological_currents(timestamps: pd.DatetimeIndex) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# 2. Live Cache Reader & Hybrid Resolver
+# 2. Read the cache (with climatology for the missing hours)
 # ---------------------------------------------------------------------------
 def get_live_currents_forecast(
     timestamps: pd.DatetimeIndex,
     max_cache_age_hours: float = 24.0
 ) -> pd.DataFrame:
     """
-    Retrieves hourly ocean current data for the requested timestamps:
-    - Reads from local CMEMS forecast cache (data/cache/cmems_forecast_cache.parquet).
-    - Checks cache freshness (within max_cache_age_hours).
-    - For hours covered by CMEMS forecast: returns CMEMS values tagged 'cmems_forecast'.
-    - For hours beyond CMEMS horizon (>10 days) or if cache is stale/unavailable:
-      returns seasonal climatology tagged 'climatological_fallback'.
+    Get the hourly current for the given times:
+    - reads the CMEMS cache (data/cache/cmems_forecast_cache.parquet)
+    - checks that the cache is not older than max_cache_age_hours
+    - hours inside the CMEMS forecast: CMEMS values, tagged 'cmems_forecast'
+    - hours after the CMEMS range (>10 days) or if the cache is old/missing:
+      climatology, tagged 'climatological_fallback'
     """
-    # Check if cache exists
+    # Does the cache exist?
     if not CACHE_FILE.exists():
         logger.warning(f"CMEMS cache file {CACHE_FILE} does not exist. Falling back to climatology.")
         return get_climatological_currents(timestamps)
 
-    # Check cache file modification time for staleness
+    # Is the cache too old? (file modified time)
     cache_mtime = datetime.fromtimestamp(os.path.getmtime(CACHE_FILE), tz=timezone.utc)
     now_utc = datetime.now(timezone.utc)
     cache_age_hours = (now_utc - cache_mtime).total_seconds() / 3600.0
@@ -175,14 +173,14 @@ def get_live_currents_forecast(
 
     try:
         df_cache = pd.read_parquet(CACHE_FILE)
-        # Normalize cache timestamps to timezone-naive UTC for robust matching
+        # Make the cache times timezone-naive UTC so they match
         cache_ts = pd.to_datetime(df_cache["timestamp"])
         if getattr(cache_ts.dt, "tz", None) is not None:
             cache_ts = cache_ts.dt.tz_convert(None)
         df_cache["timestamp"] = cache_ts
         df_cache = df_cache.set_index("timestamp").sort_index()
 
-        # Build output dataframe
+        # Build the output
         records = []
         df_clim = None
 
@@ -191,11 +189,11 @@ def get_live_currents_forecast(
             if getattr(ts_dt, "tzinfo", None) is not None:
                 ts_dt = ts_dt.tz_convert(None) if hasattr(ts_dt, "tz_convert") else ts_dt.tz_localize(None)
 
-            # Check direct presence in actual downloaded cached timestamps
-            # (handles CMEMS daily model-run truncation gracefully without theoretical assumptions)
+            # Use the time only if it is really in the downloaded data
+            # (CMEMS runs don't always cover the full range)
             if ts_dt in df_cache.index:
                 row = df_cache.loc[ts_dt]
-                # In case of duplicates, take first
+                # If there are duplicates, take the first
                 if isinstance(row, pd.DataFrame):
                     row = row.iloc[0]
                 records.append({
@@ -207,7 +205,7 @@ def get_live_currents_forecast(
                     "current_source": "cmems_forecast",
                 })
             else:
-                # Timestamp is outside actual cached data window -> seamless fallback to seasonal climatology
+                # Not in the cache, use climatology
                 if df_clim is None:
                     df_clim = get_climatological_currents(timestamps)
                 clim_row = df_clim.loc[ts_dt]
@@ -228,7 +226,7 @@ def get_live_currents_forecast(
 
 
 # ---------------------------------------------------------------------------
-# Test Suite
+# Tests
 # ---------------------------------------------------------------------------
 def _run_tests():
     print("Running currents_cache unit test suite...\n")
@@ -240,13 +238,13 @@ def _run_tests():
         if not condition:
             failures.append(f"{name}: {message}")
 
-    # 1. Test climatology generation and table creation
+    # 1. Climatology table
     clim_df = fit_and_save_climatology()
     check("Climatology table generated successfully", len(clim_df) > 0)
     check("Climatology table contains current_u and current_v",
           "current_u" in clim_df.columns and "current_v" in clim_df.columns)
 
-    # 2. Test climatological query across arbitrary timestamps
+    # 2. Climatology for random times
     test_ts = pd.date_range("2026-09-15 00:00:00", periods=48, freq="1h")
     clim_res = get_climatological_currents(test_ts)
     check("Climatology query returns exact requested row count (48)", len(clim_res) == 48)
@@ -255,7 +253,7 @@ def _run_tests():
     check("Speed matches sqrt(u^2 + v^2)",
           np.allclose(clim_res["current_speed"], np.sqrt(clim_res["current_u"]**2 + clim_res["current_v"]**2)))
 
-    # 3. Test mock CMEMS cache ingestion and hybrid retrieval
+    # 3. Fake CMEMS cache and mixed lookup
     mock_cmems = pd.DataFrame({
         "timestamp": test_ts[:24],  # first 24 hours only
         "current_u": [0.15] * 24,
@@ -272,7 +270,7 @@ def _run_tests():
     check("Hours 25-48 (>CMEMS cache) sourced from climatological fallback",
           (hybrid_res.iloc[24:]["current_source"] == "climatological_fallback").all())
 
-    # 4. Clean up mock cache or leave valid cache
+    # 4. Remove the fake cache or keep the real one
     print(f"\n{len(failures)} failures out of 7 checks.")
     if failures:
         print("FAILURES:")

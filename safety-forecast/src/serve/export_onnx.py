@@ -1,19 +1,17 @@
 """
-Exports all trained XGBoost multi-horizon forecasters and regressors to ONNX format
-for sub-5ms CPU inference in the FastAPI serving pipeline.
+Exports the trained XGBoost models to ONNX so the FastAPI service can run them fast on CPU.
 
-Dependencies:
+Needs:
     pip install skl2onnx onnxmltools onnxruntime --break-system-packages
 
-Models Exported:
-    - Multi-Horizon Wave Forecasters (hs, tp, swell_height, wind_wave_height)
-    - Multi-Horizon Wind & SLP Forecasters (wind_speed, wind_gust, slp, wind_dir_sin, wind_dir_cos)
-    - Multi-Horizon Current Forecasters (current_u, current_v)
-    - Spatial Regressors (wave, wind, current)
+Models:
+    - wave forecasters (hs, tp, swell_height, wind_wave_height)
+    - wind and SLP forecasters (wind_speed, wind_gust, slp, wind_dir_sin, wind_dir_cos)
+    - current forecasters (current_u, current_v)
+    - spatial regressors (wave, wind, current)
 
-Parity Verification:
-    Every exported model is verified against its original XGBoost prediction on a sample batch.
-    Max absolute error must satisfy tolerance (< 1e-3).
+Each exported model is compared with the XGBoost prediction on a sample.
+Max difference must be < 1e-3.
 
 Run from project root:
     python src/serve/export_onnx.py
@@ -61,7 +59,7 @@ FORECASTER_MODELS = [
 
 
 def export_xgboost_to_onnx(model_name: str, feature_names: list, sample_X: pd.DataFrame) -> bool:
-    """Loads a saved XGBoost JSON model, converts to ONNX, and verifies parity."""
+    """Load an XGBoost JSON model, convert it to ONNX and compare the outputs."""
     json_path = MODELS_DIR / f"{model_name}.json"
     if not json_path.exists():
         print(f"  [SKIPPED] {model_name}.json not found in {MODELS_DIR}")
@@ -70,7 +68,7 @@ def export_xgboost_to_onnx(model_name: str, feature_names: list, sample_X: pd.Da
     model = xgb.XGBRegressor()
     model.load_model(str(json_path))
 
-    # Reset feature names to default positional identifiers for onnxmltools compatibility
+    # onnxmltools needs the default feature names (f0, f1, ...)
     model.get_booster().feature_names = None
 
     initial_type = [("input", FloatTensorType([None, len(feature_names)]))]
@@ -80,7 +78,7 @@ def export_xgboost_to_onnx(model_name: str, feature_names: list, sample_X: pd.Da
     with open(out_path, "wb") as f:
         f.write(onnx_model.SerializeToString())
 
-    # Parity verification: Compare original XGBoost output with ONNX runtime output
+    # Compare the XGBoost output with the ONNX output
     sample_values = sample_X[feature_names].values.astype(np.float32)
     original_preds = model.predict(sample_X[feature_names])
 
@@ -98,11 +96,11 @@ def export_xgboost_to_onnx(model_name: str, feature_names: list, sample_X: pd.Da
 
 
 def benchmark_latency(onnx_path: Path, n_features: int, n_calls: int = 300) -> float:
-    """Measures single-sample inference latency in milliseconds."""
+    """Time for one prediction in ms."""
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     dummy = np.random.rand(1, n_features).astype(np.float32)
     
-    # Warmup
+    # Warm up
     for _ in range(20):
         session.run(None, {"input": dummy})
         
@@ -134,13 +132,13 @@ def main():
     feature_cols = [c for c in stacked.columns if not c.startswith("target_")]
     print(f"   Total Input Features per sample: {len(feature_cols)} (132 lags + 1 horizon column)")
 
-    # Save exact positional feature names to manifest
+    # Save the feature names in order to the manifest
     features_manifest_path = ONNX_DIR / "forecaster_features.json"
     with open(features_manifest_path, "w") as f:
         json.dump(feature_cols, f, indent=2)
     print(f"   Saved feature manifest to {features_manifest_path}")
 
-    # Create verification sample
+    # Sample data for the check
     sample_df = stacked.sample(n=min(200, len(stacked)), random_state=42)
 
     print(f"\n3. Converting {len(FORECASTER_MODELS)} Forecasters to ONNX and Verifying Parity...")

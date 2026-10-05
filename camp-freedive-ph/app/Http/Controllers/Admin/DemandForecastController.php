@@ -9,19 +9,18 @@ use Carbon\Carbon;
 use Illuminate\View\View;
 
 /**
- * Demand Forecast module - a standalone sidebar page.
+ * Demand Forecast page (sidebar).
  *
- * Shows ONLY ML-generated forecast data (clearly labelled as forecast) next to the
- * actual booking history, plus the single set of High/Medium/Low and
- * Peak/Shoulder/Off-Peak rules the whole system uses.
- * Layout mirrors the Demand Forecast tab in Reports & Analytics.
+ * Shows the ML forecast (labelled as forecast) next to the real booking history,
+ * plus the High/Medium/Low and Peak/Shoulder/Off-Peak rules used in the whole system.
+ * Same layout as the Demand Forecast tab in Reports & Analytics.
  */
 class DemandForecastController extends Controller
 {
-    /** Divers per coach used for "coaches needed" (same ratio as the monthly rollup). */
+    /** Divers per coach, for "coaches needed" (same as the monthly total). */
     protected const DIVERS_PER_COACH = 4;
 
-    /** Look-ahead windows offered on the page, in days. */
+    /** Day ranges you can pick on the page. */
     protected const HORIZONS = [7, 30, 60, 90];
 
     public function __construct(protected DemandForecastService $forecastService)
@@ -46,8 +45,8 @@ class DemandForecastController extends Controller
     }
 
     /**
-     * For each look-ahead window: the scheduled batches starting within it and their
-     * monthly totals (using the service's own monthly rollup, so numbers match everywhere).
+     * For each day range: the batches starting in it and the monthly totals
+     * (uses the service's monthly total so the numbers are the same everywhere).
      */
     protected function horizonViews(array $batchForecasts): array
     {

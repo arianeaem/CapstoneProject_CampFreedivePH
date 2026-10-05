@@ -22,8 +22,8 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Stop a coach from being deactivated/removed while they still have upcoming batches.
-     * Returns a redirect with the batches to reassign, or null when it is safe to continue.
+     * Don't let a coach be deactivated/removed if they still have upcoming batches.
+     * Returns a redirect with the batches to reassign, or null if it's ok.
      */
     protected function blockIfCoachHasUpcomingWork(User $user, string $action): ?RedirectResponse
     {
@@ -47,7 +47,7 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Display a listing of internal users.
+     * List of staff users.
      */
     public function index(Request $request): View
     {
@@ -55,7 +55,7 @@ class UserManagementController extends Controller
 
         $query = User::query()->latest();
 
-        // Search filter
+        // Search
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
@@ -65,12 +65,12 @@ class UserManagementController extends Controller
             });
         }
 
-        // Role filter
+        // Filter by role
         if ($request->filled('role')) {
             $query->where('role', $request->input('role'));
         }
 
-        // Status filter (removed/archived accounts only show when explicitly filtered)
+        // Filter by status (removed/archived accounts only show if picked)
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         } else {
@@ -92,7 +92,7 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Provision and store a new internal user account.
+     * Create a new staff account.
      */
     public function store(StoreUserRequest $request): RedirectResponse
     {
@@ -139,7 +139,7 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Show the profile edit form for a user (Admin/Owner-managed only).
+     * Edit user form (admin/owner only).
      */
     public function edit(User $user): View
     {
@@ -150,7 +150,7 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Update an internal user's profile details.
+     * Save the user's details.
      */
     public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
@@ -217,13 +217,13 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Toggle active/inactive account status.
+     * Switch the account between active and inactive.
      */
     public function toggleStatus(Request $request, User $user): RedirectResponse
     {
         $currentUser = Auth::user();
 
-        // Prevent modifying self status
+        // You can't change your own status
         if ($user->id === $currentUser->id) {
             return back()->with('error', 'You cannot deactivate your own account.');
         }
@@ -252,15 +252,15 @@ class UserManagementController extends Controller
     }
 
     /**
-     * "Remove" an internal user account (Owner, or Admin for Coaches).
-     * Nothing is deleted: the account is archived so all history stays, login is blocked,
-     * and the person is emailed. Coaches with upcoming batches must be reassigned first.
+     * "Remove" a staff account (owner, or admin for coaches).
+     * We don't delete it. The account is archived so the history stays, login is blocked
+     * and the person gets an email. Coaches with upcoming batches must be reassigned first.
      */
     public function destroy(Request $request, User $user): RedirectResponse
     {
         $currentUser = Auth::user();
 
-        // Prevent self-deletion
+        // You can't remove yourself
         if ($user->id === $currentUser->id) {
             return back()->with('error', 'You cannot delete your own account.');
         }

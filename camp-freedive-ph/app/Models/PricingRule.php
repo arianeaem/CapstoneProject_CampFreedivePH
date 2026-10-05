@@ -9,12 +9,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Pricing Rule Model representing dynamic yield management rules.
- *
- * Revenue & Seasonal Economics Context:
- * - Governs automatic price adjustments based on Batangas dive seasons (Amihan peak dry season vs Habagat monsoon),
- *   demand surges (occupancy percentage), and booking lead time.
- * - Enforces adjustment caps (clamped between -30% discount and +30% surge) to preserve customer fairness.
+ * A pricing rule (discount or surcharge).
+ * Can be based on demand, season (Amihan / Habagat) or how early people book.
+ * All rules together are kept between -30% and +30%.
  *
  * @property int $id
  * @property string $name
@@ -25,7 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $adjustment_type increase, decrease
  * @property string $adjustment_method percentage, fixed
  * @property float $adjustment_value
- * @property int $priority Execution priority ordering
+ * @property int $priority order the rules run in
  * @property string $status active, inactive
  */
 class PricingRule extends Model
@@ -68,7 +65,7 @@ class PricingRule extends Model
     }
 
     /**
-     * Human-readable condition summary (e.g. "Demand = High", "Season = Peak", "Lead time ≤ 3 days")
+     * Condition text, e.g. "Demand = High", "Season = Peak", "Lead time <= 3 days"
      */
     public function getConditionSummaryAttribute(): string
     {
@@ -87,7 +84,7 @@ class PricingRule extends Model
     }
 
     /**
-     * Human-readable adjustment badge (e.g. "+15%", "-₱500")
+     * Adjustment text, e.g. "+15%" or "-P500"
      */
     public function getFormattedAdjustmentAttribute(): string
     {
@@ -99,7 +96,7 @@ class PricingRule extends Model
     }
 
     /**
-     * Human-readable "Applies To" label
+     * "Applies To" text
      */
     public function getFormattedAppliesToAttribute(): string
     {
@@ -113,7 +110,7 @@ class PricingRule extends Model
     }
 
     /**
-     * Type badge configuration
+     * Badge settings for the rule type
      */
     public function getTypeBadgeAttribute(): array
     {

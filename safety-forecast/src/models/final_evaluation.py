@@ -1,11 +1,10 @@
 """
-Final, one-time evaluation of the complete multi-horizon forecasting pipeline
-(wave/wind/current forecasters -> safety classifier -> deterministic safety thresholds) on `test` —
-the 15% chronological split that has been deliberately untouched through every
-step of this build.
+Final test of the whole forecast system
+(wave/wind/current forecasters -> safety classifier -> hard limits) on `test`,
+the last 15% of the data that was never used before this.
 
-Evaluates multi-horizon performance across all 8 horizons (1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h),
-both for the ML classifier alone and with the deterministic safety thresholds layer applied.
+Shows the results for all 8 horizons (1h, 6h, 12h, 24h, 48h, 72h, 96h, 144h),
+for the classifier alone and with the hard limits added.
 
 Run from the project root: python src/models/final_evaluation.py
 """
@@ -53,7 +52,7 @@ def main():
     full = classifier_X.copy()
     full["target_risk_tier"] = classifier_y.values
 
-    train, val, test = temporal_split(full)  # only `test` is used from here on
+    train, val, test = temporal_split(full)  # only test is used below
     feature_cols = [c for c in full.columns if c != "target_risk_tier"]
 
     print(f"Test split: {len(test)} rows ({test.index.min()} to {test.index.max()})")
@@ -62,12 +61,12 @@ def main():
     test_X = test[feature_cols]
     true_tiers = [int(x) for x in test["target_risk_tier"].values]
 
-    # Step 1: Classifier prediction from forecaster outputs
+    # Step 1: classifier prediction from the forecaster outputs
     print("Running safety classifier inference on forecaster predictions...")
     classifier = load_classifier()
     ml_preds = predict_booster(classifier, test_X)
 
-    # Step 2: Safety thresholds layer applied on top of predicted telemetry
+    # Step 2: hard limits on top of the predicted values
     print("Applying deterministic physical safety thresholds on test predictions...")
     final_tiers: list[int] = []
     threshold_triggered_count = 0
@@ -91,7 +90,7 @@ def main():
     print(f"Safety thresholds triggered on {threshold_triggered_count} / {len(test)} test rows "
           f"({threshold_triggered_count/len(test)*100:.2f}%)\n")
 
-    # --- Report both stages: ML alone, and ML + safety thresholds combined ---
+    # --- Results for the classifier alone and with the hard limits ---
     for stage_name, preds in [("ML Classifier Alone", ml_preds),
                                ("Full System (ML + Safety Thresholds)", final_tiers)]:
         print("=" * 70)
@@ -118,7 +117,7 @@ def main():
             print("No Critical Risk rows in test set.")
         print()
 
-    # Per-horizon test breakdown for the full system
+    # Test results per horizon for the full system
     print("=" * 70)
     print("FULL SYSTEM TEST PERFORMANCE BY FORECAST HORIZON:")
     print("=" * 70)

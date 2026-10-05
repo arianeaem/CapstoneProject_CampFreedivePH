@@ -1,14 +1,12 @@
 """
-Baseline Comparison Suite: ML Forecasters vs Physical Baselines.
-Compares multi-horizon ML forecaster models against two standard baselines:
-1. Persistence Baseline: predicted value(t+H) = value(t) (lag0h observation)
-2. Climatological Baseline: predicted value(t+H) = historical mean for (hour-of-day, day-of-year)
-   fit strictly on the `train` split only to prevent lookahead leakage.
-   For circular directions (wind_dir, current_dir), circular mean is computed via
-   sin/cos component averaging (vector mean), not naive degree averaging.
+Compares the ML models with two simple baselines:
+1. Persistence: value(t+H) = value(t) (the lag0h value)
+2. Climatology: value(t+H) = past average for (hour of day, day of year),
+   fit on the train split only so there is no leakage.
+   For directions (wind_dir, current_dir) we average sin/cos, not the degrees.
 
-Evaluates across all 5 forecast horizons: 1h, 6h, 24h (1-day), 72h (3-day), 168h (7-day).
-Produces formatted summary tables and skill-decay metrics.
+Checks 5 horizons: 1h, 6h, 24h, 72h and 168h.
+Prints summary tables and how the skill drops with the horizon.
 
 Run from project root: python src/models/baselines.py
 """
@@ -40,7 +38,7 @@ VARIABLES = [
     ("tp", "xgb_wave_forecaster_tp", "linear"),
     ("swell_height", "xgb_wave_forecaster_swell_height", "linear"),
     ("wind_wave_height", "xgb_wave_forecaster_wind_wave_height", "linear"),
-    # Wind & atmospheric variables
+    # Wind and pressure variables
     ("wind_speed", "xgb_wind_forecaster_wind_speed", "linear"),
     ("wind_gust", "xgb_wind_forecaster_wind_gust", "linear"),
     ("slp", "xgb_wind_forecaster_slp", "linear"),
@@ -59,7 +57,7 @@ def mae_score(y_true, y_pred) -> float:
 
 
 def circular_angular_diff(y_true_deg, y_pred_deg):
-    """Computes shortest angular difference in degrees accounting for 360 wrap-around."""
+    """Shortest angle difference in degrees (handles the 360 wrap)."""
     diff = np.abs(y_true_deg - y_pred_deg) % 360
     return np.minimum(diff, 360 - diff)
 
@@ -75,31 +73,28 @@ def circular_mae_score(y_true_deg, y_pred_deg) -> float:
 
 
 def persistence_prediction(stacked_df: pd.DataFrame, var: str) -> pd.Series:
-    """predicted value(t+H) = value(t) — the naive forecast. Reads the lag0h
-    column built in Step 1 (the current/most-recent observed value), rather
-    than re-deriving it — same value, single source of truth."""
+    """value(t+H) = value(t), the simple forecast. Uses the lag0h column
+    made in Step 1 (the latest value)."""
     return stacked_df[f"{var}_lag0h"]
 
 
 def fit_climatology(train_df: pd.DataFrame, var: str) -> pd.Series:
-    """Fits a (hour-of-day, day-of-year) -> historical mean lookup table
-    using ONLY the training split. This is the actual leakage guard — a
-    version that computed climatology from the full dataset (train+val+test
-    combined) would let future information leak into the val/test baseline."""
+    """Make a (hour of day, day of year) -> average table using ONLY the
+    training split. If we used all the data, future values would leak into
+    the val/test baseline."""
     ts = pd.to_datetime(train_df.index)
     return train_df.groupby([ts.hour, ts.dayofyear])[var].mean()
 
 
 def apply_climatology(target_index: pd.DatetimeIndex, climatology_table: pd.Series, global_mean: float) -> np.ndarray:
-    """Broadcasts a climatology table FIT ON TRAIN ONLY onto any other split
-    (val or test), looking up each row's own hour/day-of-year. Never re-fits
-    on the split being evaluated."""
+    """Apply a climatology table (fit on train only) to another split
+    (val or test) using each row's hour and day of year. Never refits."""
     keys = list(zip(target_index.hour, target_index.dayofyear))
     return np.array([climatology_table.get(k, global_mean) for k in keys])
 
 
 def fit_circular_climatology(train_df: pd.DataFrame, sin_col: str, cos_col: str) -> pd.Series:
-    """Computes circular mean direction per (hour, day-of-year) via sin/cos averaging on train split only."""
+    """Average direction per (hour, day of year) using sin/cos, on the train split only."""
     ts = pd.to_datetime(train_df.index)
     mean_sin = train_df.groupby([ts.hour, ts.dayofyear])[sin_col].mean()
     mean_cos = train_df.groupby([ts.hour, ts.dayofyear])[cos_col].mean()
@@ -132,7 +127,7 @@ def compare_to_baselines(model_rmse: dict, persistence_rmse: dict, climatology_r
 
 
 def plot_skill_decay(df_results: pd.DataFrame):
-    """Generates comparison skill-decay curves for defense reporting."""
+    """Charts of how the skill drops with the horizon."""
     unique_vars = df_results["variable"].unique()
     n_vars = len(unique_vars)
     fig, axes = plt.subplots(int(np.ceil(n_vars / 3)), 3, figsize=(16, 14))
@@ -194,7 +189,7 @@ def main():
 
     print(f"1. Evaluating 9 Linear Target Variables on validation split ({len(val_stacked)} rows)...\n")
 
-    # Store predictions for circular reconstruction
+    # Keep the predictions to rebuild the angles
     predictions_cache = {}
 
     for var, model_filename, _ in VARIABLES:
@@ -211,10 +206,10 @@ def main():
         val_preds = model.predict(val_stacked[feature_cols])
         predictions_cache[var] = val_preds
 
-        # Persistence prediction
+        # Persistence
         pers_preds = persistence_prediction(val_stacked, var).values
 
-        # Fit Climatology strictly on train split
+        # Climatology (fit on train only)
         clim_table = fit_climatology(train_raw, var)
         global_mean = float(train_raw[var].mean())
         val_ts = pd.to_datetime(val_stacked.index)
@@ -238,7 +233,7 @@ def main():
             climatology_rmse[key] = rmse_score(y_t, c_p)
 
     # -----------------------------------------------------------------------
-    # 2. Circular Wind Direction Evaluation (Degrees, Circular Mean Climatology)
+    # 2. Wind direction (degrees, sin/cos climatology)
     # -----------------------------------------------------------------------
     sin_path = MODELS_DIR / "xgb_wind_forecaster_wind_dir_sin.json"
     cos_path = MODELS_DIR / "xgb_wind_forecaster_wind_dir_cos.json"
@@ -254,7 +249,7 @@ def main():
         pred_cos = cos_model.predict(val_stacked[feature_cols])
         pred_wind_dir = (np.degrees(np.arctan2(pred_sin, pred_cos))) % 360
 
-        # Persistence for wind_dir (observed wind_dir at time t)
+        # Persistence for wind_dir (wind_dir at time t)
         if "wind_dir" in raw_df.columns:
             pers_wind_dir = raw_df.loc[val_stacked.index, "wind_dir"].values
         elif "wind_dir_lag0h" in val_stacked.columns:
@@ -262,7 +257,7 @@ def main():
         else:
             pers_wind_dir = (np.degrees(np.arctan2(val_stacked["wind_v_lag0h"].values, val_stacked["wind_u_lag0h"].values))) % 360
 
-        # Circular Climatology fit on train (sin/cos component means)
+        # Climatology fit on train (sin/cos averages)
         train_raw_sin = np.sin(np.radians(train_raw["wind_dir"]))
         train_raw_cos = np.cos(np.radians(train_raw["wind_dir"]))
         train_df_wind = pd.DataFrame({"sin": train_raw_sin, "cos": train_raw_cos}, index=train_raw.index)
@@ -289,7 +284,7 @@ def main():
             climatology_rmse[key] = circular_rmse_score(y_t, c_p)
 
     # -----------------------------------------------------------------------
-    # 3. Circular Current Direction Evaluation (Degrees, Vector Mean Climatology)
+    # 3. Current direction (degrees, vector average climatology)
     # -----------------------------------------------------------------------
     if "current_u" in predictions_cache and "current_v" in predictions_cache:
         print("3. Evaluating Circular Current Direction (current_dir_deg)...")
@@ -302,7 +297,7 @@ def main():
         v_lag0 = val_stacked["current_v_lag0h"].values
         pers_current_dir = (np.degrees(np.arctan2(v_lag0, u_lag0))) % 360
 
-        # Circular Climatology fit on train (vector component means)
+        # Climatology fit on train (vector averages)
         clim_current_table = fit_circular_climatology(train_raw, "current_u", "current_v")
         global_current_mean = float((np.degrees(np.arctan2(train_raw["current_v"].mean(), train_raw["current_u"].mean()))) % 360)
         val_ts = pd.to_datetime(val_stacked.index)
@@ -327,7 +322,7 @@ def main():
             persistence_rmse[key] = circular_rmse_score(y_t, p_p)
             climatology_rmse[key] = circular_rmse_score(y_t, c_p)
 
-    # Build comparison summary table
+    # Summary table
     df_comparison = compare_to_baselines(model_rmse, persistence_rmse, climatology_rmse, units)
 
     print("\n" + "-" * 85)
@@ -335,7 +330,7 @@ def main():
     print("-" * 85)
     print(df_comparison.to_string(index=False))
 
-    # Save outputs
+    # Save
     csv_path = REPORTS_DIR / "baseline_comparison_summary.csv"
     df_comparison.to_csv(csv_path, index=False)
     print(f"\nSaved comparison summary table to {csv_path}")
@@ -345,7 +340,7 @@ def main():
         json.dump(df_comparison.to_dict(orient="records"), f, indent=2)
     print(f"Saved JSON metrics to {metrics_json_path}")
 
-    # Generate and save figures
+    # Make and save the charts
     if len(df_comparison) > 0:
         plot_skill_decay(df_comparison)
 

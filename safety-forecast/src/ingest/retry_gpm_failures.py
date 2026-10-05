@@ -1,14 +1,12 @@
 """
-Targeted Retry and Patch Script for NASA GPM IMERG Ingestion Failures.
+Retries the NASA GPM IMERG downloads that failed and patches them in.
 
-Purpose:
-- Reads all logged failures and NaN time slices in gpm_final_*.nc files.
-- Re-fetches the missing granules from NASA GES DISC OPeNDAP using a controlled,
-  polite concurrency rate (4-8 workers with randomized backoff) to prevent the
-  concurrency spike that causes HTTP 503s on Day 1 of each month.
-- Patches the retrieved precipitation grids directly into the target NetCDF file.
-- Updates gpm_failures.log and gpm_ingestion_summary.json.
-- Re-aggregates to interim Parquet with updated rain_is_interpolated flags.
+- finds the logged failures and the all-NaN time slices in gpm_final_*.nc
+- downloads the missing files again from NASA GES DISC OPeNDAP with fewer workers
+  (4-8, with random waits), because too many at once gave HTTP 503 on day 1 of each month
+- writes the downloaded rain grids into the NetCDF file
+- updates gpm_failures.log and gpm_ingestion_summary.json
+- rebuilds the interim parquet with the updated rain_is_interpolated flags
 
 Usage:
     python safety-forecast/src/ingest/retry_gpm_failures.py [--workers 8] [--run-to-interim]
@@ -37,7 +35,7 @@ SUMMARY_FILE = RAW_SUBDIR / "gpm_ingestion_summary.json"
 
 
 def find_all_nan_slices_in_netcdfs():
-    """Identifies all time slices across all gpm_final_*.nc that contain all-NaN spatial grids."""
+    """Find all time slices in gpm_final_*.nc where the whole grid is NaN."""
     files = sorted(RAW_SUBDIR.glob("gpm_final_*.nc"))
     missing_items = []
     
@@ -84,7 +82,7 @@ def retry_missing_granules(max_workers: int = 8, run_interim: bool = True):
         fpath = items[0]["file_path"]
         print(f"\nProcessing {fname}: {len(items)} missing granules...")
 
-        # Re-fetch missing granules concurrently with polite rate
+        # Download the missing files again (a few at a time)
         results = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
@@ -99,7 +97,7 @@ def retry_missing_granules(max_workers: int = 8, run_interim: bool = True):
                 except Exception as e:
                     results[it["time_idx"]] = (it["timestamp"], None)
 
-        # Patch directly into NetCDF using netCDF4 in read/write mode
+        # Write them into the NetCDF file (netCDF4 in read/write mode)
         ds_nc = nc.Dataset(fpath, "r+")
         precip_var = ds_nc.variables["precipitation"]
         
@@ -124,7 +122,7 @@ def retry_missing_granules(max_workers: int = 8, run_interim: bool = True):
             print(f"  {fn} at {t.isoformat()}")
     print("=" * 80)
 
-    # Re-run to_interim to refresh Parquet and update interpolation tracking
+    # Run to_interim again to update the parquet and the interpolation flags
     if run_interim:
         print("\nRe-generating interim Parquet dataset...")
         to_interim()

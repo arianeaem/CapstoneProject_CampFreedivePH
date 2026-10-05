@@ -1,12 +1,11 @@
 """
-Reproducible Snapshot Rev4 Generation Tool for Camp FreedivePH.
+Makes snapshot 2026-10-04_rev4.
 
-Creates snapshot 2026-10-04_rev4:
-- Incorporates clean ECMWF CDS re-download of era5_2026_08.nc on identical [14.0, 120.7, 13.5, 121.1] area.
-- Includes 9-column era5_wind_pressure.parquet with era5t_revision_risk (~90d) and is_provisional (120h).
-- Preserves exact SHA-256 for cmems_waves.parquet and cmems_currents.parquet.
-- Runs dynamic audit via audits/audit_era5.py.
-- Emits manifest v1.4 with full governance rules, historical comparison benchmarks, and immutability lock.
+- uses the clean re-download of era5_2026_08.nc from ECMWF CDS (same area [14.0, 120.7, 13.5, 121.1])
+- era5_wind_pressure.parquet has 9 columns, with era5t_revision_risk (~90 days) and is_provisional (120h)
+- cmems_waves.parquet and cmems_currents.parquet keep the same SHA-256
+- runs the check in audits/audit_era5.py
+- writes manifest v1.4 with the rules, the comparisons and the read-only lock
 """
 
 import os
@@ -71,7 +70,7 @@ def build_rev4():
 
         print(f"[REV4 BUILD] Copied {fname}: {len(df)} rows, SHA256={sha256}")
 
-    # Run dynamic audit on the snapshot ERA5 file
+    # Run the check on the snapshot ERA5 file
     print("[REV4 BUILD] Running dynamic audit on snapshot ERA5 parquet...")
     audit_results = run_audit(
         raw_dir=str(SAFETY_DIR / "data" / "raw" / "era5_wind_pressure"),
@@ -162,7 +161,7 @@ def build_rev4():
         json.dump(manifest, f, indent=2)
     print(f"[REV4 BUILD] Manifest written to {manifest_path}")
 
-    # Set read-only attributes
+    # Make the files read-only
     os.system(f"attrib +r {snapshot_dir}/*.*")
     print(f"[REV4 BUILD] Applied read-only lock to {snapshot_dir}/*.*")
 

@@ -1,12 +1,12 @@
 """
-Serving Feature Extractor for Camp FreedivePH Short-Range Production Models.
+Builds the inputs for the short-range models when serving.
 
-Extracts the exact 34-feature vectors for 'hs' and 'current_speed' from the Observed Store,
-matching the training pipeline (train_short_range_models.py) down to float precision.
-Strictly respects operational data lags:
-- Waves (hs, tp, swell, wind_wave): 12h lag
-- Currents (current_speed, eulerian, tide, stokes): 24h lag
-- Atmospheric (slp, wind_speed, wind_gust): 120h lag
+Makes the 34 features for 'hs' and 'current_speed' from the observed store,
+exactly the same as in training (train_short_range_models.py).
+Uses the data delays:
+- waves (hs, tp, swell, wind_wave): 12h
+- currents (current_speed, eulerian, tide, stokes): 24h
+- atmosphere (slp, wind_speed, wind_gust): 120h
 """
 
 import json
@@ -64,7 +64,7 @@ class ServingFeatureExtractor:
         with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
             self.manifest = json.load(f)
 
-        # Precompute anomalies and rolls for fast slicing
+        # Compute the anomalies and rolling values once so lookups are fast
         self.precomputed = {}
         for target in ["hs", "current_speed"]:
             x = self.df[target].to_numpy(float)
@@ -96,8 +96,8 @@ class ServingFeatureExtractor:
         horizon_h: int
     ) -> np.ndarray:
         """
-        Extracts the 34-element feature vector for (target, origin_time, horizon_h).
-        Guarantees exact numerical alignment with train_short_range_models.py.
+        Build the 34 features for (target, origin_time, horizon_h).
+        Same values as in train_short_range_models.py.
         """
         t0 = pd.to_datetime(origin_time)
         if t0.tzinfo is None and self.df.index.tz is not None:
@@ -121,7 +121,7 @@ class ServingFeatureExtractor:
             if t_lag in a_series.index:
                 cols.append(float(a_series.loc[t_lag]))
             else:
-                # If slightly before index, use nearest
+                # A bit before the index, use the closest
                 prior = a_series.loc[:t_lag]
                 cols.append(float(prior.iloc[-1]) if len(prior) > 0 else 0.0)
 
@@ -135,7 +135,7 @@ class ServingFeatureExtractor:
                 val = prior.iloc[-1] if len(prior) > 0 else 0.0
             cols.append(float(val if np.isfinite(val) else 0.0))
 
-        # 3. Climatology at target time & calendar DOY harmonics
+        # 3. Climatology at the target time and day of year sin/cos
         doy_target = min(t_target.dayofyear, 366)
         hour_target = t_target.hour
         clim_target = pre["sm"][doy_target - 1] + pre["hod"][hour_target]
@@ -144,7 +144,7 @@ class ServingFeatureExtractor:
         cols.append(float(np.sin(2 * np.pi * doy_target / 366.0)))
         cols.append(float(np.cos(2 * np.pi * doy_target / 366.0)))
 
-        # 4. Aux variables (lagged value & 24h change)
+        # 4. Other variables (lagged value and 24h change)
         aux_list = AUX_COLS[target]
         for a_col in aux_list:
             lag_a = LAGS_MAP[a_col]

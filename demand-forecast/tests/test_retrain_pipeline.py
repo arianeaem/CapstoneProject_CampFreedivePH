@@ -77,7 +77,7 @@ class DemandRulesTests(unittest.TestCase):
 
 
 class PerBatchForecastTests(unittest.TestCase):
-    """The forecast is made for REAL scheduled batches; totals are sums of those batches."""
+    """The forecast is made for the scheduled batches, and the totals are the sums of those."""
 
     class _ConstModel:
         def __init__(self, value):
@@ -87,7 +87,7 @@ class PerBatchForecastTests(unittest.TestCase):
             return [self.value] * len(X)
 
     class _LagModel:
-        """Predicts from the lag feature, so a leak between batches would change the result."""
+        """Predicts from the lag feature, so if batches leaked into each other the result would change."""
 
         def predict(self, X):
             return [float(v) + 1.0 for v in X["participant_count_lag_1"]]
@@ -180,7 +180,7 @@ class PerBatchForecastTests(unittest.TestCase):
 
 
 class ForecastOutputTests(unittest.TestCase):
-    """Only meaningful AFTER `python retrain_pipeline.py` has been run."""
+    """Only works after running `python retrain_pipeline.py`."""
 
     def setUp(self):
         self.path = os.path.join(BASE_DIR, "outputs", "forecast.csv")

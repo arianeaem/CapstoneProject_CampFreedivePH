@@ -13,20 +13,20 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Queued customer cancellation email dispatched when a batch is cancelled
- * due to severe weather, marine hazard conditions, or force majeure events.
+ * Email to the guest when their batch is cancelled because of bad weather
+ * or other sea hazards. Sent through the queue.
  */
 class BatchWeatherCancellationMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
     /**
-     * Number of times the queued job may be attempted.
+     * How many times to try sending.
      */
     public int $tries = 3;
 
     /**
-     * Number of seconds to wait before retrying the job.
+     * Seconds to wait before trying again.
      */
     public int $backoff = 30;
 
@@ -64,7 +64,7 @@ class BatchWeatherCancellationMail extends Mailable implements ShouldQueue
     }
 
     /**
-     * Everything the guest has paid (all completed payments are refunded 100%).
+     * Total the guest has paid (all completed payments get a 100% refund).
      */
     public function refundAmount(): float
     {

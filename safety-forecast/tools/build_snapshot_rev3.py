@@ -1,9 +1,8 @@
 """
-Reproducible Snapshot Rev3 Generation Tool for Camp FreedivePH.
+Makes snapshot 2026-10-04_rev3.
 
-Copies verified interim parquet files into snapshot directory 2026-10-04_rev3,
-computes dynamic SHA-256 hashes, executes dynamic audits via audit_era5.py,
-generates manifest.json, and locks files as read-only.
+Copies the checked interim parquet files to 2026-10-04_rev3, computes the SHA-256
+hashes, runs audit_era5.py, writes manifest.json and makes the files read-only.
 """
 
 import os
@@ -14,7 +13,7 @@ import hashlib
 from pathlib import Path
 import pandas as pd
 
-# Add safety-forecast dir to sys.path to allow importing from audits
+# Add the safety-forecast folder to sys.path so we can import from audits
 SAFETY_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SAFETY_DIR.parent
 if str(SAFETY_DIR) not in sys.path:
@@ -37,7 +36,7 @@ def build_rev3():
 
     snapshot_dir.mkdir(parents=True, exist_ok=True)
 
-    # Unlock directory if already exists
+    # If the folder already exists, make it writable first
     os.system(f"attrib -r {snapshot_dir}/*.* >nul 2>&1")
 
     targets = [
@@ -71,7 +70,7 @@ def build_rev3():
 
         print(f"[REV3 BUILD] Copied {fname}: {len(df)} rows, SHA256={sha256}")
 
-    # Run dynamic audit on the snapshot ERA5 file
+    # Run the check on the snapshot ERA5 file
     print("[REV3 BUILD] Running dynamic audit on snapshot ERA5 parquet...")
     audit_results = run_audit(
         raw_dir=str(REPO_ROOT / "safety-forecast" / "data" / "raw" / "era5_wind_pressure"),
@@ -160,7 +159,7 @@ def build_rev3():
         json.dump(manifest, f, indent=2)
     print(f"[REV3 BUILD] Manifest written to {manifest_path}")
 
-    # Set read-only attributes
+    # Make the files read-only
     os.system(f"attrib +r {snapshot_dir}/*.*")
     print(f"[REV3 BUILD] Applied read-only lock to {snapshot_dir}/*.*")
 

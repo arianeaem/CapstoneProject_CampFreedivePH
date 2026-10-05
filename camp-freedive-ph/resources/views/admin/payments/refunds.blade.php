@@ -79,7 +79,7 @@
                             </span>
                         </div>
 
-                        <!-- Booking Number (Bigger Font) & Requested Date Below It -->
+                        <!-- Booking number and requested date -->
                         <div>
                             <a href="{{ route('admin.bookings.show', $booking) }}" class="font-mono font-black text-xl sm:text-2xl text-[#780000] hover:underline block leading-tight tracking-tight">
                                 {{ $booking->booking_number }}
@@ -90,7 +90,7 @@
                         </div>
                     </div>
 
-                    <!-- Students Connected to Booking (All Students Listed, No Count) -->
+                    <!-- Students in the booking -->
                     @php
                         $studentNames = $booking->participants->pluck('name')->filter()->values();
                         $studentsDisplay = $studentNames->isNotEmpty() ? $studentNames->implode(', ') : $booking->contact_name;
@@ -101,7 +101,7 @@
                         </span>
                     </div>
 
-                    <!-- Key Details Grid (2x2) Matching Reference Style -->
+                    <!-- Details (2x2) -->
                     <div class="mt-3 grid grid-cols-2 gap-3">
                         <div>
                             <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">DIVE DATE</span>

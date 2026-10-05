@@ -1,5 +1,5 @@
 // Calendar date picker (booking-page style) used by <x-date-picker>.
-// Values are plain 'YYYY-MM-DD' strings in local time, exactly like <input type="date">.
+// Values are 'YYYY-MM-DD' strings in local time, same as <input type="date">.
 
 const pad = (n) => String(n).padStart(2, '0');
 const toYmd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -109,7 +109,7 @@ export default function datePicker({ value = '', min = '', max = '', yearSelect 
             this.open = false;
         },
 
-        // Fire native-like events after x-model has synced, so existing @change handlers keep working
+        // Fire change events after x-model updates, so the @change handlers still work
         setValue(v) {
             this.value = v;
             this.$nextTick(() => {

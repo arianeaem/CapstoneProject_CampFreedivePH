@@ -1,5 +1,5 @@
 """
-Builds processed training features from interim collocated data.
+Builds the training features from the interim data.
 Reads: data/interim/collocated.parquet
 Writes: data/processed/training_features.parquet
 
@@ -26,16 +26,15 @@ def _find_project_root() -> Path:
 
 def build_training_features() -> pd.DataFrame:
     """
-    Constructs the canonical feature table from collocated raw meteorological and oceanographic records.
+    Build the feature table from the raw weather and sea data.
 
-    Physics Feature Engineering:
-        1. Cyclical Temporal Transforms: Encodes diurnal (hour_sin/cos) and seasonal (doy_sin/cos) cycles.
-        2. Non-Linear Wave Dynamics: Calculates wave steepness ($Hs / L$) and swell-to-total-energy ratio.
-        3. Barometric Tendency ($\Delta P_{3h}$): Captures rapid 3-hour atmospheric pressure drops.
-        4. Vector Current & Wind Components: Decomposes scalar speeds and directions into orthogonal $u$ and $v$ vectors.
+    1. Time of day (hour_sin/cos) and time of year (doy_sin/cos).
+    2. Wave steepness (Hs / L) and swell share of the total.
+    3. 3-hour pressure change (delta_p_3h).
+    4. Current and wind as u and v parts.
 
     Returns:
-        pd.DataFrame: Cleaned feature table saved to `data/processed/training_features.parquet`.
+        pd.DataFrame: feature table, saved to data/processed/training_features.parquet
     """
     root = _find_project_root()
     interim_path = root / "data" / "interim" / "collocated.parquet"
@@ -47,7 +46,7 @@ def build_training_features() -> pd.DataFrame:
     df_raw = pd.read_parquet(interim_path)
     print(f"  Raw collocated shape: {df_raw.shape}")
 
-    # Enforce cutoff rule: training features strictly use verified rows only
+    # Only use checked rows for training
     if "is_verified" in df_raw.columns:
         n_before = len(df_raw)
         df_raw = df_raw[df_raw["is_verified"] == True].copy()
@@ -62,10 +61,10 @@ def build_training_features() -> pd.DataFrame:
         df_raw = df_raw[mask].copy()
         print(f"  Filtered to {len(df_raw)} verified rows (excluded {n_before - len(df_raw)} provisional/forecast rows)")
 
-    # Compute physics and cyclical features
+    # Physics and time features
     df_feat = compute_marine_physics_features(df_raw)
 
-    # Drop leading NaNs created by .shift(3) on delta_p_3h
+    # Remove the first rows that are NaN because of .shift(3) in delta_p_3h
     df_clean = df_feat.dropna()
     leading_nans = len(df_feat) - len(df_clean)
     print(f"  Dropped {leading_nans} leading NaN rows from shift(3)")

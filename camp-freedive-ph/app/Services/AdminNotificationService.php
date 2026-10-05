@@ -67,7 +67,7 @@ class AdminNotificationService
         );
     }
 
-    /** Hours from now until the batch's first dive (06:30 on day 1, Manila time). */
+    /** Hours from now until the first dive of the batch (6:30 AM on day 1, Manila time). */
     public static function hoursUntilDive(Batch $batch): int
     {
         $diveStart = \Carbon\Carbon::parse($batch->start_date->toDateString(), 'Asia/Manila')->setTime(6, 30);
@@ -76,8 +76,8 @@ class AdminNotificationService
     }
 
     /**
-     * Critical Risk less than 18 hours before the dive: tell owners/admins what guests were offered
-     * (free reschedule or full downpayment refund) and that they must decide on the batch.
+     * Critical Risk less than 18 hours before the dive: tell owners/admins what the guests were offered
+     * (free reschedule or full downpayment refund) and that they need to decide on the batch.
      */
     public function imminentCriticalRisk(Batch $batch, int $guestsNotified = 0): void
     {
@@ -108,7 +108,7 @@ class AdminNotificationService
     }
 
     /**
-     * High Risk less than 18 hours before the dive: heads-up only. Guests were told the dive is still planned.
+     * High Risk less than 18 hours before the dive: just a heads-up. Guests were told the dive is still on.
      */
     public function imminentHighRisk(Batch $batch, int $guestsNotified = 0): void
     {

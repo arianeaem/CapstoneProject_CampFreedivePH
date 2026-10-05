@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // 1. Coach Availabilities (Written by Coach Portal, Read/Modified by Admin)
+        // 1. Coach availability (set by the coach, can be changed by admin)
         Schema::create('coach_availabilities', function (Blueprint $table) {
             $table->id();
             $table->foreignId('coach_id')->constrained('users')->onDelete('cascade');
@@ -23,7 +23,7 @@ return new class extends Migration
             $table->unique(['coach_id', 'date']);
         });
 
-        // 2. Participant / Student Coach Assignments
+        // 2. Which coach each participant has
         Schema::create('participant_assignments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('participant_id')->constrained('booking_participants')->onDelete('cascade');
@@ -38,7 +38,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // 3. Coach Openings (Post to Coach Portal broadcast)
+        // 3. Open coach slots (shown on the Coach Portal)
         Schema::create('coach_openings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('batch_id')->constrained('batches')->onDelete('cascade');
@@ -50,7 +50,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // 4. Coach Requests (Coaches requesting to take an open date)
+        // 4. Coach requests for open slots
         Schema::create('coach_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('opening_id')->nullable()->constrained('coach_openings')->nullOnDelete();
@@ -63,7 +63,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // 5. Assignment Logs (Audit trail for student reassignments)
+        // 5. History of student reassignments
         Schema::create('assignment_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('participant_id')->constrained('booking_participants')->onDelete('cascade');
