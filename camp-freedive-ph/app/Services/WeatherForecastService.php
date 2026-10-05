@@ -363,9 +363,8 @@ class WeatherForecastService
         if (in_array($classification, ['High Risk', 'Critical Risk'], true)) {
             $assessedBatch = $batch->fresh();
             app(\App\Services\AdminNotificationService::class)->risk($assessedBatch, $classification);
-            if ($classification === 'Critical Risk') {
-                app(\App\Services\AdminNotificationService::class)->imminentCriticalRisk($assessedBatch);
-            }
+            // Less than 18 hours before the dive: email guests and owners/admins (Critical = reschedule/refund options, High = heads-up)
+            app(\App\Services\WeatherRiskNotifier::class)->handle($assessedBatch, $classification);
         }
 
         return $result;
@@ -593,6 +592,24 @@ class WeatherForecastService
         ];
 
         return $primary;
+    }
+
+    /**
+     * Historical Model vs Legacy Forecast comparison for an upcoming batch's dates
+     * (same engines as the booking page). Null for past batches or when unavailable.
+     */
+    public function modelComparisonForBatch(Batch $batch): ?array
+    {
+        if (!$batch->start_date || $batch->start_date->copy()->startOfDay()->lt(Carbon::today(self::TIMEZONE))) {
+            return null;
+        }
+
+        try {
+            return $this->previewDateAssessment($batch->start_date->copy())['engines'] ?? null;
+        } catch (\Throwable $e) {
+            Log::info("[WeatherForecastService] Model comparison unavailable for batch {$batch->id}: " . $e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -1145,6 +1162,7 @@ class WeatherForecastService
                 'thunderstorm_advisory' => (bool) ($overrideData['thunderstorm_advisory'] ?? false),
                 'typhoon_within_distance' => (bool) ($overrideData['typhoon_within_distance'] ?? false),
                 'tsunami_warning' => (bool) ($overrideData['tsunami_warning'] ?? false),
+                'other_hazard' => ($overrideData['other_hazard'] ?? null) ?: null,
                 'reason' => $overrideData['reason'] ?? 'PAGASA Marine Weather Advisory',
                 'cancelled_batch' => $cancelBatch,
                 'applied_by' => $operator->id,
@@ -1194,8 +1212,9 @@ class WeatherForecastService
             'note' => "Cancelled by Camp due to weather safety advisory: {$cancellationReason}",
         ]);
 
+        // Skip bookings that are already cancelled or finished so nobody is emailed twice
         $connectedBookings = $batch->bookings()
-            ->whereNotIn('status', ['cancelled_by_guest', 'no_show'])
+            ->whereNotIn('status', ['cancelled', 'cancelled_by_guest', 'cancelled_by_camp', 'completed', 'no_show'])
             ->get();
 
         $notificationsSent = 0;
@@ -1223,16 +1242,21 @@ class WeatherForecastService
                 ]);
             }
 
-            // Generate Templated Guest Cancellation & Safety Notification Message
+            // Plain-language summary of the guest email, kept in the batch's notification log
             $scheduledDateStr = $booking->start_date->format('M d, Y') . ' - ' . $booking->end_date->format('M d, Y');
-            $messageBody = "Good day, {$booking->contact_name}. Your scheduled date for {$scheduledDateStr} will be canceled due to:\n\n- {$cancellationReason}\n\nThere will be options for this cancelled schedule:\n- Full refund\n- Reschedule\n\nYou can select your preferred option by entering your booking number ({$booking->booking_number}) and PIN in Manage Booking.";
+            $paid = (float) $booking->payments()->where('status', 'completed')->sum('amount');
+            $messageBody = "Hello {$booking->contact_name}, we cancelled your trip on {$scheduledDateStr} for your safety.\n\nWhy: {$cancellationReason}\n\n"
+                . ($paid > 0
+                    ? 'A full refund of PHP ' . number_format($paid, 2) . ' has been started. No action needed.'
+                    : 'No payment was received yet, so there is nothing to refund.')
+                . "\n\nPrefer another date? Reply to this email and we will move the booking for free instead of refunding.";
 
             NotificationLog::create([
                 'batch_id' => $batch->id,
                 'booking_id' => $booking->id,
                 'recipient_email' => $booking->contact_email,
                 'recipient_name' => $booking->contact_name,
-                'subject' => "Camp FreedivePH Schedule Cancellation Notice - {$scheduledDateStr}",
+                'subject' => "Your dive on {$scheduledDateStr} has been cancelled for your safety",
                 'message_body' => $messageBody,
                 'channel' => 'email',
                 'sent_by' => $operator->id,
@@ -1277,8 +1301,10 @@ class WeatherForecastService
         $thunderstorm = (bool) ($overrides['thunderstorm_advisory'] ?? false);
         $typhoon = (bool) ($overrides['typhoon_within_distance'] ?? false);
         $tsunami = (bool) ($overrides['tsunami_warning'] ?? false);
+        // Non-weather hazards (oil spill, red tide, no-sail order, ...) also force Critical Risk
+        $otherHazard = !empty($overrides['other_hazard']);
 
-        return ($tcwsSignal >= 3 || $galeWarning || $thunderstorm || $typhoon || $tsunami);
+        return ($tcwsSignal >= 3 || $galeWarning || $thunderstorm || $typhoon || $tsunami || $otherHazard);
     }
 
     /**
@@ -1679,6 +1705,7 @@ class WeatherForecastService
         }
 
         // 4. Cache each day individually and summarize metrics
+        $snapshotRows = [];
         foreach ($dayBuckets as $dateKey => $bucket) {
             Cache::put("forecast:marine_cache:{$dateKey}", $bucket['marine'], now()->addMinutes(60));
             Cache::put("forecast:weather_cache:{$dateKey}", $bucket['weather'], now()->addMinutes(60));
@@ -1796,12 +1823,21 @@ class WeatherForecastService
             Cache::put("forecast:date:{$dateKey}", $summary, now()->addMinutes(60));
             $dailySummaries[$dateKey] = $summary;
 
-            // Automatically persist multi-horizon historical forecast snapshot
+            // Multi-horizon historical forecast snapshot (saved in one upsert below)
+            $daysOut = max(0, (int) Carbon::now(self::TIMEZONE)->startOfDay()->diffInDays(Carbon::parse($dateKey)->startOfDay(), false));
+            $snapshotRows[] = $this->forecastSnapshotRow($dateKey, $daysOut, $summary);
+        }
+
+        // ... and persist them in a single query instead of two per day
+        if (!empty($snapshotRows)) {
             try {
-                $daysOut = max(0, (int) Carbon::now(self::TIMEZONE)->startOfDay()->diffInDays(Carbon::parse($dateKey)->startOfDay(), false));
-                $this->recordForecastSnapshot($dateKey, $daysOut, $summary);
+                ForecastSnapshot::upsert(
+                    $snapshotRows,
+                    ['target_date', 'lead_time_days'],
+                    array_values(array_diff(array_keys($snapshotRows[0]), ['target_date', 'lead_time_days', 'created_at']))
+                );
             } catch (\Throwable $e) {
-                Log::debug("Could not record snapshot for {$dateKey}: " . $e->getMessage());
+                Log::debug('Could not record forecast snapshots: ' . $e->getMessage());
             }
         }
 
@@ -2229,20 +2265,39 @@ class WeatherForecastService
                 'target_date' => $date,
                 'lead_time_days' => $leadTimeDays,
             ],
-            [
-                'lead_time_label' => ForecastSnapshot::formatLeadTimeLabel($leadTimeDays),
-                'predicted_classification' => $summary['overall_classification'] ?? $summary['daytime_classification'] ?? 'Safe',
-                'predicted_score_pct' => $summary['overall_score_pct'] ?? $summary['daytime_score_pct'] ?? 25.0,
-                'predicted_wave_height' => (float) ($summary['avg_wave_height'] ?? 0.70),
-                'predicted_wind_speed' => (float) ($summary['avg_wind_speed'] ?? 12.0),
-                'predicted_ocean_current' => (float) ($summary['avg_ocean_current'] ?? 0.30),
-                'predicted_rain' => (float) ($summary['total_rain'] ?? 0.0),
-                'predicted_pressure' => (float) ($summary['avg_pressure'] ?? 1010.5),
-                'ml_predicted_classification' => $mlClassification,
-                'hourly_data' => $summary['hourly'] ?? [],
-                'captured_at' => now(),
-            ]
+            $this->forecastSnapshotValues($leadTimeDays, $summary, $mlClassification)
         );
+    }
+
+    /**
+     * Snapshot row in database format (model casts applied) for bulk upserts.
+     */
+    protected function forecastSnapshotRow(string $date, int $leadTimeDays, array $summary, ?string $mlClassification = null): array
+    {
+        $model = new ForecastSnapshot(array_merge(
+            ['target_date' => $date, 'lead_time_days' => $leadTimeDays],
+            $this->forecastSnapshotValues($leadTimeDays, $summary, $mlClassification)
+        ));
+        $now = $model->freshTimestampString();
+
+        return array_merge($model->getAttributes(), ['created_at' => $now, 'updated_at' => $now]);
+    }
+
+    protected function forecastSnapshotValues(int $leadTimeDays, array $summary, ?string $mlClassification = null): array
+    {
+        return [
+            'lead_time_label' => ForecastSnapshot::formatLeadTimeLabel($leadTimeDays),
+            'predicted_classification' => $summary['overall_classification'] ?? $summary['daytime_classification'] ?? 'Safe',
+            'predicted_score_pct' => $summary['overall_score_pct'] ?? $summary['daytime_score_pct'] ?? 25.0,
+            'predicted_wave_height' => (float) ($summary['avg_wave_height'] ?? 0.70),
+            'predicted_wind_speed' => (float) ($summary['avg_wind_speed'] ?? 12.0),
+            'predicted_ocean_current' => (float) ($summary['avg_ocean_current'] ?? 0.30),
+            'predicted_rain' => (float) ($summary['total_rain'] ?? 0.0),
+            'predicted_pressure' => (float) ($summary['avg_pressure'] ?? 1010.5),
+            'ml_predicted_classification' => $mlClassification,
+            'hourly_data' => $summary['hourly'] ?? [],
+            'captured_at' => now(),
+        ];
     }
 
     /**
@@ -2895,7 +2950,7 @@ class WeatherForecastService
                 'wind_dir_circ_mean_deg' => $h['wind_dir_circ_mean_deg'] ?? null,
                 'tier' => $h['tier'],
                 'label' => $h['label'],
-                'adverse_tail_triggered' => $h['adverse_tail_triggered'] ? 1 : 0,
+                'adverse_tail_triggered' => (bool) $h['adverse_tail_triggered'],
                 'created_at' => $nowStr,
                 'updated_at' => $nowStr,
             ];

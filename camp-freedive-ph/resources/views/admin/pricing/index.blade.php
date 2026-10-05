@@ -104,10 +104,10 @@
                              x-transition:leave="transition ease-in duration-100 transform"
                              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                              x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                             class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                             class="popover-panel absolute right-0 mt-2 space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Rules</h4>
-                                <a href="{{ route('admin.pricing.index') }}" class="text-sm text-[#780000] hover:underline font-bold">Reset</a>
+                                <h4 class="popover-title">Filter Rules</h4>
+                                <a href="{{ route('admin.pricing.index') }}" class="popover-reset">Reset</a>
                             </div>
 
                             <form method="GET" action="{{ route('admin.pricing.index') }}" class="space-y-3 text-sm">
@@ -248,19 +248,18 @@
                                 <div x-show="openMenu" 
                                      @click.outside="openMenu = false" 
                                      x-cloak 
-                                     class="absolute right-0 mt-1 w-40 bg-white rounded-xl border border-[#E5E5EA] shadow-lg p-1.5 z-50 space-y-1 text-left">
+                                     class="menu-panel absolute right-0 mt-2">
                                     
                                     <!-- Edit Rule -->
                                     <a href="{{ route('admin.pricing.edit', $rule) }}" 
-                                       class="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-lg transition-colors">
-                                        <img src="{{ asset('icons/icons8-edit-60.png') }}" alt="Edit" class="w-4.5 h-4.5 object-contain inline-block shrink-0">
+                                       class="menu-item">
                                         <span>Edit Rule</span>
                                     </a>
 
                                     <!-- Delete Rule -->
                                     <button type="button"
                                             @click="openMenu = false; deleteModal = true; deleteUrl = '{{ route('admin.pricing.destroy', $rule) }}'; ruleName = '{{ addslashes($rule->name) }}'; triggeredCount = {{ $rule->adjustments_count }};"
-                                            class="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold text-[#780000] hover:bg-[#FEF2F2] rounded-lg transition-colors text-left cursor-pointer">
+                                            class="menu-item menu-item-danger">
                                         <span>Delete Rule</span>
                                     </button>
                                 </div>
@@ -294,9 +293,9 @@
     <!-- Soft Delete Confirmation Modal -->
     <div x-show="deleteModal" 
          x-cloak 
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+         class="fixed inset-0 z-50 flex justify-end bg-black/40"
          @keydown.escape.window="deleteModal = false">
-        <div class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl border border-[#E5E5EA]"
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-xl border-l border-[#E5E5EA]"
              @click.away="deleteModal = false">
             <div class="space-y-1.5">
                 <h3 class="text-lg font-bold text-[#1D1D1F]">Delete Pricing Rule?</h3>
@@ -304,7 +303,7 @@
                     Are you sure you want to remove rule <strong class="text-[#1D1D1F]" x-text="ruleName"></strong>?
                 </p>
                 <template x-if="triggeredCount > 0">
-                    <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm mt-2">
+                    <div class="banner banner-warning mt-2">
                         <strong>Notice:</strong> This rule has affected <span x-text="triggeredCount"></span> booking(s). It will be soft-deleted to preserve all past customer receipts and audit histories.
                     </div>
                 </template>

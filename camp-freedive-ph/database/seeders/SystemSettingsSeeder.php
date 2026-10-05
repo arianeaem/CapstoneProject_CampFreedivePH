@@ -280,5 +280,7 @@ class SystemSettingsSeeder extends Seeder
                 ]
             );
         }
+
+        app(\App\Services\SystemSettingService::class)->clearCache();
     }
 }

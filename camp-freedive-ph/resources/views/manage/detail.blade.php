@@ -59,21 +59,6 @@
                 </div>
             </div>
 
-            <!-- Security PIN -->
-            <div class="bg-[#1D1D1F] border border-[#2C2C2E] rounded-xl p-3.5 sm:p-4 flex sm:flex-col items-center sm:items-end justify-between gap-2.5 shrink-0 shadow-sm">
-                <div class="text-left sm:text-right">
-                    <span class="text-xs font-bold text-[#00C3D0] uppercase tracking-wider block">Security PIN</span>
-                    <span class="text-lg sm:text-xl font-mono font-black text-white tracking-widest mt-0.5 block">{{ $booking->pin }}</span>
-                </div>
-                <button type="button" 
-                        @click="navigator.clipboard.writeText('{{ $booking->pin }}'); copiedPin = true; setTimeout(() => copiedPin = false, 2000)"
-                        aria-label="Copy Security PIN"
-                        class="min-h-[44px] px-3.5 py-2 rounded-xl bg-white hover:bg-[#F2F2F7] active:bg-[#E5E5EA] text-xs font-bold text-[#1D1D1F] shadow-xs flex items-center gap-1.5 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#1D1D1F]">
-                    <img src="{{ asset('icons/icons8-copy-60.png') }}" class="w-4 h-4 object-contain shrink-0" alt="" aria-hidden="true" x-show="!copiedPin">
-                    <svg x-show="copiedPin" x-cloak class="w-4 h-4 text-[#065F46] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                    <span x-text="copiedPin ? 'Copied' : 'Copy PIN'"></span>
-                </button>
-            </div>
         </div>
 
         <!-- Booking Key Information -->
@@ -213,7 +198,7 @@
                 </div>
 
                 @if($booking->pickup_option === 'carpool')
-                <div class="p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5] text-xs sm:text-sm">
+                <div class="banner banner-note">
                     <strong class="font-bold text-[#780000] block mb-1">Carpool Arrival & Grace Period Notice:</strong>
                     <p class="text-[#4A4A4F] leading-relaxed">
                         Please arrive at your pickup location (<strong>{{ $booking->pickup_location }}</strong>) before the designated departure time. A 30-minute grace period applies before the van departs; please arrive promptly to avoid delays for other participants.
@@ -385,9 +370,8 @@
 
                 <!-- Marine Safety Advisory Notice -->
                 @if($policy['is_force_majeure'])
-                <div class="p-4 rounded-xl bg-sky-50 text-sky-950 space-y-1.5 shadow-2xs">
+                <div class="banner banner-error space-y-1.5">
                     <div class="font-bold text-sm text-sky-950 flex items-center gap-1.5">
-                        <svg class="w-4 h-4 text-sky-700 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                         <span>Advisory: Weather Force Majeure Active</span>
                     </div>
                     <p class="text-sm text-sky-900 leading-relaxed">
@@ -437,21 +421,21 @@
          aria-modal="true" 
          aria-labelledby="reschedule-modal-title" 
          @keydown.escape.window="openRescheduleModal = false" 
-         class="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-[#E5E5EA]" 
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border-l border-[#E5E5EA]" 
              @click.outside="openRescheduleModal = false"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             <div class="flex items-center justify-between pb-4">
                 <div>
                     <h3 id="reschedule-modal-title" class="text-lg font-bold text-[#1D1D1F]">Reschedule Dive Dates</h3>
@@ -474,24 +458,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label for="reschedule-start-date" class="block font-bold text-[#1D1D1F] mb-2">New Start Date <span class="text-[#D70015]">*</span></label>
-                        <input type="date" 
-                               id="reschedule-start-date"
-                               name="requested_start_date" 
-                               x-model="rescheduleStartDate" 
-                               @change="onRescheduleDateChange()"
-                               min="{{ date('Y-m-d', strtotime('+3 days')) }}"
-                               required
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:outline-none text-sm font-medium text-[#1D1D1F] bg-white transition-colors">
+                        <x-date-picker id="reschedule-start-date" name="requested_start_date" model="rescheduleStartDate" x-on:change="onRescheduleDateChange()" :min="date('Y-m-d', strtotime('+3 days'))" required />
                     </div>
                     <div>
                         <label for="reschedule-end-date" class="block font-bold text-[#6E6E73] mb-1">New End Date (Auto)</label>
-                        <input type="date" 
-                               id="reschedule-end-date"
-                               name="requested_end_date" 
-                               x-model="rescheduleEndDate" 
-                               readonly
-                               required
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5EA] bg-[#F2F2F7] text-sm font-medium text-[#6E6E73]">
+                        <x-date-picker id="reschedule-end-date" name="requested_end_date" model="rescheduleEndDate" readonly required />
                     </div>
                 </div>
 
@@ -501,22 +472,17 @@
                     <span class="font-medium text-[#1D1D1F]">Checking sea safety &amp; weather conditions for selected dates...</span>
                 </div>
 
-                <!-- Weather Forecast Check -->
-                <div x-show="rescheduleForecast && !weatherLoading" x-cloak role="status" aria-live="polite" class="p-3.5 rounded-xl text-sm space-y-1.5"
-                     :style="'background-color: ' + (rescheduleForecast?.bg_color || '#F2F2F7') + '; color: ' + (rescheduleForecast?.text_color || '#1D1D1F')">
-                    <div class="font-bold flex items-center justify-between">
-                        <span x-text="'Safety: ' + (rescheduleForecast?.title || '')"></span>
-                        <span x-text="rescheduleForecast?.is_bookable ? 'Safe' : 'Storm Warning'"></span>
-                    </div>
-                    <p class="text-sm pt-0.5" x-text="rescheduleForecast?.description"></p>
-                </div>
+                <!-- Weather Forecast Check (shared design: components/dive-safety/live-evaluation) -->
+                <template x-if="rescheduleForecast && rescheduleForecast.day1 && !weatherLoading">
+                    <x-dive-safety.live-evaluation forecast="rescheduleForecast" />
+                </template>
 
                 <div>
                     <label for="reschedule-reason" class="block font-bold text-[#1D1D1F] mb-2">Reason for Rescheduling (Optional)</label>
                     <textarea id="reschedule-reason" name="reason" rows="2" placeholder="e.g. Work schedule change" class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:outline-none text-sm text-[#1D1D1F] bg-white transition-colors"></textarea>
                 </div>
 
-                <div class="p-3.5 bg-[#FFFBEB] rounded-xl text-sm text-[#92400E]">
+                <div class="banner banner-warning">
                     <strong>Note:</strong> On submission, your request status is set to <strong>Pending Approval</strong>. The camp will review coach availability and notify you via email.
                 </div>
 
@@ -543,21 +509,21 @@
          aria-modal="true" 
          aria-labelledby="cancel-modal-title" 
          @keydown.escape.window="openCancelModal = false" 
-         class="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border border-[#E5E5EA]" 
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border-l border-[#E5E5EA]" 
              @click.outside="openCancelModal = false"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             <div class="flex items-center justify-between pb-4">
                 <div>
                     <h3 id="cancel-modal-title" class="text-lg font-bold text-[#1D1D1F]">Request Booking Cancellation</h3>

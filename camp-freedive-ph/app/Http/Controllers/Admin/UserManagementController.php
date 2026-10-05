@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Illuminate\Support\Facades\Gate;
+use App\Http\Requests\Admin\Users\UpdateUserRequest;
+use App\Http\Requests\Admin\Users\StoreUserRequest;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\UserAccountService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +20,35 @@ use Illuminate\View\View;
 
 class UserManagementController extends Controller
 {
+    public function __construct(protected UserAccountService $accounts)
+    {
+    }
+
+    /**
+     * Stop a coach from being deactivated/removed while they still have upcoming batches.
+     * Returns a redirect with the batches to reassign, or null when it is safe to continue.
+     */
+    protected function blockIfCoachHasUpcomingWork(User $user, string $action): ?RedirectResponse
+    {
+        $commitments = $this->accounts->upcomingCoachCommitments($user);
+        if ($commitments->isEmpty()) {
+            return null;
+        }
+
+        return back()
+            ->with('error', "{$user->name} can't be {$action} yet because they still have upcoming batches. Reassign their students to other coaches first: " . $this->accounts->describeCommitments($commitments) . '.')
+            ->with('blocked_coach', [
+                'name' => $user->name,
+                'action' => $action,
+                'batches' => $commitments->map(fn ($c) => [
+                    'batch_number' => $c['batch']->batch_number,
+                    'date' => $c['batch']->formatted_date_range,
+                    'students' => $c['students'],
+                    'team_only' => $c['team_only'],
+                ])->all(),
+            ]);
+    }
+
     /**
      * Display a listing of internal users.
      */
@@ -40,18 +73,20 @@ class UserManagementController extends Controller
             $query->where('role', $request->input('role'));
         }
 
-        // Status filter
+        // Status filter (removed/archived accounts only show when explicitly filtered)
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
+        } else {
+            $query->where('status', '!=', 'archived');
         }
 
         $perPage = max(5, min(100, (int) $request->input('per_page', 10)));
         $users = $query->paginate($perPage)->withQueryString();
 
         $stats = [
-            'total' => User::count(),
-            'coaches' => User::where('role', 'coach')->count(),
-            'admins' => User::whereIn('role', ['admin', 'owner'])->count(),
+            'total' => User::where('status', '!=', 'archived')->count(),
+            'coaches' => User::where('role', 'coach')->where('status', '!=', 'archived')->count(),
+            'admins' => User::whereIn('role', ['admin', 'owner'])->where('status', '!=', 'archived')->count(),
             'active' => User::where('status', 'active')->count(),
         ];
 
@@ -62,42 +97,12 @@ class UserManagementController extends Controller
     /**
      * Provision and store a new internal user account.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StoreUserRequest $request): RedirectResponse
     {
         $currentUser = Auth::user();
+        $validated = $request->validated();
 
-        // Only Owner can create Admin accounts; Admin can only create Coach accounts
-        $allowedRoles = $currentUser->isOwner() ? ['admin', 'coach'] : ['coach'];
-
-        $validated = $request->validate([
-            'first_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'middle_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'no_middle_name' => ['nullable', 'boolean'],
-            'last_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'suffix' => ['nullable', 'string', 'max:20'],
-            'name' => ['nullable', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'phone' => ['required', 'string', 'max:50'],
-            'role' => ['required', Rule::in($allowedRoles)],
-            'temp_password' => ['nullable', 'string', 'min:8'],
-        ], [
-            'first_name.regex' => 'First name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'middle_name.regex' => 'Middle name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'last_name.regex' => 'Last name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-        ]);
-
-        $first = trim($validated['first_name'] ?? '');
-        $middle = (!empty($validated['no_middle_name'])) ? '' : trim($validated['middle_name'] ?? '');
-        $last = trim($validated['last_name'] ?? '');
-        $suffix = trim($validated['suffix'] ?? '');
-        if ($suffix === 'None' || $suffix === 'none') {
-            $suffix = '';
-        }
-
-        $fullName = implode(' ', array_filter([$first, $middle, $last, $suffix]));
-        if (empty($fullName)) {
-            $fullName = $validated['name'] ?? '';
-        }
+        $fullName = $request->fullName() ?: ($validated['name'] ?? '');
         if (empty($fullName)) {
             return back()->withErrors(['first_name' => 'First and Last name are required.'])->withInput();
         }
@@ -141,12 +146,8 @@ class UserManagementController extends Controller
      */
     public function edit(User $user): View
     {
+        Gate::authorize('update', $user);
         $currentUser = Auth::user();
-
-        // Admins cannot edit other Admins or the Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only manage Freediving Coach profiles.');
-        }
 
         return view('admin.users.edit', compact('user', 'currentUser'));
     }
@@ -154,47 +155,16 @@ class UserManagementController extends Controller
     /**
      * Update an internal user's profile details.
      */
-    public function update(Request $request, User $user): RedirectResponse
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
         $currentUser = Auth::user();
+        $validated = $request->validated();
 
-        // Admins cannot update other Admins or Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only manage Freediving Coach profiles.');
+        if ($user->isActive() && $validated['status'] === 'inactive' && ($blocked = $this->blockIfCoachHasUpcomingWork($user, 'deactivated'))) {
+            return $blocked->withInput();
         }
 
-        $allowedRoles = $currentUser->isOwner() ? ['owner', 'admin', 'coach'] : ['coach'];
-
-        $validated = $request->validate([
-            'first_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'middle_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'no_middle_name' => ['nullable', 'boolean'],
-            'last_name' => ['nullable', 'string', 'max:120', 'regex:/^[\p{L}\s\.\'\-]+$/u'],
-            'suffix' => ['nullable', 'string', 'max:20'],
-            'name' => ['nullable', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'phone' => ['required', 'string', 'max:50'],
-            'role' => ['required', Rule::in($allowedRoles)],
-            'status' => ['required', 'in:active,inactive'],
-            'new_password' => ['nullable', 'string', 'min:8'],
-        ], [
-            'first_name.regex' => 'First name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'middle_name.regex' => 'Middle name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-            'last_name.regex' => 'Last name may only contain letters (including Ñ/ñ), spaces, hyphens, and periods.',
-        ]);
-
-        $first = trim($validated['first_name'] ?? '');
-        $middle = (!empty($validated['no_middle_name'])) ? '' : trim($validated['middle_name'] ?? '');
-        $last = trim($validated['last_name'] ?? '');
-        $suffix = trim($validated['suffix'] ?? '');
-        if ($suffix === 'None' || $suffix === 'none') {
-            $suffix = '';
-        }
-
-        $fullName = implode(' ', array_filter([$first, $middle, $last, $suffix]));
-        if (empty($fullName)) {
-            $fullName = $validated['name'] ?? $user->name;
-        }
+        $fullName = $request->fullName() ?: ($validated['name'] ?? $user->name);
 
         $changes = [];
         if ($user->name !== $fullName) $changes[] = "Name: {$user->name} → {$fullName}";
@@ -261,27 +231,33 @@ class UserManagementController extends Controller
             return back()->with('error', 'You cannot deactivate your own account.');
         }
 
-        // Admins cannot toggle status of other Admins or Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only toggle status of Coach accounts.');
+        Gate::authorize('changeStatus', $user);
+
+        if ($user->isActive() && ($blocked = $this->blockIfCoachHasUpcomingWork($user, 'deactivated'))) {
+            return $blocked;
         }
 
+        $wasArchived = $user->isArchived();
         $newStatus = $user->isActive() ? 'inactive' : 'active';
         $user->update(['status' => $newStatus]);
 
         AuditLogger::log(
-            'USER_STATUS_TOGGLED',
-            "Status changed to {$newStatus} for user: {$user->email} by {$currentUser->name}",
+            $wasArchived ? 'USER_RESTORED' : 'USER_STATUS_TOGGLED',
+            ($wasArchived ? 'Removed account restored' : "Status changed to {$newStatus}") . " for user: {$user->email} by {$currentUser->name}",
             $user,
             $currentUser->name,
             $request
         );
 
-        return back()->with('success', "Account {$user->name} is now {$newStatus}.");
+        return back()->with('success', $wasArchived
+            ? "Account {$user->name} has been restored and is active again."
+            : "Account {$user->name} is now {$newStatus}.");
     }
 
     /**
-     * Delete an internal user account (Owner or Admin for Coaches).
+     * "Remove" an internal user account (Owner, or Admin for Coaches).
+     * Nothing is deleted: the account is archived so all history stays, login is blocked,
+     * and the person is emailed. Coaches with upcoming batches must be reassigned first.
      */
     public function destroy(Request $request, User $user): RedirectResponse
     {
@@ -292,30 +268,27 @@ class UserManagementController extends Controller
             return back()->with('error', 'You cannot delete your own account.');
         }
 
-        // Admins cannot delete other Admins or Owner
-        if (!$currentUser->isOwner() && ($user->isAdmin() || $user->isOwner())) {
-            abort(403, 'Admins can only delete Freediving Coach accounts.');
+        Gate::authorize('delete', $user);
+
+        if ($user->isArchived()) {
+            return back()->with('error', "{$user->name}'s account is already removed.");
         }
 
-        $userEmail = $user->email;
-        $userName = $user->name;
-        $userRole = $user->role;
+        if ($blocked = $this->blockIfCoachHasUpcomingWork($user, 'removed')) {
+            return $blocked;
+        }
 
-        DB::transaction(function () use ($user) {
-            // Delete associated Coach profile record if exists
-            \App\Models\Coach::where('user_id', $user->id)->delete();
-            $user->delete();
-        });
+        $this->accounts->archive($user, $currentUser);
 
         AuditLogger::log(
-            'USER_DELETED',
-            "User account permanently deleted: {$userEmail} ({$userName}, Role: {$userRole}) by {$currentUser->name}",
-            null,
+            'USER_REMOVED',
+            "User account removed (archived, data kept): {$user->email} ({$user->name}, Role: {$user->role}) by {$currentUser->name}",
+            $user,
             $currentUser->name,
             $request
         );
 
         return redirect()->route('admin.users.index')
-            ->with('success', "Account for {$userName} ({$userEmail}) has been deleted successfully.");
+            ->with('success', "{$user->name}'s account has been removed. Their records are kept and they have been notified by email.");
     }
 }

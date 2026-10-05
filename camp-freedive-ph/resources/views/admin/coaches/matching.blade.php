@@ -230,8 +230,8 @@
     @endif
 
     <!-- Share to Coaches Modal -->
-    <div x-show="shareModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="shareModalOpen = false">
+    <div x-show="shareModalOpen" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="shareModalOpen = false">
             <div class="flex items-center justify-between">
                 <h3 class="text-lg font-bold text-[#1D1D1F]">Share to Coach Portal</h3>
                 <button type="button" @click="shareModalOpen = false" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F] cursor-pointer" aria-label="Close modal">✕</button>
@@ -257,8 +257,8 @@
     </div>
 
     <!-- Unassign Coach Modal -->
-    <div x-show="unassignModalOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="unassignModalOpen = false">
+    <div x-show="unassignModalOpen" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="unassignModalOpen = false">
             <div class="flex items-center justify-between">
                 <h3 class="text-lg font-bold text-[#1D1D1F]">Remove Coach Assignment</h3>
                 <button type="button" @click="unassignModalOpen = false" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F] cursor-pointer" aria-label="Close modal">✕</button>

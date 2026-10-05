@@ -96,10 +96,10 @@
                          x-transition:leave="transition ease-in duration-100 transform"
                          x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                          x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                         class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                         class="popover-panel absolute right-0 mt-2 space-y-3">
                         <div class="flex items-center justify-between">
-                            <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Coaches</h4>
-                            <a href="{{ route('admin.coaches.index') }}" class="text-sm text-[#780000] hover:underline font-bold">Reset</a>
+                            <h4 class="popover-title">Filter Coaches</h4>
+                            <a href="{{ route('admin.coaches.index') }}" class="popover-reset">Reset</a>
                         </div>
 
                         <form action="{{ route('admin.coaches.index') }}" method="GET" class="space-y-3 text-sm">
@@ -112,10 +112,7 @@
 
                             <div>
                                 <label class="block font-bold text-[#6E6E73] text-sm mb-1">Available on Specific Date</label>
-                                <input type="date" 
-                                       name="available_on" 
-                                       value="{{ request('available_on') }}" 
-                                       class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
+                                <x-date-picker name="available_on" :value="request('available_on')" placeholder="Any date" />
                             </div>
 
                             <div class="pt-2 border-t border-[#E5E5EA] flex justify-end">

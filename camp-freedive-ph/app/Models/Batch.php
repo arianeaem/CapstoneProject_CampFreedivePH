@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -166,15 +167,21 @@ class Batch extends Model
      */
     public function getAssignedCoachesAttribute(): Collection
     {
-        $fromAssignments = $this->activeParticipantAssignments()
-            ->with('coach')
-            ->get()
+        // Reuse eager-loaded assignments (list pages) instead of querying per batch
+        $assignments = $this->relationLoaded('activeParticipantAssignments')
+            ? $this->activeParticipantAssignments->loadMissing('coach')
+            : $this->activeParticipantAssignments()->with('coach')->get();
+
+        $fromAssignments = $assignments
             ->pluck('coach')
             ->unique('id')
             ->filter();
 
         // Also detect coaches assigned for this batch date when participants are 0
         $startDateStr = $this->start_date ? $this->start_date->format('Y-m-d') : null;
+        if ($startDateStr && $this->preloadedAvailabilityCoaches !== null) {
+            return $fromAssignments->merge($this->preloadedAvailabilityCoaches)->unique('id')->values();
+        }
         if ($startDateStr) {
             $batchNum = $this->batch_number;
             $batchCode = $this->batch_code;
@@ -193,6 +200,45 @@ class Batch extends Model
         }
 
         return $fromAssignments;
+    }
+
+    /** Set by preloadAssignedCoaches() so list pages avoid one availability query per batch. */
+    protected ?Collection $preloadedAvailabilityCoaches = null;
+
+    /**
+     * Load the availability-based coaches for many batches with one query
+     * (same matching rules as getAssignedCoachesAttribute()).
+     */
+    public static function preloadAssignedCoaches(iterable $batches): void
+    {
+        $batches = collect($batches)->filter(fn ($b) => $b->start_date);
+        if ($batches->isEmpty()) {
+            return;
+        }
+
+        $dates = $batches->map(fn ($b) => $b->start_date->format('Y-m-d'));
+        $availabilities = CoachAvailability::query()
+            ->where('status', 'assigned')
+            ->whereDate('date', '>=', $dates->min())
+            ->whereDate('date', '<=', $dates->max())
+            ->whereHas('coach', fn ($q) => $q->where('role', 'coach'))
+            ->with('coach')
+            ->get();
+
+        foreach ($batches as $batch) {
+            $dateStr = $batch->start_date->format('Y-m-d');
+            $num = $batch->batch_number;
+            $code = $batch->batch_code;
+
+            $batch->preloadedAvailabilityCoaches = $availabilities
+                ->filter(fn ($a) => $a->date && $a->date->format('Y-m-d') === $dateStr)
+                ->filter(fn ($a) => (!$num && !$code)
+                    || ($num && str_contains((string) $a->notes, $num))
+                    || ($code && str_contains((string) $a->notes, $code)))
+                ->pluck('coach')
+                ->unique('id')
+                ->values();
+        }
     }
 
     public const MAX_CAPACITY = 45;
@@ -225,13 +271,39 @@ class Batch extends Model
     /**
      * Total participants in active confirmed bookings.
      */
+    public const INACTIVE_BOOKING_STATUSES = ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'];
+
     public function getTotalParticipantsCountAttribute(): int
     {
+        // 1. Precomputed by scopeWithActiveParticipantsTotal() (one query for a whole list)
+        if (array_key_exists('active_participants_total', $this->attributes)) {
+            return (int) $this->attributes['active_participants_total'];
+        }
+
+        // 2. Eager-loaded bookings.participants (avoids one query per batch on list pages)
+        if ($this->relationLoaded('bookings') && $this->bookings->every(fn ($b) => $b->relationLoaded('participants'))) {
+            return (int) $this->bookings
+                ->whereNotIn('status', self::INACTIVE_BOOKING_STATUSES)
+                ->sum(fn ($b) => $b->participants->count());
+        }
+
         return (int) $this->bookings()
-            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'])
+            ->whereNotIn('status', self::INACTIVE_BOOKING_STATUSES)
             ->withCount('participants')
             ->get()
             ->sum('participants_count');
+    }
+
+    /**
+     * Adds an 'active_participants_total' column so total_participants_count needs no extra query.
+     */
+    public function scopeWithActiveParticipantsTotal(Builder $query): Builder
+    {
+        return $query->addSelect(['active_participants_total' => BookingParticipant::query()
+            ->selectRaw('count(*)')
+            ->join('bookings', 'bookings.id', '=', 'booking_participants.booking_id')
+            ->whereColumn('bookings.batch_id', 'batches.id')
+            ->whereNotIn('bookings.status', self::INACTIVE_BOOKING_STATUSES)]);
     }
 
     /**

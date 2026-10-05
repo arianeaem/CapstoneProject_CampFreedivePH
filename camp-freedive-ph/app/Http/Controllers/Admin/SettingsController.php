@@ -10,6 +10,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Settings\UpdateProgramsRequest;
+use App\Http\Requests\Admin\Settings\UpdateDepositsRequest;
+use App\Http\Requests\Admin\Settings\UpdateAddonsRequest;
+use App\Http\Requests\Admin\Settings\UpdateOperationsRequest;
+use App\Http\Requests\Admin\Settings\UpdateCancellationPolicyRequest;
 
 class SettingsController extends Controller
 {
@@ -60,21 +65,9 @@ class SettingsController extends Controller
     /**
      * Update Programs, Class Rates, Inclusions & Exclusions.
      */
-    public function updatePrograms(Request $request): RedirectResponse
+    public function updatePrograms(UpdateProgramsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'base_price_discovery' => 'required|numeric|min:0|max:100000',
-            'base_price_fundive_cert' => 'required|numeric|min:0|max:100000',
-            'base_price_fundive_noncert' => 'required|numeric|min:0|max:100000',
-            'base_price_refinement' => 'required|numeric|min:0|max:100000',
-            'dynamic_pricing_cap_percent' => 'required|numeric|min:0|max:100',
-            'discovery_inclusions' => 'nullable|string',
-            'discovery_exclusions' => 'nullable|string',
-            'fundive_inclusions' => 'nullable|string',
-            'fundive_exclusions' => 'nullable|string',
-            'refinement_inclusions' => 'nullable|string',
-            'refinement_exclusions' => 'nullable|string',
-        ]);
+        $validated = $request->validated();
 
         $parseLines = fn(?string $text) => array_values(array_filter(
             array_map('trim', explode("\n", $text ?? '')),
@@ -117,12 +110,9 @@ class SettingsController extends Controller
     /**
      * Update Reservation Downpayment Deposits.
      */
-    public function updateDeposits(Request $request): RedirectResponse
+    public function updateDeposits(UpdateDepositsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'downpayment_carpool' => 'required|numeric|min:0|max:100000',
-            'downpayment_own_transpo' => 'required|numeric|min:0|max:100000',
-        ]);
+        $validated = $request->validated();
 
         $settingsToUpdate = [
             'program_pricing.downpayment_carpool' => number_format((float) $validated['downpayment_carpool'], 2, '.', ''),
@@ -156,19 +146,9 @@ class SettingsController extends Controller
     /**
      * Update Carpool, Boat Dive, LGU Fees & Pickup Locations.
      */
-    public function updateAddons(Request $request): RedirectResponse
+    public function updateAddons(UpdateAddonsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'carpool_fee_per_head' => 'required|numeric|min:0|max:100000',
-            'boat_dive_fee_per_head' => 'required|numeric|min:0|max:100000',
-            'lgu_tourism_pass_fee' => 'required|numeric|min:0|max:100000',
-            'environmental_fee' => 'required|numeric|min:0|max:100000',
-            'pickup_locations' => 'nullable|array',
-            'pickup_locations.*.id' => 'required|string',
-            'pickup_locations.*.name' => 'required|string',
-            'pickup_locations.*.time' => 'required|string',
-            'pickup_locations.*.address' => 'nullable|string',
-        ]);
+        $validated = $request->validated();
 
         $locations = array_values(array_filter($validated['pickup_locations'] ?? [], fn($loc) => !empty(trim($loc['name'] ?? ''))));
 
@@ -203,13 +183,9 @@ class SettingsController extends Controller
     /**
      * Update Camp Operations & Ratios.
      */
-    public function updateOperations(Request $request): RedirectResponse
+    public function updateOperations(UpdateOperationsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'max_batch_capacity' => 'required|integer|min:5|max:200',
-            'coach_student_ratio' => 'required|integer|min:1|max:20',
-            'min_coaches_per_batch' => 'required|integer|min:1|max:10',
-        ]);
+        $validated = $request->validated();
 
         $settingsToUpdate = [
             'camp_operations.max_batch_capacity' => (int) $validated['max_batch_capacity'],
@@ -239,12 +215,9 @@ class SettingsController extends Controller
     /**
      * Update Booking & Cancellation Policies.
      */
-    public function updateCancellation(Request $request): RedirectResponse
+    public function updateCancellation(UpdateCancellationPolicyRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'full_refund_threshold_days' => 'required|integer|min:1|max:90',
-            'reschedule_only_threshold_days' => 'required|integer|min:0|max:90',
-        ]);
+        $validated = $request->validated();
 
         if ($validated['full_refund_threshold_days'] <= $validated['reschedule_only_threshold_days']) {
             return back()

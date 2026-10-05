@@ -44,13 +44,11 @@ class BatchWeatherCancellationMail extends Mailable implements ShouldQueue
      */
     public function envelope(): Envelope
     {
-        $startDateStr = $this->booking->start_date ? $this->booking->start_date->format('M d, Y') : '';
-        $endDateStr = $this->booking->end_date ? $this->booking->end_date->format('M d, Y') : '';
-        $dateRange = $startDateStr . ($endDateStr ? " - {$endDateStr}" : '');
+        $date = $this->booking->start_date ? $this->booking->start_date->format('M d') : 'upcoming';
 
         return new Envelope(
             from: new Address(config('mail.from.address', 'gustoariane@gmail.com'), config('mail.from.name', 'Camp FreedivePH')),
-            subject: "Camp Cancellation Notice ({$dateRange}) - Booking #{$this->booking->booking_number} | Camp FreedivePH",
+            subject: "Your {$date} dive has been cancelled for your safety - Booking #{$this->booking->booking_number}",
         );
     }
 
@@ -61,7 +59,16 @@ class BatchWeatherCancellationMail extends Mailable implements ShouldQueue
     {
         return new Content(
             view: 'emails.batch_weather_cancellation',
+            with: ['refundAmount' => $this->refundAmount()],
         );
+    }
+
+    /**
+     * Everything the guest has paid (all completed payments are refunded 100%).
+     */
+    public function refundAmount(): float
+    {
+        return (float) $this->booking->payments()->where('status', 'completed')->sum('amount');
     }
 
     /**

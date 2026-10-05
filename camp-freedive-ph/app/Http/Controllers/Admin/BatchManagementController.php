@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
 use App\Models\Booking;
+use App\Models\User;
 use App\Services\BatchManagementService;
 use App\Services\DemandForecastService;
 use Carbon\Carbon;
@@ -13,6 +14,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Batches\StoreBatchRequest;
+use App\Http\Requests\Admin\Batches\AssignParticipantRequest;
+use App\Http\Requests\Admin\Batches\UpdateBatchStatusRequest;
+use App\Http\Requests\Admin\Batches\MoveBookingRequest;
 
 /**
  * Administrative Batch Management & Logistics Controller.
@@ -57,15 +62,6 @@ class BatchManagementController extends Controller
             $query->whereDate('start_date', '<=', $request->input('date_to'));
         }
 
-        // Filter: Search Batch Number or Notes
-        if ($request->filled('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('batch_code', 'like', "%{$search}%")
-                  ->orWhere('name', 'like', "%{$search}%")
-                  ->orWhere('notes', 'like', "%{$search}%");
-            });
-        }
 
         // Sort options
         $sort = $request->input('sort', 'date_asc');
@@ -80,6 +76,30 @@ class BatchManagementController extends Controller
         };
 
         $batches = $query->get();
+        Batch::preloadAssignedCoaches($batches);
+
+        // Search: batch number / code / name / notes, or an assigned coach's name (case-insensitive)
+        if ($request->filled('search')) {
+            $needle = mb_strtolower(trim($request->input('search')));
+            $batches = $batches->filter(function ($b) use ($needle) {
+                $haystacks = array_merge(
+                    [$b->batch_number, $b->batch_code, $b->name, $b->notes],
+                    $b->assigned_coaches->pluck('name')->all()
+                );
+                foreach ($haystacks as $h) {
+                    if ($h !== null && str_contains(mb_strtolower((string) $h), $needle)) {
+                        return true;
+                    }
+                }
+                return false;
+            })->values();
+        }
+
+        // Filter: batches a specific coach is assigned to
+        if ($request->filled('coach')) {
+            $coachId = (int) $request->input('coach');
+            $batches = $batches->filter(fn ($b) => $b->assigned_coaches->pluck('id')->contains($coachId))->values();
+        }
 
         // Staffing Status Filter (in-memory computed)
         if ($request->filled('staffing')) {
@@ -121,7 +141,13 @@ class BatchManagementController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
+        $coachOptions = User::where('role', 'coach')
+            ->where('status', '!=', 'archived')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
         return view('admin.batches.index', compact(
+            'coachOptions',
             'batches', 
             'attentionCount', 
             'unbatchedBookings', 
@@ -234,20 +260,9 @@ class BatchManagementController extends Controller
     /**
      * Store a newly created Batch.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StoreBatchRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'batch_number' => 'nullable|string|max:100',
-            'name' => 'nullable|string|max:255',
-            'batch_code' => 'nullable|string|max:100',
-            'start_date' => 'required|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date',
-            'risk_classification' => 'nullable|string|in:very_safe,safe,moderate,high_risk,critical_risk',
-            'capacity_note' => 'nullable|string|max:255',
-            'notes' => 'nullable|string|max:1000',
-            'booking_ids' => 'nullable|array',
-            'booking_ids.*' => 'exists:bookings,id',
-        ]);
+        $validated = $request->validated();
 
         $batchRaw = $validated['batch_number'] ?? $request->input('batch_number_digits') ?? '';
         if (preg_match('/(\d+)/', (string) $batchRaw, $m)) {
@@ -323,12 +338,9 @@ class BatchManagementController extends Controller
     /**
      * Quick on-site pod assignment for a participant using the batch's pre-trip assigned coaches.
      */
-    public function assignParticipant(Request $request, Batch $batch): RedirectResponse
+    public function assignParticipant(AssignParticipantRequest $request, Batch $batch): RedirectResponse
     {
-        $validated = $request->validate([
-            'participant_id' => 'required|exists:booking_participants,id',
-            'coach_id' => 'nullable|exists:users,id',
-        ]);
+        $validated = $request->validated();
 
         $participant = \App\Models\BookingParticipant::findOrFail($validated['participant_id']);
 
@@ -398,12 +410,9 @@ class BatchManagementController extends Controller
     /**
      * Update whole-batch status with cascade behavior.
      */
-    public function updateStatus(Request $request, Batch $batch): RedirectResponse
+    public function updateStatus(UpdateBatchStatusRequest $request, Batch $batch): RedirectResponse
     {
-        $validated = $request->validate([
-            'status' => 'required|string|in:confirmed,completed,rescheduled,cancelled_by_camp',
-            'note' => 'nullable|string|max:1000',
-        ]);
+        $validated = $request->validated();
 
         try {
             $this->batchService->updateStatus(
@@ -429,13 +438,9 @@ class BatchManagementController extends Controller
     /**
      * Move an individual booking from this batch to another batch.
      */
-    public function moveBooking(Request $request, Batch $batch): RedirectResponse
+    public function moveBooking(MoveBookingRequest $request, Batch $batch): RedirectResponse
     {
-        $validated = $request->validate([
-            'booking_id' => 'required|exists:bookings,id',
-            'target_batch_id' => 'nullable|exists:batches,id',
-            'reason' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         try {
             $booking = Booking::findOrFail($validated['booking_id']);

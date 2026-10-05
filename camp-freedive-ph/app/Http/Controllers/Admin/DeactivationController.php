@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use Illuminate\Support\Facades\Gate;
 use App\Http\Controllers\Controller;
 use App\Models\Coach;
 use App\Models\DeactivationRequest;
@@ -12,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Coaches\ProposeDeactivationRequest;
 
 class DeactivationController extends Controller
 {
@@ -43,13 +45,11 @@ class DeactivationController extends Controller
     /**
      * Propose coach deactivation (Admin or Owner).
      */
-    public function propose(Request $request, Coach $coach): RedirectResponse
+    public function propose(ProposeDeactivationRequest $request, Coach $coach): RedirectResponse
     {
         $currentUser = Auth::user();
 
-        $validated = $request->validate([
-            'reason' => ['nullable', 'string', 'max:500'],
-        ]);
+        $validated = $request->validated();
 
         try {
             $this->deactivationService->propose($coach, $currentUser, $validated['reason'] ?? null);
@@ -75,9 +75,7 @@ class DeactivationController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser->isOwner()) {
-            abort(403, 'Unauthorized. Only the Camp Owner can confirm coach deactivations.');
-        }
+        Gate::authorize('confirm', $deactivationRequest);
 
         $result = $this->deactivationService->confirm($deactivationRequest, $currentUser);
 
@@ -103,9 +101,7 @@ class DeactivationController extends Controller
     {
         $currentUser = Auth::user();
 
-        if (!$currentUser->isOwner()) {
-            abort(403, 'Unauthorized. Only the Camp Owner can dismiss deactivation requests.');
-        }
+        Gate::authorize('dismiss', $deactivationRequest);
 
         $this->deactivationService->dismiss($deactivationRequest, $currentUser);
 

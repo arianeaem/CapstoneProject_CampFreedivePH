@@ -82,5 +82,5 @@ jobs:
           app-name: 'camp-freedive-ph'
           slot-name: 'Production'
           package: .
-          startup-command: 'cp /home/site/wwwroot/default /etc/nginx/sites-available/default && service nginx reload'
+          startup-command: 'cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && service nginx reload && (php /home/site/wwwroot/artisan optimize || true)'
           

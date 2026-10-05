@@ -65,7 +65,9 @@ class BookingPolicyEngine
         $rescheduleOnlyDays = (int) ($this->settingService?->get('booking_cancellation.reschedule_only_threshold_days', 7) ?? 7);
 
         // Check if there is an active storm / typhoon warning for that dive date in Mabini, Batangas
-        $isForceMajeure = $this->weatherService->isStormSignalActive($booking->start_date);
+        $isForceMajeure = $this->weatherService->isStormSignalActive($booking->start_date)
+            // The batch's official safety assessment rating Critical Risk counts too (matches the guest email)
+            || ($booking->batch?->risk_classification === 'critical_risk' && $daysUntilDive >= 0);
 
         // Base policy tier calculation based on days until dive & force majeure
         if ($isForceMajeure) {

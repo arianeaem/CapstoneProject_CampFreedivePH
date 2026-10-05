@@ -11,6 +11,27 @@ class SystemSettingService
 {
     protected const CACHE_PREFIX = 'system_setting:';
     protected const ALL_CACHE_KEY = 'system_settings_all';
+    protected const MAP_CACHE_KEY = 'system_settings_map';
+
+    /**
+     * All settings as [key => ['value' => ..., 'type' => ...]], loaded once per request
+     * (the service is bound as scoped) from a single cache entry.
+     */
+    protected ?array $map = null;
+
+    protected function settingsMap(): array
+    {
+        return $this->map ??= Cache::rememberForever(self::MAP_CACHE_KEY, fn () => SystemSetting::query()
+            ->get(['key', 'value', 'type'])
+            ->mapWithKeys(fn ($s) => [$s->key => ['value' => $s->value, 'type' => $s->type]])
+            ->all());
+    }
+
+    protected function forgetMap(): void
+    {
+        $this->map = null;
+        Cache::forget(self::MAP_CACHE_KEY);
+    }
 
     /**
      * Get a setting value by key with typed casting and caching.
@@ -18,16 +39,7 @@ class SystemSettingService
     public function get(string $key, mixed $default = null): mixed
     {
         try {
-            $value = Cache::rememberForever(self::CACHE_PREFIX . $key, function () use ($key) {
-                $setting = SystemSetting::where('key', $key)->first();
-                if (! $setting) {
-                    return null;
-                }
-                return [
-                    'value' => $setting->value,
-                    'type' => $setting->type,
-                ];
-            });
+            $value = $this->settingsMap()[$key] ?? null;
 
             if ($value === null) {
                 return $default;
@@ -81,6 +93,7 @@ class SystemSettingService
 
         Cache::forget(self::CACHE_PREFIX . $key);
         Cache::forget(self::ALL_CACHE_KEY);
+        $this->forgetMap();
 
         if ($oldValue !== $setting->value) {
             AuditLogger::log(
@@ -118,6 +131,7 @@ class SystemSettingService
         }
 
         Cache::forget(self::ALL_CACHE_KEY);
+        $this->forgetMap();
 
         if (! empty($changes)) {
             AuditLogger::log(
@@ -138,5 +152,6 @@ class SystemSettingService
             Cache::forget(self::CACHE_PREFIX . $key);
         }
         Cache::forget(self::ALL_CACHE_KEY);
+        $this->forgetMap();
     }
 }

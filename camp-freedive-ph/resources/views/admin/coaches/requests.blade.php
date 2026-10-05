@@ -29,8 +29,8 @@
         @php 
             $batch = $groupRequests->first()->batch;
             $headcount = (int) $batch->total_participants_count;
-            $coachesNeeded = $headcount > 0 ? (int) ceil($headcount / 4) : 0;
-            $alreadyApproved = \App\Models\CoachRequest::where('batch_id', $batch->id)->where('status', 'approved')->count();
+            $coachesNeeded = $headcount > 0 ? (int) ceil($headcount / $coachRatio) : 0;
+            $alreadyApproved = (int) ($approvedByBatch[$batch->id] ?? 0);
         @endphp
         <div class="bg-white rounded-xl border border-[#E5E5EA] p-5 sm:p-6 shadow-2xs" x-data="{ selectedRequests: [] }">
             

@@ -29,13 +29,7 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $isOwner = ($user->role === 'owner');
-        
-        // Active view: 'operations' or 'executive' (Owners default to executive, admins always operations)
-        $defaultView = $isOwner ? 'executive' : 'operations';
-        $activeView = $request->input('view', $defaultView);
-        if (!$isOwner) {
-            $activeView = 'operations';
-        }
+
 
         $now = Carbon::now('Asia/Manila');
         $today = $now->copy()->startOfDay();
@@ -64,17 +58,25 @@ class DashboardController extends Controller
             ->get();
 
         $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
-        $understaffedBatches = Batch::where('start_date', '>=', $today)
+
+        // Upcoming active batches: loaded once, reused by the inbox, runway and occupancy stats
+        $allUpcomingBatches = Batch::where('start_date', '>=', $today)
             ->whereIn('status', ['confirmed', 'open'])
-            ->with(['bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants'), 'coachAssignments.coach'])
-            ->get()
+            ->orderBy('start_date', 'asc')
+            ->with([
+                'bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants'),
+                'coachAssignments.coach',
+                'activeParticipantAssignments.coach',
+                'riskAssessment',
+            ])
+            ->get();
+        Batch::preloadAssignedCoaches($allUpcomingBatches);
+
+        $understaffedBatches = $allUpcomingBatches
             ->filter(fn($b) => $b->is_coach_pending || ($b->total_participants_count > 0 && $b->assigned_coaches_count < ceil($b->total_participants_count / $coachRatio)))
             ->values();
 
-        $weatherAlerts = Batch::where('start_date', '>=', $today)
-            ->whereIn('status', ['confirmed', 'open'])
-            ->with('riskAssessment')
-            ->get()
+        $weatherAlerts = $allUpcomingBatches
             ->filter(fn($b) => in_array(strtolower($b->risk_classification ?? ''), ['high_risk', 'critical_risk']) || in_array(strtolower($b->riskAssessment?->overall_risk_rating ?? ''), ['high_risk', 'critical_risk']))
             ->values();
 
@@ -98,16 +100,7 @@ class DashboardController extends Controller
         // =========================================================================
         // 2. BATCH RUNWAY (NEXT 4 UPCOMING TRIPS)
         // =========================================================================
-        $upcomingBatches = Batch::where('start_date', '>=', $today)
-            ->whereIn('status', ['confirmed', 'open'])
-            ->orderBy('start_date', 'asc')
-            ->with([
-                'bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants'),
-                'coachAssignments.coach',
-                'riskAssessment'
-            ])
-            ->take(4)
-            ->get();
+        $upcomingBatches = $allUpcomingBatches->take(4)->values();
 
         // =========================================================================
         // 3. OPERATIONAL HEALTH STATS
@@ -118,11 +111,6 @@ class DashboardController extends Controller
               ->whereDate('start_date', '>=', $today->copy()->startOfMonth())
               ->whereDate('start_date', '<=', $today->copy()->endOfMonth());
         })->count();
-
-        $allUpcomingBatches = Batch::where('start_date', '>=', $today)
-            ->whereIn('status', ['confirmed', 'open'])
-            ->with(['bookings' => fn($q) => $q->where('status', '!=', 'pending_downpayment')->with('participants')])
-            ->get();
 
         $avgOccupancy = $allUpcomingBatches->count() > 0
             ? (int) round($allUpcomingBatches->avg(fn($b) => $b->occupancy_percentage ?? 0))
@@ -151,16 +139,19 @@ class DashboardController extends Controller
         // =========================================================================
         // 4. OWNER EXECUTIVE & FINANCIAL ANALYTICS
         // =========================================================================
-        $grossRevenue = (float) Payment::whereIn('status', ['completed', 'paid'])->sum('amount');
-        $downpaymentRevenue = (float) Payment::whereIn('status', ['completed', 'paid'])
-            ->where('payment_type', 'downpayment')
-            ->sum('amount');
-        $balanceRevenue = (float) Payment::whereIn('status', ['completed', 'paid'])
-            ->whereIn('payment_type', ['balance_settlement', 'full'])
-            ->sum('amount');
+        $paymentTotals = Payment::query()->selectRaw("
+                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') THEN amount END), 0) AS gross,
+                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') AND payment_type = 'downpayment' THEN amount END), 0) AS downpayment,
+                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') AND payment_type IN ('balance_settlement', 'full') THEN amount END), 0) AS balance,
+                COALESCE(SUM(CASE WHEN status = 'refunded' THEN amount_refunded END), 0) AS refunded_status,
+                COALESCE(SUM(amount_refunded), 0) AS refunded_all
+            ")->first();
+        $grossRevenue = (float) $paymentTotals->gross;
+        $downpaymentRevenue = (float) $paymentTotals->downpayment;
+        $balanceRevenue = (float) $paymentTotals->balance;
         $outstandingBalances = (float) Booking::where('status', 'confirmed')->sum('balance_amount');
-        $refundsProcessed = (float) Payment::where('status', 'refunded')->sum('amount_refunded') 
-            ?: (float) Payment::sum('amount_refunded') 
+        $refundsProcessed = (float) $paymentTotals->refunded_status
+            ?: (float) $paymentTotals->refunded_all
             ?: (float) CancellationRequest::where('status', 'approved')->sum('calculated_refund_amount');
         $netRevenue = max(0, $grossRevenue - $refundsProcessed);
 
@@ -198,15 +189,26 @@ class DashboardController extends Controller
             ],
         ];
         $packageAnalytics = [];
-        $totalBookingsCount = max(1, Booking::where('status', '!=', 'pending_downpayment')->count());
+        $bookingCountsByClass = Booking::where('status', '!=', 'pending_downpayment')
+            ->selectRaw('class_type, COUNT(*) AS c')
+            ->groupBy('class_type')
+            ->pluck('c', 'class_type');
+        $paxByClass = BookingParticipant::join('bookings', 'bookings.id', '=', 'booking_participants.booking_id')
+            ->where('bookings.status', '!=', 'pending_downpayment')
+            ->selectRaw('bookings.class_type, COUNT(*) AS c')
+            ->groupBy('bookings.class_type')
+            ->pluck('c', 'class_type');
+        $revenueByClass = Payment::join('bookings', 'bookings.id', '=', 'payments.booking_id')
+            ->whereIn('payments.status', ['completed', 'paid'])
+            ->selectRaw('bookings.class_type, SUM(payments.amount) AS s')
+            ->groupBy('bookings.class_type')
+            ->pluck('s', 'class_type');
+        $totalBookingsCount = max(1, (int) $bookingCountsByClass->sum());
 
         foreach ($packages as $key => $pkg) {
-            $pBookings = Booking::where('status', '!=', 'pending_downpayment')->where('class_type', $key);
-            $count = $pBookings->count();
-            $paxCount = BookingParticipant::whereHas('booking', fn($q) => $q->where('status', '!=', 'pending_downpayment')->where('class_type', $key))->count();
-            $rev = (float) Payment::whereIn('status', ['completed', 'paid'])
-                ->whereHas('booking', fn($q) => $q->where('class_type', $key))
-                ->sum('amount');
+            $count = (int) ($bookingCountsByClass[$key] ?? 0);
+            $paxCount = (int) ($paxByClass[$key] ?? 0);
+            $rev = (float) ($revenueByClass[$key] ?? 0);
 
             $packageAnalytics[$key] = [
                 'name' => $pkg['name'],
@@ -223,9 +225,14 @@ class DashboardController extends Controller
 
         // Dynamic Pricing Analytics
         $activeRulesCount = PricingRule::where('status', 'active')->count();
-        $totalAdjustments = BookingPriceAdjustment::count();
-        $positiveYield = (float) BookingPriceAdjustment::where('adjustment_amount', '>', 0)->sum('adjustment_amount');
-        $discountGiven = (float) abs(BookingPriceAdjustment::where('adjustment_amount', '<', 0)->sum('adjustment_amount'));
+        $adjustmentTotals = BookingPriceAdjustment::query()->selectRaw('
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN adjustment_amount > 0 THEN adjustment_amount END), 0) AS positive,
+                COALESCE(SUM(CASE WHEN adjustment_amount < 0 THEN adjustment_amount END), 0) AS negative
+            ')->first();
+        $totalAdjustments = (int) $adjustmentTotals->total;
+        $positiveYield = (float) $adjustmentTotals->positive;
+        $discountGiven = (float) abs($adjustmentTotals->negative);
         $netDynamicLift = $positiveYield - $discountGiven;
 
         $dynamicPricingStats = [
@@ -238,7 +245,7 @@ class DashboardController extends Controller
         ];
 
         // Governance & Audit Logs
-        $recentAuditLogs = AuditLog::latest('created_at')->take(6)->get();
+        $recentAuditLogs = AuditLog::with('user')->latest('created_at')->take(6)->get();
 
         // AI Demand & Revenue Forecast
         $forecastData = app(\App\Services\DemandForecastService::class)->getForecastData();
@@ -246,7 +253,6 @@ class DashboardController extends Controller
         return view('admin.dashboard', compact(
             'user',
             'isOwner',
-            'activeView',
             'actionInbox',
             'upcomingBatches',
             'operationalStats',

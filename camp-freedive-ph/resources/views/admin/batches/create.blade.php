@@ -32,13 +32,7 @@
                         <label for="start_date" class="block font-bold text-[#1D1D1F] text-sm mb-2">
                             Start Date (Day 1) <span class="text-[#780000]">*</span>
                         </label>
-                        <input type="date" 
-                               name="start_date" 
-                               id="start_date" 
-                               x-model="startDate" 
-                               @change="fetchUnbatchedBookings()" 
-                               required 
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                        <x-date-picker id="start_date" name="start_date" model="startDate" x-on:change="fetchUnbatchedBookings()" required />
                         @error('start_date')
                             <span class="text-sm text-[#D70015] font-semibold mt-1.5 flex items-center gap-1.5">
                                 <svg class="w-4 h-4 shrink-0 text-[#D70015]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -53,12 +47,7 @@
                         <label for="end_date" class="block font-bold text-[#1D1D1F] text-sm mb-2">
                             End Date (Day 2) <span class="text-[#780000]">*</span>
                         </label>
-                        <input type="date" 
-                               name="end_date" 
-                               id="end_date" 
-                               x-model="endDate" 
-                               required 
-                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                        <x-date-picker id="end_date" name="end_date" model="endDate" required />
                         @error('end_date')
                             <span class="text-sm text-[#D70015] font-semibold mt-1.5 flex items-center gap-1.5">
                                 <svg class="w-4 h-4 shrink-0 text-[#D70015]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -72,12 +61,9 @@
 
                 <!-- Duplicate Batch Date Warning Alert & Direct Redirect -->
                 <template x-if="duplicateBatches.length > 0">
-                    <div class="p-4 rounded-xl bg-[#FFFBEB] text-[#92400E] space-y-3">
+                    <div class="banner banner-warning space-y-3">
                         <div class="flex items-center justify-between gap-3">
                             <div class="flex items-center gap-2 font-extrabold text-sm text-[#78350F]">
-                                <svg class="w-4 h-4 text-[#78350F] shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                                    <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
-                                </svg>
                                 <span>Batch Already Exists for this Date Range!</span>
                             </div>
                         </div>
@@ -261,7 +247,7 @@
             </div>
 
             <!-- Form Actions -->
-            <div class="flex items-center justify-end gap-3 pt-6 border-t border-[#E5E5EA]">
+            <div class="flex items-center justify-end gap-3">
                 <a href="{{ route('admin.batches.index') }}" class="btn-secondary min-h-[44px] px-6 py-2.5 text-sm font-bold inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">Cancel</a>
                 <button type="submit" class="btn-primary min-h-[44px] px-8 py-2.5 text-sm font-bold inline-flex items-center justify-center active:scale-[0.99] transition-all shadow-md focus:outline-none focus:ring-2 focus:ring-[#780000]">
                     Create Batch

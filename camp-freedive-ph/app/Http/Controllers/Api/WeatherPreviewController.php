@@ -8,6 +8,7 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Http\Requests\Api\WeatherPreviewRequest;
 
 class WeatherPreviewController extends Controller
 {
@@ -18,13 +19,8 @@ class WeatherPreviewController extends Controller
     /**
      * Preview endpoint for client date selection on the booking page.
      */
-    public function preview(Request $request): JsonResponse
+    public function preview(WeatherPreviewRequest $request): JsonResponse
     {
-        $request->validate([
-            'start_date' => 'required|date',
-            'replay' => 'sometimes|boolean',
-        ]);
-
         try {
             $startDate = Carbon::parse($request->input('start_date'));
             $preview = $this->forecastService->previewDateAssessment(

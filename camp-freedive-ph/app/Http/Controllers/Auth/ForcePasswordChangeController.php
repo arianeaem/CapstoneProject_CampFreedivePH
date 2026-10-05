@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
+use App\Http\Requests\Auth\ChangePasswordRequest;
 
 class ForcePasswordChangeController extends Controller
 {
@@ -34,16 +35,9 @@ class ForcePasswordChangeController extends Controller
     /**
      * Update temporary password to a new secure password.
      */
-    public function update(Request $request): RedirectResponse
+    public function update(ChangePasswordRequest $request): RedirectResponse
     {
         $user = Auth::user();
-
-        $request->validate([
-            'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
-        ], [
-            'password.different' => 'Your new password cannot be the same as your temporary password.',
-        ]);
 
         if (!Hash::check($request->current_password, $user->password)) {
             return back()->withErrors([

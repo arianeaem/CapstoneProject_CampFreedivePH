@@ -67,11 +67,21 @@ class AdminNotificationService
         );
     }
 
-    public function imminentCriticalRisk(Batch $batch): void
+    /** Hours from now until the batch's first dive (06:30 on day 1, Manila time). */
+    public static function hoursUntilDive(Batch $batch): int
     {
         $diveStart = \Carbon\Carbon::parse($batch->start_date->toDateString(), 'Asia/Manila')->setTime(6, 30);
-        $hoursUntilDive = now('Asia/Manila')->diffInHours($diveStart, false);
 
+        return (int) now('Asia/Manila')->diffInHours($diveStart, false);
+    }
+
+    /**
+     * Critical Risk less than 18 hours before the dive: tell owners/admins what guests were offered
+     * (free reschedule or full downpayment refund) and that they must decide on the batch.
+     */
+    public function imminentCriticalRisk(Batch $batch, int $guestsNotified = 0): void
+    {
+        $hoursUntilDive = self::hoursUntilDive($batch);
         if ($hoursUntilDive < 0 || $hoursUntilDive >= 18) {
             return;
         }
@@ -82,15 +92,49 @@ class AdminNotificationService
         }
 
         $this->notify(
-            'URGENT: Critical Risk assessment required',
-            "Batch {$batch->batch_code} is classified as Critical Risk and starts in approximately {$hoursUntilDive} hours. Complete the full operational assessment now and decide whether to issue a force-majeure notice to customers.",
+            "URGENT: Critical Risk for {$batch->batch_code} - starts in about {$hoursUntilDive} hours",
+            "The latest weather and sea check rates batch {$batch->batch_code} as Critical Risk, and the dive starts in about {$hoursUntilDive} hours. "
+                . "Guests in this batch have been emailed that they can reschedule for free or cancel with a full refund of their downpayment (force-majeure). "
+                . "Please review the conditions in Safety Monitoring now and decide whether to cancel the batch.",
             [
                 'Batch' => $batch->batch_code,
-                'Schedule' => "{$batch->start_date?->format('M d, Y')} - {$batch->end_date?->format('M d, Y')}",
-                'Time to dive' => "{$hoursUntilDive} hours",
-                'Required action' => 'Complete full assessment and decide on customer force-majeure notification',
+                'Dive dates' => "{$batch->start_date?->format('M d, Y')} - {$batch->end_date?->format('M d, Y')}",
+                'Starts in' => "About {$hoursUntilDive} hours",
+                'Guests emailed' => (string) $guestsNotified,
+                'What to do' => 'Check Safety Monitoring, then cancel the batch or confirm it is safe to go',
             ],
             'critical',
+        );
+    }
+
+    /**
+     * High Risk less than 18 hours before the dive: heads-up only. Guests were told the dive is still planned.
+     */
+    public function imminentHighRisk(Batch $batch, int $guestsNotified = 0): void
+    {
+        $hoursUntilDive = self::hoursUntilDive($batch);
+        if ($hoursUntilDive < 0 || $hoursUntilDive >= 18) {
+            return;
+        }
+
+        $key = "admin:high-risk-imminent:{$batch->id}:" . $batch->start_date->format('Y-m-d');
+        if (!Cache::add($key, true, now()->addDay())) {
+            return;
+        }
+
+        $this->notify(
+            "High Risk for {$batch->batch_code} - starts in about {$hoursUntilDive} hours",
+            "The latest weather and sea check rates batch {$batch->batch_code} as High Risk, and the dive starts in about {$hoursUntilDive} hours. "
+                . "Guests have been told the dive is still planned and that coaches will take extra safety steps. No free cancellation or refund was offered. "
+                . "Please brief the coaches and check Safety Monitoring again before departure.",
+            [
+                'Batch' => $batch->batch_code,
+                'Dive dates' => "{$batch->start_date?->format('M d, Y')} - {$batch->end_date?->format('M d, Y')}",
+                'Starts in' => "About {$hoursUntilDive} hours",
+                'Guests emailed' => (string) $guestsNotified,
+                'What to do' => 'Brief coaches on extra safety steps and recheck conditions before departure',
+            ],
+            'high',
         );
     }
 

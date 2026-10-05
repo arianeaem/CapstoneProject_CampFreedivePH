@@ -114,20 +114,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block font-bold text-[#1D1D1F] mb-2">Start Date (Day 1) <span class="text-[#780000]">*</span></label>
-                    <input type="date" 
-                           name="start_date" 
-                           value="{{ old('start_date', $booking->start_date->format('Y-m-d')) }}" 
-                           required 
-                           class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                    <x-date-picker name="start_date" :value="old('start_date', $booking->start_date->format('Y-m-d'))" required />
                 </div>
 
                 <div>
                     <label class="block font-bold text-[#1D1D1F] mb-2">End Date (Day 2) <span class="text-[#780000]">*</span></label>
-                    <input type="date" 
-                           name="end_date" 
-                           value="{{ old('end_date', $booking->end_date->format('Y-m-d')) }}" 
-                           required 
-                           class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                    <x-date-picker name="end_date" :value="old('end_date', $booking->end_date->format('Y-m-d'))" required />
                 </div>
             </div>
 
@@ -244,7 +236,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div>
                                 <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Birthdate <span class="text-[#780000]">*</span></label>
-                                <input type="date" :name="'participants[' + index + '][birthdate]'" x-model="p.birthdate" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                                <x-date-picker name-expr="'participants[' + index + '][birthdate]'" model="p.birthdate" :max="now()->toDateString()" year-select placeholder="Select birthdate" required />
                                 <select :name="'participants[' + index + '][gender]'" x-model="p.gender" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
                                     <option value="">Select gender</option>
                                     <option value="female">Female</option>

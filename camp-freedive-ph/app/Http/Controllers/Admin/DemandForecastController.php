@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Services\DemandForecastService;
 use App\Support\DemandRules;
+use Carbon\Carbon;
 use Illuminate\View\View;
 
 /**
@@ -13,9 +14,16 @@ use Illuminate\View\View;
  * Shows ONLY ML-generated forecast data (clearly labelled as forecast) next to the
  * actual booking history, plus the single set of High/Medium/Low and
  * Peak/Shoulder/Off-Peak rules the whole system uses.
+ * Layout mirrors the Demand Forecast tab in Reports & Analytics.
  */
 class DemandForecastController extends Controller
 {
+    /** Divers per coach used for "coaches needed" (same ratio as the monthly rollup). */
+    protected const DIVERS_PER_COACH = 4;
+
+    /** Look-ahead windows offered on the page, in days. */
+    protected const HORIZONS = [7, 30, 60, 90];
+
     public function __construct(protected DemandForecastService $forecastService)
     {
     }
@@ -28,11 +36,47 @@ class DemandForecastController extends Controller
         $hasForecast = !empty($forecast['forecasts']);
 
         $batchForecasts = $this->forecastService->getBatchForecasts();
-        $batchMonthly = $this->forecastService->getBatchMonthlyRollup($batchForecasts);
         $modelInfo = $this->forecastService->getModelInfo();
+        $horizons = $this->horizonViews($batchForecasts);
+        $diversPerCoach = self::DIVERS_PER_COACH;
 
         return view('admin.demand.index', compact(
-            'rules', 'hasForecast', 'batchForecasts', 'batchMonthly', 'modelInfo'
+            'rules', 'hasForecast', 'batchForecasts', 'modelInfo', 'horizons', 'diversPerCoach'
         ));
+    }
+
+    /**
+     * For each look-ahead window: the scheduled batches starting within it and their
+     * monthly totals (using the service's own monthly rollup, so numbers match everywhere).
+     */
+    protected function horizonViews(array $batchForecasts): array
+    {
+        $views = [];
+        foreach (self::HORIZONS as $days) {
+            $batches = array_values(array_filter($batchForecasts, fn ($b) => (int) $b['days_to_start'] <= $days));
+
+            $views[(string) $days] = [
+                'months' => $this->forecastService->getBatchMonthlyRollup($batches),
+                'batches' => array_map(fn ($b) => [
+                    'key' => $b['batch_id'] ?? $b['batch_code'],
+                    'code' => $b['batch_code'] ?? '',
+                    'label' => Carbon::parse($b['batch_date'])->format('M d'),
+                    'date' => Carbon::parse($b['batch_date'])->format('M d, Y (D)'),
+                    'days_to_start' => (int) $b['days_to_start'],
+                    'booked' => (int) $b['booked_so_far'],
+                    'capacity' => (int) $b['capacity'],
+                    'divers' => (float) $b['predicted_participants'],
+                    'low' => $b['lower_bound'],
+                    'high' => $b['upper_bound'],
+                    'bookings' => (float) $b['predicted_bookings'],
+                    'revenue' => (float) $b['predicted_revenue_php'],
+                    'coaches' => (int) ceil($b['predicted_participants'] / self::DIVERS_PER_COACH),
+                    'demand' => $b['demand_level'],
+                    'season' => $b['season_period'],
+                ], $batches),
+            ];
+        }
+
+        return $views;
     }
 }

@@ -107,10 +107,10 @@
                              x-transition:leave="transition ease-in duration-100 transform"
                              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                              x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                             class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                             class="popover-panel absolute right-0 mt-2 space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Audit Logs</h4>
-                                <a href="{{ route('admin.audit_logs.index') }}" class="min-h-[44px] px-3 py-1.5 rounded-lg text-sm text-[#780000] hover:bg-[#F2F2F7] active:scale-[0.98] transition-all font-bold inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#780000]">Reset</a>
+                                <h4 class="popover-title">Filter Audit Logs</h4>
+                                <a href="{{ route('admin.audit_logs.index') }}" class="popover-reset">Reset</a>
                             </div>
 
                             <form method="GET" action="{{ route('admin.audit_logs.index') }}" class="space-y-3 text-sm">
@@ -133,19 +133,11 @@
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
                                         <label for="filter-date-from" class="block font-bold text-[#6E6E73] text-sm mb-1">Date From</label>
-                                        <input type="date" 
-                                               id="filter-date-from"
-                                               name="date_from" 
-                                               value="{{ request('date_from') }}" 
-                                               class="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
+                                        <x-date-picker id="filter-date-from" name="date_from" :value="request('date_from')" placeholder="Any date" />
                                     </div>
                                     <div>
                                         <label for="filter-date-to" class="block font-bold text-[#6E6E73] text-sm mb-1">Date To</label>
-                                        <input type="date" 
-                                               id="filter-date-to"
-                                               name="date_to" 
-                                               value="{{ request('date_to') }}" 
-                                               class="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
+                                        <x-date-picker id="filter-date-to" name="date_to" :value="request('date_to')" placeholder="Any date" />
                                     </div>
                                 </div>
 

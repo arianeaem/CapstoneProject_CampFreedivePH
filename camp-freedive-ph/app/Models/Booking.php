@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  *
  * @property int $id
  * @property string $booking_number e.g. BK-2026-XXXX
- * @property string $pin 4-digit security PIN for guest portal access
+ * @property string $pin 4-digit PIN for guest portal access
  * @property string $class_type discovery, fundive, refinement
  * @property bool $is_certified_diver
  * @property Carbon $start_date
@@ -146,8 +146,14 @@ class Booking extends Model
 
     public function getPaymentStatusBadgeAttribute(): array
     {
-        $hasPayment = $this->payments()->whereIn('status', ['completed', 'paid'])->exists();
-        $isRefunded = $this->payments()->whereIn('status', ['refunded', 'refund_requested'])->exists();
+        // Use eager-loaded payments when available (list pages) instead of two queries per booking
+        if ($this->relationLoaded('payments')) {
+            $hasPayment = $this->payments->whereIn('status', ['completed', 'paid'])->isNotEmpty();
+            $isRefunded = $this->payments->whereIn('status', ['refunded', 'refund_requested'])->isNotEmpty();
+        } else {
+            $hasPayment = $this->payments()->whereIn('status', ['completed', 'paid'])->exists();
+            $isRefunded = $this->payments()->whereIn('status', ['refunded', 'refund_requested'])->exists();
+        }
 
         if ($this->status === 'no_show') {
             return [

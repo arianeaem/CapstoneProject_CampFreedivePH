@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Payments\StorePaymentRequest;
+use App\Http\Requests\Admin\Payments\SettleBalanceRequest;
 
 class PaymentController extends Controller
 {
@@ -95,18 +97,11 @@ class PaymentController extends Controller
     /**
      * Store a manually entered payment record.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StorePaymentRequest $request): RedirectResponse
     {
         $currentUser = Auth::user();
 
-        $validated = $request->validate([
-            'booking_id' => ['required', 'exists:bookings,id'],
-            'amount' => ['required', 'numeric', 'min:100'],
-            'payment_method' => ['required', 'in:cash,gcash,bpi_bank_transfer,maya,other'],
-            'payment_type' => ['required', 'in:downpayment,balance_settlement,full'],
-            'transaction_id' => ['nullable', 'string', 'max:100'],
-            'notes' => ['nullable', 'string', 'max:500'],
-        ]);
+        $validated = $request->validated();
 
         $booking = Booking::findOrFail($validated['booking_id']);
         $amount = (float) $validated['amount'];
@@ -169,17 +164,12 @@ class PaymentController extends Controller
     /**
      * Settle remaining balance for a booking.
      */
-    public function settleBalance(Request $request, Payment $payment): RedirectResponse
+    public function settleBalance(SettleBalanceRequest $request, Payment $payment): RedirectResponse
     {
         $currentUser = Auth::user();
         $booking = $payment->booking;
 
-        $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'min:1'],
-            'payment_method' => ['required', 'in:cash,gcash,bpi_bank_transfer,maya,card,other'],
-            'transaction_id' => ['nullable', 'string', 'max:100'],
-            'notes' => ['nullable', 'string', 'max:500'],
-        ]);
+        $validated = $request->validated();
 
         $amount = (float) $validated['amount'];
         $txnId = $validated['transaction_id'] ?: ('BAL-TXN-' . strtoupper(bin2hex(random_bytes(5))));

@@ -26,7 +26,7 @@
                 <div x-show="customOpen" 
                      @click.away="customOpen = false" 
                      x-cloak 
-                     class="absolute left-0 sm:left-auto sm:right-0 mt-2 w-72 max-w-[calc(100vw-48px)] bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-xl z-30 space-y-3">
+                     class="popover-panel absolute left-0 sm:left-auto sm:right-0 mt-2 space-y-3">
                     <h4 class="text-sm font-bold text-[#1D1D1F]">Select Custom Date Range</h4>
                     <form method="GET" action="{{ auth()->user()->isOwner() ? route('owner.reports.index') : route('admin.reports.index') }}" class="space-y-2.5">
                         <input type="hidden" name="preset" value="custom">
@@ -36,18 +36,12 @@
 
                         <div class="space-y-1">
                             <label class="block text-sm font-bold text-[#6E6E73]">Start Date</label>
-                            <input type="date" 
-                                   name="start_date" 
-                                   value="{{ $range['start']->format('Y-m-d') }}" 
-                                   class="w-full text-sm rounded-lg border border-[#D1D1D6] p-2 focus:border-[#780000]">
+                            <x-date-picker name="start_date" :value="$range['start']->format('Y-m-d')" />
                         </div>
 
                         <div class="space-y-1">
                             <label class="block text-sm font-bold text-[#6E6E73]">End Date</label>
-                            <input type="date" 
-                                   name="end_date" 
-                                   value="{{ $range['end']->format('Y-m-d') }}" 
-                                   class="w-full text-sm rounded-lg border border-[#D1D1D6] p-2 focus:border-[#780000]">
+                            <x-date-picker name="end_date" :value="$range['end']->format('Y-m-d')" />
                         </div>
 
                         <button type="submit" class="btn-primary w-full py-2 text-sm font-bold">

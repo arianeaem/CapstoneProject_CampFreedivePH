@@ -152,7 +152,7 @@
         </div>
 
         <!-- Error Alert Banner -->
-        <div x-show="errorMessage" x-cloak class="mb-6 p-3.5 sm:p-4 rounded-xl bg-[#FEF2F2] text-[#991B1B] text-sm flex items-center justify-between gap-3 shadow-2xs">
+        <div x-show="errorMessage" x-cloak class="banner banner-error mb-6 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 min-w-0">
                 <span x-text="errorMessage"></span>
             </div>
@@ -160,7 +160,7 @@
         </div>
 
         <!-- Draft Restored Notification Banner -->
-        <div x-show="draftRestored" x-cloak class="mb-6 p-3.5 sm:p-4 rounded-xl bg-[#F0FDF4] text-[#166534] text-sm flex items-center justify-between gap-3 shadow-2xs">
+        <div x-show="draftRestored" x-cloak class="banner banner-success mb-6 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 min-w-0">
                 <span>Your saved booking progress has been automatically restored.</span>
             </div>
@@ -740,7 +740,7 @@
                         
                         <div class="flex items-center justify-between gap-2">
                             <div class="flex items-center gap-1.5 sm:gap-2">
-                                <h3 class="font-black text-sm sm:text-base text-[#1D1D1F]">Dive Safety Evaluation</h3>
+                                <h3 class="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-[#6E6E73]">Dive conditions</h3>
                                 
                                 <!-- About Forecast Icon with Popover -->
                                 <div class="relative inline-flex items-center" x-data="{ showTip: false }">
@@ -824,116 +824,9 @@
                             </div>
                         </div>
 
-                        <!-- Weather Assessment Results -->
+                        <!-- Weather Assessment Results (shared design: components/dive-safety/live-evaluation) -->
                         <template x-if="forecast && !weatherLoading">
-                            <div class="space-y-4">
-                                <!-- Overall Assessment (5 Lines Indicator & Climatology/Model Badge) -->
-                                <div class="space-y-2 pb-1">
-                                    <div class="flex items-center justify-between gap-2 flex-wrap">
-                                        <div class="flex items-center gap-2.5 sm:gap-3 flex-wrap">
-                                            <span class="text-base sm:text-xl font-black uppercase tracking-wide"
-                                                  :class="getSafetyTextClass(forecast.overall_classification)"
-                                                  x-text="forecast.overall_classification"></span>
-
-                                            <!-- 5 Lines Indicator -->
-                                            <div class="flex items-center gap-1 sm:gap-1.5" :title="'Safety Score: ' + getSafetyScore(forecast.overall_classification) + '/5'">
-                                                <template x-for="i in 5" :key="i">
-                                                    <div class="h-1.5 w-4 sm:w-7 rounded-full transition-all duration-300"
-                                                         :class="i <= getSafetyScore(forecast.overall_classification) ? getSafetyBarClass(forecast.overall_classification) : 'bg-[#E5E5EA]'"></div>
-                                                </template>
-                                            </div>
-                                        </div>
-
-                                        <template x-if="forecast.is_benchmark || forecast.is_seasonal_estimate">
-                                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#F2F2F7] text-[#6E6E73] border border-[#E5E5EA]">
-                                                <svg class="w-3 h-3 text-[#00C3D0]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                                Seasonal Outlook
-                                            </span>
-                                        </template>
-                                        <template x-if="!forecast.is_benchmark && !forecast.is_seasonal_estimate && forecast.reliability">
-                                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#EBF7F8] text-[#00C3D0] border border-[#BCE8EC]">
-                                                <span class="w-1.5 h-1.5 rounded-full bg-[#00C3D0] animate-pulse"></span>
-                                                <span x-text="'Reliability: ' + forecast.reliability"></span>
-                                            </span>
-                                        </template>
-                                    </div>
-
-                                    <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed pt-1" x-text="forecast.description"></p>
-                                </div>
-
-                                <!-- Day 1 & Day 2 Breakdown -->
-                                <template x-if="forecast.day1 && forecast.day2">
-                                    <div class="space-y-3.5 pt-1">
-                                        <!-- Day 1 -->
-                                        <div class="relative pl-3.5 sm:pl-4 py-1 space-y-1.5 text-xs sm:text-sm bg-[#FAFAFA] rounded-xl p-3 border border-[#E5E5EA]">
-                                            <div class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
-                                                 :class="forecast.is_seasonal_estimate ? 'bg-[#D1D1D6]' : getSafetyBarClass(forecast.day1.classification)"></div>
-                                            <div class="flex items-center justify-between">
-                                                <span class="font-extrabold text-[#1D1D1F] text-xs sm:text-sm uppercase tracking-wider">Day 1</span>
-                                                <span class="text-xs font-bold px-2 py-0.5 rounded-md"
-                                                      :class="getSafetyTextClass(forecast.day1.classification)"
-                                                      x-text="forecast.day1.classification"></span>
-                                            </div>
-                                            <div class="text-[#6E6E73] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-1">
-                                                <span class="font-bold text-[#1D1D1F]" x-text="forecast.day1.date"></span>
-                                                <span class="shrink-0 text-xs">Peak Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day1.worst_hour"></strong></span>
-                                            </div>
-                                            <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.day1.recommended_action"></p>
-                                        </div>
-
-                                        <!-- Day 2 -->
-                                        <div class="relative pl-3.5 sm:pl-4 py-1 space-y-1.5 text-xs sm:text-sm bg-[#FAFAFA] rounded-xl p-3 border border-[#E5E5EA]">
-                                            <div class="absolute left-0 top-1 bottom-1 w-1 sm:w-1.5 rounded-full transition-colors duration-200"
-                                                 :class="forecast.is_seasonal_estimate ? 'bg-[#D1D1D6]' : getSafetyBarClass(forecast.day2.classification)"></div>
-                                            <div class="flex items-center justify-between">
-                                                <span class="font-extrabold text-[#1D1D1F] text-xs sm:text-sm uppercase tracking-wider">Day 2</span>
-                                                <span class="text-xs font-bold px-2 py-0.5 rounded-md"
-                                                      :class="getSafetyTextClass(forecast.day2.classification)"
-                                                      x-text="forecast.day2.classification"></span>
-                                            </div>
-                                            <div class="text-[#6E6E73] text-xs sm:text-sm flex flex-wrap items-center justify-between gap-1">
-                                                <span class="font-bold text-[#1D1D1F]" x-text="forecast.day2.date"></span>
-                                                <span class="shrink-0 text-xs">Peak Hour: <strong class="text-[#1D1D1F]" x-text="forecast.day2.worst_hour"></strong></span>
-                                            </div>
-                                            <p class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed" x-text="forecast.day2.recommended_action"></p>
-                                        </div>
-                                    </div>
-                                </template>
-
-                                <!-- Model Comparison: Historical Model vs Legacy (Open-Meteo + ONNX) -->
-                                <template x-if="forecast.engines">
-                                    <div class="space-y-2 pt-1">
-                                        <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#1D1D1F]">Model Comparison</h4>
-                                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                            <template x-for="engine in [forecast.engines.historical, forecast.engines.legacy]" :key="engine.label">
-                                                <div class="rounded-xl border border-[#E5E5EA] bg-[#FAFAFA] p-3 space-y-2 text-xs">
-                                                    <div class="flex items-start justify-between gap-2">
-                                                        <span class="font-bold text-[#1D1D1F] leading-snug" x-text="engine.label"></span>
-                                                        <span class="font-black uppercase tracking-wide shrink-0 text-right"
-                                                              :class="engine.available && !engine.is_seasonal_estimate ? getSafetyTextClass(engine.overall_classification) : 'text-[#6E6E73]'"
-                                                              x-text="!engine.available ? 'Unavailable' : (engine.is_seasonal_estimate ? 'Seasonal' : engine.overall_classification)"></span>
-                                                    </div>
-                                                    <template x-if="engine.available">
-                                                        <div class="space-y-1.5">
-                                                            <template x-for="(day, idx) in [engine.day1, engine.day2]" :key="idx">
-                                                                <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
-                                                                    <span><span class="font-semibold text-[#1D1D1F]" x-text="'Day ' + (idx + 1)"></span> · <span x-text="day.worst_hour"></span></span>
-                                                                    <span class="font-bold" :class="getSafetyTextClass(day.classification)" x-text="day.classification"></span>
-                                                                </div>
-                                                            </template>
-                                                            <p class="text-[11px] text-[#8E8E93] leading-snug pt-0.5" x-text="engine.data_source"></p>
-                                                        </div>
-                                                    </template>
-                                                    <template x-if="!engine.available">
-                                                        <p class="text-[11px] text-[#8E8E93] leading-snug">Not available for these dates.</p>
-                                                    </template>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </div>
-                                </template>
-
-                            </div>
+                            <x-dive-safety.live-evaluation forecast="forecast" />
                         </template>
 
                         <!-- Empty State: Dates Selected but Forecast Failed to Load -->
@@ -998,7 +891,7 @@
                         
                         <div class="space-y-4">
                             <template x-for="(participant, index) in form.participants" :key="index">
-                                <div class="p-3.5 sm:p-5 rounded-xl relative space-y-3.5 sm:space-y-4">
+                                <div class="p-3.5 sm:p-5 border border-[#D1D1D6] rounded-xl relative space-y-3.5 sm:space-y-4">
                                     <div class="flex items-center justify-between">
                                         <span class="font-bold text-[#780000] text-sm" x-text="'Participant #' + (index + 1)"></span>
                                         <button type="button" 
@@ -1089,12 +982,7 @@
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Birthdate <span class="text-[#780000]">*</span></label>
-                                            <input type="date"
-                                                   x-model="participant.birthdate"
-                                                   @change="calculateAge(participant)"
-                                                   :max="new Date().toISOString().split('T')[0]"
-                                                   class="w-full px-3.5 py-2.5 rounded-xl border text-sm text-[#1D1D1F] bg-white transition-colors"
-                                                   :class="touchedStep3 && !validateAge(calculateAge(participant)) ? 'border-[#D70015] bg-red-50/20' : 'border-[#D1D1D6] focus:border-[#780000]'">
+                                            <x-date-picker model="participant.birthdate" x-on:change="calculateAge(participant)" :max="now()->toDateString()" year-select placeholder="Select birthdate" invalid="touchedStep3 && !validateAge(calculateAge(participant))" />
                                             <span class="text-xs text-[#6E6E73]" x-show="participant.birthdate" x-text="calculateAge(participant) + ' years old'"></span>
                                         </div>
 
@@ -1319,7 +1207,6 @@
                                             <span x-show="form.pickup_option === 'carpool'" class="w-2.5 h-2.5 rounded-full bg-[#780000]"></span>
                                         </div>
                                         <span class="font-bold text-[#780000] text-xs sm:text-sm block">₱1,200 / person</span>
-                                        <span class="text-xs sm:text-sm text-[#780000] font-semibold block">(DP: ₱3,000 / head)</span>
                                     </div>
                                 </label>
 
@@ -1337,7 +1224,6 @@
                                             <span x-show="form.pickup_option === 'own'" class="w-2.5 h-2.5 rounded-full bg-[#780000]"></span>
                                         </div>
                                         <span class="font-bold text-[#1D1D1F] text-xs sm:text-sm block">₱0 (Self-arranged)</span>
-                                        <span class="text-xs sm:text-sm text-[#6E6E73] font-semibold block">(DP: ₱2,000 / head)</span>
                                     </div>
                                 </label>
                             </div>
@@ -1376,7 +1262,7 @@
                                         <span class="font-bold text-sm text-[#1D1D1F] block">Boat Dive (Optional)</span>
                                         <span x-show="form.boat_dive" class="w-2.5 h-2.5 rounded-full bg-[#780000]"></span>
                                     </div>
-                                    <span class="text-xs sm:text-sm text-[#6E6E73] block leading-snug">Boat ride to deeper marine sanctuaries.</span>
+                                    <span class="text-xs sm:text-sm text-[#6E6E73] block leading-snug">Enjoy the freedive site hopping experience across Sepoc Island, Sombrero Island and Dari Laut.</span>
                                 </div>
                                 <div class="text-right shrink-0">
                                     <span class="font-extrabold text-[#780000] text-xs sm:text-sm">+₱{{ number_format($feesData['boat_dive'] ?? 600) }}</span>
@@ -1525,9 +1411,8 @@
 
             <div class="max-w-7xl mx-auto space-y-6">
                 <!-- Slot Hold Countdown Banner -->
-                <div class="p-3.5 sm:p-4 rounded-xl bg-amber-50 text-amber-900 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-2xs">
+                <div class="banner banner-warning flex items-center justify-between gap-3">
                     <div class="flex items-center gap-2 min-w-0">
-                        <img src="{{ asset('icons/icons8-clock-60.png') }}" alt="" aria-hidden="true" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0 object-contain">
                         <span class="font-medium">Slots held for checkout:</span>
                     </div>
                     <span class="font-mono font-bold text-amber-950 px-2.5 py-0.5 rounded-lg bg-amber-100/80 tracking-wide shrink-0" x-text="timerDisplay"></span>
@@ -1709,7 +1594,7 @@
                             </div>
 
                             <div class="pt-3 border-t border-white/15">
-                                <span class="text-xs uppercase tracking-wider text-[#00C3D0] font-bold">4-Digit Security PIN</span>
+                                <span class="text-xs uppercase tracking-wider text-[#00C3D0] font-bold">4-Digit PIN</span>
                                 <div class="text-2xl font-mono font-bold text-white tracking-widest mt-0.5" x-text="confirmedBooking.pin"></div>
                                 <span class="text-xs text-[#A1A1A6] block mt-1">Keep this PIN safe to manage or update your booking anytime.</span>
                             </div>
@@ -1820,7 +1705,7 @@
          aria-modal="true"
          aria-labelledby="session-expired-title"
          aria-describedby="session-expired-desc"
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+         class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
@@ -1828,13 +1713,13 @@
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
         
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-2xl text-center space-y-4 relative border border-[#E5E5EA]"
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 sm:p-7 shadow-2xl text-center space-y-4 relative border-l border-[#E5E5EA]"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             
             <!-- Warning Icon -->
             <div class="w-14 h-14 mx-auto rounded-full bg-amber-50 flex items-center justify-center text-amber-600">

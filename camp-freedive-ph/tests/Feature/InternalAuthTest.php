@@ -132,17 +132,15 @@ class InternalAuthTest extends TestCase
         // Admin can access admin dashboard, but NOT audit logs (Owner exclusive)
         $this->actingAs($admin);
         $adminResponse = $this->get('/admin')->assertStatus(200);
-        $adminResponse->assertSee('Upcoming Weekend Batches');
+        $adminResponse->assertSee('Upcoming batches');
         $this->get('/admin/settings/audit-logs')->assertStatus(403);
 
-        // Owner can access both executive and operations views on /owner
+        // Owner sees operations and revenue on one dashboard (no view switcher)
         $this->actingAs($owner);
-        $ownerExecResponse = $this->get('/owner')->assertStatus(200);
-        $ownerExecResponse->assertSee('Gross Collected Revenue');
-        $ownerExecResponse->assertSee('Executive Analytics');
-
-        $ownerOpsResponse = $this->get('/owner?view=operations')->assertStatus(200);
-        $ownerOpsResponse->assertSee('Upcoming Weekend Batches');
+        $ownerResponse = $this->get('/owner')->assertStatus(200);
+        $ownerResponse->assertSee('Upcoming batches');
+        $ownerResponse->assertSee('Money collected');
+        $ownerResponse->assertDontSee('Executive Analytics');
 
         $this->get('/owner/settings/audit-logs')->assertStatus(200);
         $this->get('/owner/settings/users')->assertStatus(200);

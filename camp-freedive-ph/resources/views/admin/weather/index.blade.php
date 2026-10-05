@@ -14,7 +14,7 @@
 
     <!-- Critical / High Risk Advisory Banner -->
     @if($criticalCount > 0)
-    <div class="p-4 bg-rose-50 rounded-xl border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-rose-900 shadow-2xs">
+    <div class="banner banner-error flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex items-center gap-2.5">
             <span class="w-3 h-3 rounded-full bg-rose-600 animate-pulse"></span>
             <div>
@@ -90,18 +90,18 @@
                              x-transition:leave="transition ease-in duration-100 transform"
                              x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                              x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                             class="absolute right-0 mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                             class="popover-panel absolute right-0 mt-2 space-y-3">
                             <div class="flex items-center justify-between">
-                                <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Batches</h4>
-                                <a href="{{ route('admin.weather.index') }}" class="text-xs text-[#780000] hover:underline font-bold">Reset</a>
+                                <h4 class="popover-title">Filter Batches</h4>
+                                <a href="{{ route('admin.weather.index') }}" class="popover-reset">Reset</a>
                             </div>
 
-                            <form action="{{ route('admin.weather.index') }}" method="GET" class="space-y-3 text-xs">
+                            <form action="{{ route('admin.weather.index') }}" method="GET" class="space-y-3 text-sm">
                                 <input type="hidden" name="risk" value="{{ request('risk') }}">
 
                                 <div>
-                                    <label class="block font-bold text-[#6E6E73] text-xs mb-1">Batch Status</label>
-                                    <select name="status" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs font-medium">
+                                    <label class="block font-bold text-[#6E6E73] text-sm mb-1">Batch Status</label>
+                                    <select name="status" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
                                         <option value="">All Statuses</option>
                                         <option value="confirmed" {{ request('status') === 'confirmed' ? 'selected' : '' }}>Confirmed</option>
                                         <option value="completed" {{ request('status') === 'completed' ? 'selected' : '' }}>Completed</option>

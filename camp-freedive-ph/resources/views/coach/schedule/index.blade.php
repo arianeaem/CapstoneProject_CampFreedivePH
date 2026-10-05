@@ -69,21 +69,6 @@
                 $weatherBadge = $item['weather_badge'];
                 $assessment = $item['assessment'];
                 $releaseReq = $item['release_request'];
-
-                $wClass = strtolower(trim($item['weather_class'] ?? 'Safe'));
-                if (str_contains($wClass, 'safe')) {
-                    $wBg = 'bg-emerald-100 text-emerald-900';
-                    $wDot = 'bg-emerald-600';
-                } elseif (str_contains($wClass, 'mod') || str_contains($wClass, 'adv') || str_contains($wClass, 'warn') || str_contains($wClass, 'caut')) {
-                    $wBg = 'bg-amber-100 text-amber-900';
-                    $wDot = 'bg-amber-600';
-                } elseif (str_contains($wClass, 'risk') || str_contains($wClass, 'crit') || str_contains($wClass, 'high') || str_contains($wClass, 'dan')) {
-                    $wBg = 'bg-rose-100 text-rose-900';
-                    $wDot = 'bg-rose-600';
-                } else {
-                    $wBg = 'bg-emerald-100 text-emerald-900';
-                    $wDot = 'bg-emerald-600';
-                }
             @endphp
 
             <div class="bg-white rounded-2xl border border-[#E5E5EA] overflow-hidden">
@@ -93,20 +78,15 @@
                     
                     <!-- Left Column: Weather + Batch Title + Dive Dates & Students -->
                     <div class="space-y-2.5 flex-1 min-w-0">
-                        <!-- Weather Safety Badge & Description -->
-                        <div class="flex items-center gap-2.5 flex-wrap">
-                            <span class="px-2.5 py-1 rounded-lg text-sm font-black {{ $wBg }} inline-flex items-center shadow-2xs shrink-0">
-                                <span>{{ $item['weather_class'] }}</span>
+                        <!-- Weather Safety Status (shared design: components/dive-safety/status) -->
+                        <x-dive-safety.status :classification="$item['weather_class']"
+                                              :description="\App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($assessment?->recommended_action ?? null)"
+                                              :engines="$item['model_comparison'] ?? null" />
+                        @if($item['is_current_dive'] ?? false)
+                            <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#780000] text-white inline-flex items-center shadow-2xs">
+                                Current Dive
                             </span>
-                            <span class="text-sm text-[#6E6E73] font-medium leading-tight">
-                                {{ \App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($assessment?->recommended_action ?? 'Standard marine safety protocols in effect.') }}
-                            </span>
-                            @if($item['is_current_dive'] ?? false)
-                                <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#780000] text-white inline-flex items-center shadow-2xs">
-                                    Current Dive
-                                </span>
-                            @endif
-                        </div>
+                        @endif
 
                         <div>
                             <h2 class="text-xl sm:text-2xl font-black text-[#1D1D1F] tracking-tight">
@@ -357,10 +337,10 @@
                          x-transition:leave="transition ease-in duration-100 transform"
                          x-transition:leave-start="opacity-100 scale-100 translate-y-0"
                          x-transition:leave-end="opacity-0 scale-95 -translate-y-1"
-                         class="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-80 max-w-sm bg-white rounded-2xl border border-[#E5E5EA] shadow-xl p-4 z-50 space-y-3">
+                         class="popover-panel absolute right-0 top-full mt-2 space-y-3">
                         <div class="flex items-center justify-between">
-                            <h4 class="font-bold text-sm text-[#1D1D1F]">Filter Past History</h4>
-                            <a href="{{ route('coach.schedule.index', ['tab' => 'history']) }}" class="text-sm text-[#780000] hover:underline font-bold">Reset</a>
+                            <h4 class="popover-title">Filter Past History</h4>
+                            <a href="{{ route('coach.schedule.index', ['tab' => 'history']) }}" class="popover-reset">Reset</a>
                         </div>
 
                         <form method="GET" action="{{ route('coach.schedule.index') }}" class="space-y-3 text-sm">
@@ -368,18 +348,12 @@
 
                             <div>
                                 <label class="block font-bold text-[#6E6E73] text-sm mb-1">From Date</label>
-                                <input type="date" 
-                                       name="date_from" 
-                                       value="{{ request('date_from') }}" 
-                                       class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
+                                <x-date-picker name="date_from" :value="request('date_from')" placeholder="Any date" />
                             </div>
 
                             <div>
                                 <label class="block font-bold text-[#6E6E73] text-sm mb-1">To Date</label>
-                                <input type="date" 
-                                       name="date_to" 
-                                       value="{{ request('date_to') }}" 
-                                       class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium">
+                                <x-date-picker name="date_to" :value="request('date_to')" placeholder="Any date" />
                             </div>
 
                             <div>
@@ -555,21 +529,21 @@
          aria-modal="true"
          aria-labelledby="schedule-release-modal-title"
          @keydown.escape.window="releaseModalOpen = false"
-         class="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
          x-transition:enter="transition ease-out duration-200"
          x-transition:enter-start="opacity-0"
          x-transition:enter-end="opacity-100"
          x-transition:leave="transition ease-in duration-150"
          x-transition:leave-start="opacity-100"
          x-transition:leave-end="opacity-0">
-        <div class="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-[#E5E5EA] space-y-6 relative" 
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-6 shadow-2xl border-l border-[#E5E5EA] space-y-6 relative" 
              @click.outside="releaseModalOpen = false"
              x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:enter-start="opacity-0 translate-x-full"
+             x-transition:enter-end="opacity-100 translate-x-0"
              x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95">
+             x-transition:leave-start="opacity-100 translate-x-0"
+             x-transition:leave-end="opacity-0 translate-x-full">
             
             <div class="flex items-start justify-between border-b border-[#E5E5EA] pb-4">
                 <div>

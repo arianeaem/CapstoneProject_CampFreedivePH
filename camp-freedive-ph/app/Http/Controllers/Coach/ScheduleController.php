@@ -85,6 +85,7 @@ class ScheduleController extends Controller
                 'weather_class' => $weatherClass,
                 'weather_badge' => $weatherBadge,
                 'assessment' => $d1,
+                'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                 'hours_until_dive' => max(0, $hoursUntilDive),
                 'can_request_release' => $canRequestRelease,
                 'release_request' => $releaseRequest,

@@ -65,27 +65,21 @@
                          x-transition:leave="transition ease-in duration-75"
                          x-transition:leave-start="transform opacity-100 scale-100"
                          x-transition:leave-end="transform opacity-0 scale-95"
-                         class="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-[#E5E5EA] p-1.5 z-50 focus:outline-none text-sm">
+                         class="menu-panel absolute right-0 mt-2">
                         
                         <!-- Reschedule Action -->
                         <button type="button"
                                 @click="openActionsMenu = false; openRescheduleModal = true"
-                                class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                            <svg class="w-4 h-4 text-[#6E6E73]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                                <line x1="16" x2="16" y1="2" y2="6"/>
-                                <line x1="8" x2="8" y1="2" y2="6"/>
-                                <line x1="3" x2="21" y1="10" y2="10"/>
-                            </svg>
+                                class="menu-item">
                             <span>Reschedule Batch</span>
                         </button>
 
-                        <div class="h-px bg-[#F2F2F7] my-1"></div>
+                        <div class="menu-divider"></div>
 
                         <!-- Cancel by Camp Action -->
                         <button type="button"
                                 @click="openActionsMenu = false; openCancelModal = true"
-                                class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
+                                class="menu-item menu-item-danger">
                             <svg class="w-4 h-4 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"/>
                                 <line x1="15" y1="9" x2="9" y2="15"/>
@@ -130,18 +124,12 @@
                          x-transition:leave="transition ease-in duration-75"
                          x-transition:leave-start="transform opacity-100 scale-100"
                          x-transition:leave-end="transform opacity-0 scale-95"
-                         class="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-[#E5E5EA] p-1.5 z-50 focus:outline-none text-sm">
+                         class="menu-panel absolute right-0 mt-2">
                         
                         <!-- Reschedule Action -->
                         <button type="button"
                                 @click="openActionsMenu = false; openRescheduleModal = true"
-                                class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                            <svg class="w-4 h-4 text-[#6E6E73]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                                <line x1="16" x2="16" y1="2" y2="6"/>
-                                <line x1="8" x2="8" y1="2" y2="6"/>
-                                <line x1="3" x2="21" y1="10" y2="10"/>
-                            </svg>
+                                class="menu-item">
                             <span>Reschedule Batch</span>
                         </button>
                     </div>
@@ -315,7 +303,7 @@
                 @endif
 
                 @if($batch->status === 'cancelled_by_camp' && $batch->cancellation_reason)
-                    <div class="p-3 bg-rose-50 rounded-xl text-sm text-rose-900 leading-relaxed">
+                    <div class="banner banner-error">
                         <strong>Camp Cancellation Advisory:</strong> {{ $batch->cancellation_reason }} (Logged at {{ $batch->cancelled_at ? $batch->cancelled_at->format('M d, Y h:i A') : 'N/A' }})
                     </div>
                 @endif
@@ -323,8 +311,7 @@
                 <!-- Occupancy & Capacity -->
                 <div class="space-y-2 pt-1">
                     @if($batch->total_participants_count > 0 && $batch->is_coach_pending)
-                        <div class="p-3 bg-amber-50 rounded-xl text-left text-sm text-amber-900 flex items-center gap-2.5">
-                            <img src="{{ asset('icons/icons8-clock-60.png') }}" class="w-4.5 h-4.5 object-contain shrink-0" alt="" aria-hidden="true">
+                        <div class="banner banner-warning text-left flex items-center gap-2.5">
                             <span class="font-bold">Instructor Pending</span>
                         </div>
                     @else
@@ -514,8 +501,8 @@
     </div>
 
     <!-- Cancel Batch Modal -->
-    <div x-show="openCancelModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div role="alertdialog" aria-modal="true" aria-labelledby="modal-cancel-batch-title" class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openCancelModal = false">
+    <div x-show="openCancelModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div role="alertdialog" aria-modal="true" aria-labelledby="modal-cancel-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCancelModal = false">
             <h3 id="modal-cancel-batch-title" class="text-lg font-bold text-[#780000]">Cancel Batch (by Camp)</h3>
             <p class="text-sm text-[#6E6E73]">
                 Cancelling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will automatically update all connected bookings, set them to <strong>Cancelled by Camp</strong>, trigger <strong>100% force majeure refund eligibility</strong>, and send custom cancellation emails to all customers.
@@ -543,8 +530,8 @@
     </div>
 
     <!-- Reschedule Batch Modal -->
-    <div x-show="openRescheduleModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-reschedule-batch-title" class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openRescheduleModal = false">
+    <div x-show="openRescheduleModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div role="dialog" aria-modal="true" aria-labelledby="modal-reschedule-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openRescheduleModal = false">
             <h3 id="modal-reschedule-batch-title" class="text-lg font-bold text-[#1D1D1F]">Reschedule Batch (by Camp)</h3>
             <p class="text-sm text-[#6E6E73]">
                 Rescheduling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will set connected bookings to <strong>Rescheduled</strong> and send a custom email notifying customers to pick their preferred new date through the <strong>Manage Booking</strong> portal.
@@ -572,8 +559,8 @@
     </div>
 
     <!-- Move Booking Modal -->
-    <div x-show="openMoveModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-move-booking-title" class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openMoveModal = false">
+    <div x-show="openMoveModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div role="dialog" aria-modal="true" aria-labelledby="modal-move-booking-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openMoveModal = false">
             <h3 id="modal-move-booking-title" class="text-lg font-bold text-[#1D1D1F]">Move Booking to Another Batch</h3>
             <p class="text-sm text-[#6E6E73]">
                 Reassign booking <strong class="text-[#780000] font-mono" x-text="selectedBookingNumber"></strong> to another scheduled 2D1N batch or unbatch it.
@@ -611,8 +598,8 @@
     </div>
 
     <!-- Complete Batch Modal -->
-    <div x-show="openCompleteModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-complete-batch-title" class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openCompleteModal = false">
+    <div x-show="openCompleteModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div role="dialog" aria-modal="true" aria-labelledby="modal-complete-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCompleteModal = false">
             <div class="flex items-center gap-3">
                 <div>
                     <h3 id="modal-complete-batch-title" class="text-lg font-bold text-[#1D1D1F]">Mark Batch as Completed</h3>
@@ -640,8 +627,8 @@
     </div>
 
     <!-- Reactivate Batch Modal -->
-    <div x-show="openReactivateModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-reactivate-batch-title" class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openReactivateModal = false">
+    <div x-show="openReactivateModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div role="dialog" aria-modal="true" aria-labelledby="modal-reactivate-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openReactivateModal = false">
             <div class="flex items-center gap-3">
                 <div>
                     <h3 id="modal-reactivate-batch-title" class="text-lg font-bold text-[#1D1D1F]">Reactivate Batch</h3>

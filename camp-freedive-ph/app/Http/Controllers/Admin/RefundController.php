@@ -3,24 +3,22 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Booking;
-use App\Models\BookingStatusLog;
-use App\Models\Payment;
-use App\Models\PaymentStatusLog;
+use App\Http\Requests\Admin\Payments\ApproveRefundRequest;
+use App\Http\Requests\Admin\Payments\ForfeitPaymentRequest;
+use App\Http\Requests\Admin\Payments\RejectRefundRequest;
 use App\Models\RefundRequest;
 use App\Services\AuditLogger;
 use App\Services\BookingPolicyEngine;
-use App\Services\PayMongoService;
+use App\Services\Payment\RefundService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class RefundController extends Controller
 {
     public function __construct(
-        protected PayMongoService $payMongoService,
+        protected RefundService $refunds,
         protected BookingPolicyEngine $policyEngine
     ) {}
 
@@ -54,154 +52,33 @@ class RefundController extends Controller
     /**
      * Approve and execute refund via PayMongo API.
      */
-    public function approve(Request $request, RefundRequest $refundRequest): RedirectResponse
+    public function approve(ApproveRefundRequest $request, RefundRequest $refundRequest): RedirectResponse
     {
-        $currentUser = Auth::user();
-        $payment = $refundRequest->payment;
+        $operator = Auth::user();
         $booking = $refundRequest->booking;
+        $result = $this->refunds->approve($refundRequest, $operator, $request->validated()['notes'] ?? null);
 
-        $validated = $request->validate([
-            'notes' => ['nullable', 'string', 'max:500'],
-        ]);
-
-        $refundAmount = (float) ($refundRequest->refund_amount ?: $payment->amount);
-        $paymongoPaymentId = $payment->paymongo_payment_id;
-
-        // Auto-resolve real PayMongo payment_id from Checkout Session if needed
-        if ((empty($paymongoPaymentId) || !str_starts_with($paymongoPaymentId, 'pay_')) && !empty($payment->paymongo_resource_id)) {
-            $session = $this->payMongoService->getCheckoutSession($payment->paymongo_resource_id);
-            $sessPayments = $session['data']['attributes']['payments'] ?? [];
-            if (!empty($sessPayments[0]['id'])) {
-                $paymongoPaymentId = $sessPayments[0]['id'];
-                $payment->update(['paymongo_payment_id' => $paymongoPaymentId]);
-            }
+        if (!$result['success']) {
+            return back()->with('error', "PayMongo Refund Error: {$result['error']}");
         }
 
-        if (empty($paymongoPaymentId)) {
-            $paymongoPaymentId = $payment->transaction_id ?: 'offline';
-        }
+        $amount = number_format($result['amount'], 2);
+        AuditLogger::log('REFUND_APPROVED_AND_EXECUTED', "Refund of ₱{$amount} approved & executed via PayMongo for Booking #{$booking->booking_number} by {$operator->name} (Refund ID: {$result['refund_id']})", $operator, $operator->name, $request);
 
-        // Call PayMongo Refund API
-        $refundResult = $this->payMongoService->refund(
-            $paymongoPaymentId,
-            $refundAmount,
-            'requested_by_customer',
-            $validated['notes'] ?? 'Camp FreedivePH Approved Cancellation Refund'
-        );
-
-        if (!$refundResult['success']) {
-            $errMsg = $refundResult['error'] ?? 'PayMongo refund execution failed. Please retry.';
-            return back()->with('error', "PayMongo Refund Error: {$errMsg}");
-        }
-
-        $paymongoRefundId = $refundResult['refund_id'] ?? ('ref_' . bin2hex(random_bytes(8)));
-
-        DB::transaction(function () use ($refundRequest, $payment, $booking, $paymongoRefundId, $refundAmount, $validated, $currentUser) {
-            // Update Payment Record
-            $payment->update([
-                'status' => 'refunded',
-                'paymongo_refund_id' => $paymongoRefundId,
-                'amount_refunded' => $refundAmount,
-                'refund_reason' => $validated['notes'] ?? 'Admin approved customer cancellation refund',
-            ]);
-
-            // Update Refund Request
-            $refundRequest->update([
-                'status' => 'approved',
-                'paymongo_refund_id' => $paymongoRefundId,
-                'notes' => $validated['notes'] ?? 'Refund processed via PayMongo API',
-                'reviewed_by' => $currentUser->id,
-                'reviewed_at' => now(),
-            ]);
-
-            // Update Booking Status to Cancelled
-            $booking->update([
-                'status' => 'cancelled_by_guest',
-            ]);
-
-            // Logs
-            PaymentStatusLog::create([
-                'payment_id' => $payment->id,
-                'old_status' => 'refund_requested',
-                'new_status' => 'refunded',
-                'changed_by' => $currentUser->id,
-                'note' => "Refund of ₱" . number_format($refundAmount, 2) . " executed via PayMongo (Refund ID: {$paymongoRefundId})",
-                'created_at' => now(),
-            ]);
-
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => 'cancellation_requested',
-                'new_status' => 'cancelled_by_guest',
-                'changed_by' => $currentUser->id,
-                'note' => "Booking cancelled. 100% refund of ₱" . number_format($refundAmount, 2) . " credited to guest via PayMongo.",
-                'created_at' => now(),
-            ]);
-        });
-
-        AuditLogger::log(
-            'REFUND_APPROVED_AND_EXECUTED',
-            "Refund of ₱" . number_format($refundAmount, 2) . " approved & executed via PayMongo for Booking #{$booking->booking_number} by {$currentUser->name} (Refund ID: {$paymongoRefundId})",
-            $currentUser,
-            $currentUser->name,
-            $request
-        );
-
-        return back()->with('success', "Refund of ₱" . number_format($refundAmount, 2) . " successfully executed via PayMongo! Reference: {$paymongoRefundId}");
+        return back()->with('success', "Refund of ₱{$amount} successfully executed via PayMongo! Reference: {$result['refund_id']}");
     }
 
     /**
      * Reject a refund request.
      */
-    public function reject(Request $request, RefundRequest $refundRequest): RedirectResponse
+    public function reject(RejectRefundRequest $request, RefundRequest $refundRequest): RedirectResponse
     {
-        $currentUser = Auth::user();
-        $payment = $refundRequest->payment;
+        $operator = Auth::user();
         $booking = $refundRequest->booking;
+        $notes = $request->validated()['notes'];
+        $this->refunds->reject($refundRequest, $operator, $notes);
 
-        $validated = $request->validate([
-            'notes' => ['required', 'string', 'max:500'],
-        ], [
-            'notes.required' => 'Please provide a clear reason for rejecting this refund request.',
-        ]);
-
-        DB::transaction(function () use ($refundRequest, $payment, $booking, $validated, $currentUser) {
-            $payment->update(['status' => 'completed']);
-            $booking->update(['status' => 'confirmed']);
-
-            $refundRequest->update([
-                'status' => 'rejected',
-                'notes' => $validated['notes'],
-                'reviewed_by' => $currentUser->id,
-                'reviewed_at' => now(),
-            ]);
-
-            PaymentStatusLog::create([
-                'payment_id' => $payment->id,
-                'old_status' => 'refund_requested',
-                'new_status' => 'completed',
-                'changed_by' => $currentUser->id,
-                'note' => "Refund request rejected by {$currentUser->name} - Reason: {$validated['notes']}",
-                'created_at' => now(),
-            ]);
-
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => 'cancellation_requested',
-                'new_status' => 'confirmed',
-                'changed_by' => $currentUser->id,
-                'note' => "Cancellation & refund rejected by {$currentUser->name} - Reason: {$validated['notes']}",
-                'created_at' => now(),
-            ]);
-        });
-
-        AuditLogger::log(
-            'REFUND_REJECTED',
-            "Refund request rejected for Booking #{$booking->booking_number} by {$currentUser->name}. Reason: {$validated['notes']}",
-            $currentUser,
-            $currentUser->name,
-            $request
-        );
+        AuditLogger::log('REFUND_REJECTED', "Refund request rejected for Booking #{$booking->booking_number} by {$operator->name}. Reason: {$notes}", $operator, $operator->name, $request);
 
         return back()->with('info', "Refund request for Booking #{$booking->booking_number} was rejected.");
     }
@@ -209,65 +86,15 @@ class RefundController extends Controller
     /**
      * Forfeit payment/downpayment per policy.
      */
-    public function forfeit(Request $request, RefundRequest $refundRequest): RedirectResponse
+    public function forfeit(ForfeitPaymentRequest $request, RefundRequest $refundRequest): RedirectResponse
     {
-        $currentUser = Auth::user();
-        $payment = $refundRequest->payment;
+        $operator = Auth::user();
         $booking = $refundRequest->booking;
+        $validated = $request->validated();
+        $amount = number_format($this->refunds->forfeit($refundRequest, $operator, $validated['forfeit_reason'], $validated['notes'] ?? null), 2);
 
-        $validated = $request->validate([
-            'forfeit_reason' => ['required', 'in:cancellation_outside_policy_window,customer_no_show,unapproved_late_withdrawal,custom_administrative_decision'],
-            'notes' => ['nullable', 'string', 'max:500'],
-        ]);
+        AuditLogger::log('PAYMENT_FORFEITED', "Payment of ₱{$amount} forfeited for Booking #{$booking->booking_number} by {$operator->name} (Reason: {$validated['forfeit_reason']})", $operator, $operator->name, $request);
 
-        $forfeitedAmount = $payment->amount;
-
-        DB::transaction(function () use ($refundRequest, $payment, $booking, $validated, $forfeitedAmount, $currentUser) {
-            $payment->update([
-                'status' => 'forfeited',
-                'is_forfeited' => true,
-                'forfeited_amount' => $forfeitedAmount,
-                'forfeit_reason' => $validated['forfeit_reason'],
-            ]);
-
-            $refundRequest->update([
-                'status' => 'forfeited',
-                'forfeit_reason' => $validated['forfeit_reason'],
-                'notes' => $validated['notes'] ?? 'Deposit forfeited per camp cancellation policy rules.',
-                'reviewed_by' => $currentUser->id,
-                'reviewed_at' => now(),
-            ]);
-
-            $bookingStatus = ($validated['forfeit_reason'] === 'customer_no_show') ? 'no_show' : 'cancelled_by_guest';
-            $booking->update(['status' => $bookingStatus]);
-
-            PaymentStatusLog::create([
-                'payment_id' => $payment->id,
-                'old_status' => 'refund_requested',
-                'new_status' => 'forfeited',
-                'changed_by' => $currentUser->id,
-                'note' => "Payment of ₱" . number_format($forfeitedAmount, 2) . " forfeited. Reason: {$validated['forfeit_reason']}" . ($validated['notes'] ? " - {$validated['notes']}" : ''),
-                'created_at' => now(),
-            ]);
-
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => 'cancellation_requested',
-                'new_status' => $bookingStatus,
-                'changed_by' => $currentUser->id,
-                'note' => "Booking cancelled. Downpayment forfeited per camp policy ({$validated['forfeit_reason']}).",
-                'created_at' => now(),
-            ]);
-        });
-
-        AuditLogger::log(
-            'PAYMENT_FORFEITED',
-            "Payment of ₱" . number_format($forfeitedAmount, 2) . " forfeited for Booking #{$booking->booking_number} by {$currentUser->name} (Reason: {$validated['forfeit_reason']})",
-            $currentUser,
-            $currentUser->name,
-            $request
-        );
-
-        return back()->with('success', "Payment of ₱" . number_format($forfeitedAmount, 2) . " marked as Forfeited per camp policy.");
+        return back()->with('success', "Payment of ₱{$amount} marked as Forfeited per camp policy.");
     }
 }

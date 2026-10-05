@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Requests\Admin\Bookings\UpdateBookingRequest;
+use App\Http\Requests\Admin\Bookings\StoreBookingRequest;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\BookingParticipant;
@@ -17,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use App\Http\Requests\Admin\Bookings\UpdateBookingStatusRequest;
 
 class BookingController extends Controller
 {
@@ -31,7 +34,7 @@ class BookingController extends Controller
      */
     public function index(Request $request): View
     {
-        $query = Booking::with('participants', 'payments');
+        $query = Booking::with('participants', 'payments', 'batch');
 
         // By default, exclude unpaid downpayment draft bookings unless explicitly requested
         if ($request->filled('status')) {
@@ -110,7 +113,10 @@ class BookingController extends Controller
             'cancelled' => Booking::whereIn('status', ['cancelled_by_camp', 'cancelled_by_guest'])->count(),
         ];
 
-        return view('admin.bookings.index', compact('bookings', 'stats'));
+        $pendingRequestsCount = \App\Models\RescheduleRequest::where('status', 'pending')->count()
+            + \App\Models\CancellationRequest::where('status', 'pending')->count();
+
+        return view('admin.bookings.index', compact('bookings', 'stats', 'pendingRequestsCount'));
     }
 
     /**
@@ -154,83 +160,10 @@ class BookingController extends Controller
     /**
      * Store a manually entered walk-in / phone booking.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(StoreBookingRequest $request): RedirectResponse
     {
         $currentUser = Auth::user();
-
-        // Merge lead contact first_name, middle_name, last_name, and suffix if present
-        if ($request->filled('first_name') || $request->filled('last_name')) {
-            $cfn = trim($request->input('first_name') ?? '');
-            $cmn = $request->boolean('no_middle_name') ? '' : trim($request->input('middle_name') ?? '');
-            $cln = trim($request->input('last_name') ?? '');
-            $csuf = trim($request->input('suffix') ?? '');
-            if ($csuf === 'None' || $csuf === 'none') {
-                $csuf = '';
-            }
-            $contactName = implode(' ', array_filter([$cfn, $cmn, $cln, $csuf]));
-            if ($contactName !== '') {
-                $request->merge(['contact_name' => $contactName]);
-            }
-        }
-
-        // Merge participant first_name, middle_name, last_name, and suffix if present
-        if ($request->has('participants') && is_array($request->input('participants'))) {
-            $participants = $request->input('participants');
-            foreach ($participants as $i => $p) {
-                if (isset($p['first_name']) || isset($p['last_name'])) {
-                    $pfn = trim($p['first_name'] ?? '');
-                    $pmn = !empty($p['no_middle_name']) ? '' : trim($p['middle_name'] ?? '');
-                    $pln = trim($p['last_name'] ?? '');
-                    $psuf = trim($p['suffix'] ?? '');
-                    if ($psuf === 'None' || $psuf === 'none') {
-                        $psuf = '';
-                    }
-                    $pName = implode(' ', array_filter([$pfn, $pmn, $pln, $psuf]));
-                    if ($pName !== '') {
-                        $participants[$i]['name'] = $pName;
-                    }
-                }
-            }
-            $request->merge(['participants' => $participants]);
-        }
-
-        // Sanitize phone number spacing/dashes before validation
-        if ($request->has('contact_phone')) {
-            $cleanedPhone = preg_replace('/[\s\-]/', '', (string)$request->input('contact_phone'));
-            $request->merge(['contact_phone' => $cleanedPhone]);
-        }
-
-        $validated = $request->validate([
-            'class_type' => 'required|in:discovery,fundive,refinement',
-            'is_certified_diver' => 'boolean',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'participants' => 'required|array|min:1|max:45',
-            'participants.*.name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
-            'participants.*.birthdate' => 'nullable|date|before_or_equal:today',
-            'participants.*.gender' => 'nullable|in:male,female,non_binary,prefer_not_to_say',
-            'participants.*.age' => 'required_without:participants.*.birthdate|nullable|integer|min:8|max:85',
-            'participants.*.health_condition' => 'nullable|string|max:1000',
-            'participants.*.swimmer_status' => 'nullable|string|max:50',
-            'contact_name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
-            'contact_email' => 'required|email:rfc,filter|max:255',
-            'contact_phone' => ['required', 'string', 'regex:/^(\+?63|0)9\d{9}$/'],
-            'contact_facebook' => 'nullable|string|max:255',
-            'pickup_option' => 'required|in:none,own,carpool',
-            'pickup_location' => 'nullable|string|max:255',
-            'boat_dive' => 'boolean',
-            'payment_method' => 'required|in:gcash,bpi_bank_transfer,maya,bdo,unionbank,cash,other',
-            'payment_stage' => 'required|in:downpayment,full',
-            'payment_reference' => 'nullable|string|max:100',
-            'admin_notes' => 'nullable|string|max:1000',
-        ], [
-            'contact_phone.regex' => 'Please enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567).',
-            'contact_email.email' => 'Please provide a valid email address.',
-            'participants.*.age.min' => 'Participant age must be at least 8 years old.',
-            'participants.*.age.max' => 'Participant age cannot exceed 85 years old.',
-            'participants.*.name.regex' => 'Participant names must contain letters only.',
-            'contact_name.regex' => 'Contact name must contain letters only.',
-        ]);
+        $validated = $request->validated();
 
         $participantCount = count($validated['participants']);
 
@@ -415,43 +348,10 @@ class BookingController extends Controller
     /**
      * Update booking and participant details with immutable audit trail.
      */
-    public function update(Request $request, Booking $booking): RedirectResponse
+    public function update(UpdateBookingRequest $request, Booking $booking): RedirectResponse
     {
         $currentUser = Auth::user();
-
-        // Sanitize phone number spacing/dashes before validation
-        if ($request->has('contact_phone')) {
-            $cleanedPhone = preg_replace('/[\s\-]/', '', (string)$request->input('contact_phone'));
-            $request->merge(['contact_phone' => $cleanedPhone]);
-        }
-
-        $validated = $request->validate([
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'pickup_option' => 'nullable|in:none,own,carpool',
-            'pickup_location' => 'nullable|string|max:255',
-            'boat_dive' => 'nullable|boolean',
-            'contact_name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
-            'contact_email' => 'required|email:rfc,filter|max:255',
-            'contact_phone' => ['required', 'string', 'regex:/^(\+?63|0)9\d{9}$/'],
-            'contact_facebook' => 'nullable|string|max:255',
-            'participants' => 'required|array|min:1|max:45',
-            'participants.*.id' => 'nullable|integer',
-            'participants.*.name' => 'required|string|min:2|max:100|regex:/^[\pL\s\.\'\-]+$/u',
-            'participants.*.birthdate' => 'nullable|date|before_or_equal:today',
-            'participants.*.gender' => 'nullable|in:male,female,non_binary,prefer_not_to_say',
-            'participants.*.age' => 'required_without:participants.*.birthdate|nullable|integer|min:8|max:85',
-            'participants.*.health_condition' => 'nullable|string|max:1000',
-            'participants.*.swimmer_status' => 'nullable|string|max:50',
-            'edit_reason' => 'required|string|max:500',
-        ], [
-            'contact_phone.regex' => 'Please enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567).',
-            'contact_email.email' => 'Please provide a valid email address.',
-            'participants.*.age.min' => 'Participant age must be at least 8 years old.',
-            'participants.*.age.max' => 'Participant age cannot exceed 85 years old.',
-            'participants.*.name.regex' => 'Participant names must contain letters only.',
-            'contact_name.regex' => 'Contact name must contain letters only.',
-        ]);
+        $validated = $request->validated();
 
         $participantCount = count($validated['participants']);
         $originalParticipantCount = $booking->participants()->count();
@@ -578,14 +478,11 @@ class BookingController extends Controller
     /**
      * Update booking lifecycle status.
      */
-    public function updateStatus(Request $request, Booking $booking): RedirectResponse
+    public function updateStatus(UpdateBookingStatusRequest $request, Booking $booking): RedirectResponse
     {
         $currentUser = Auth::user();
 
-        $validated = $request->validate([
-            'status' => 'required|in:confirmed,completed,rescheduled,no_show,cancelled_by_camp,cancelled_by_guest',
-            'note' => 'nullable|string|max:500',
-        ]);
+        $validated = $request->validated();
 
         $oldStatus = $booking->status;
         $newStatus = $validated['status'];

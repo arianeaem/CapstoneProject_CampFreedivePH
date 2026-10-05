@@ -8,7 +8,7 @@ use App\Services\Analytics\ExportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class ReportsController extends Controller
 {
@@ -38,17 +38,17 @@ class ReportsController extends Controller
 
         // Active tab: default to financial for owner, bookings for admin
         $activeTab = $request->input('tab', $isOwner ? 'financial' : 'bookings');
-        if ($activeTab === 'weather' || (!$isOwner && $activeTab === 'financial')) {
-            $activeTab = 'bookings';
+        if (!in_array($activeTab, ['financial', 'bookings', 'operations'], true) || (!$isOwner && $activeTab === 'financial')) {
+            $activeTab = $isOwner ? 'financial' : 'bookings';
         }
 
         return view('admin.reports.index', compact('user', 'isOwner', 'range', 'data', 'activeTab'));
     }
 
     /**
-     * Stream CSV export for the selected dataset and date range.
+     * Download the Excel (.xlsx) export for the selected report and date range.
      */
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request): Response
     {
         $user = Auth::user();
         $isOwner = ($user->role === 'owner');
@@ -60,7 +60,7 @@ class ReportsController extends Controller
 
         $range = $this->analyticsService->resolveDateRange($preset, $customStart, $customEnd);
 
-        return $this->exportService->streamCsv($type, $range, $isOwner);
+        return $this->exportService->download($type, $range, $isOwner);
     }
 
     /**

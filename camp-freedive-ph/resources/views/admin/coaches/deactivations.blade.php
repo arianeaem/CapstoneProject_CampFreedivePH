@@ -154,14 +154,14 @@
     <!-- ========================================================================= -->
     <!-- MODAL: CONFIRM DEACTIVATION (OWNER ONLY) -->
     <!-- ========================================================================= -->
-    <div x-show="openConfirmModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openConfirmModal = false">
+    <div x-show="openConfirmModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openConfirmModal = false">
             <h3 class="text-lg font-bold text-[#FF3B3C]">Confirm Coach Deactivation</h3>
             <p class="text-sm text-[#6E6E73]">
                 Are you sure you want to deactivate <strong class="text-[#1D1D1F]" x-text="selectedRequest?.coach?.full_name"></strong>?
             </p>
 
-            <div class="p-3 bg-[#FEF2F2] rounded-xl border border-[#FECACA] text-sm text-[#991B1B]">
+            <div class="banner banner-warning">
                 <strong>Conflict Check:</strong> If this coach has any upcoming 2D1N batch assignments, the system will block deactivation until those sessions are reassigned.
             </div>
 

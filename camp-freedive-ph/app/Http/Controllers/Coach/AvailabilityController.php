@@ -13,6 +13,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
+use App\Http\Requests\Coach\ToggleAvailabilityRequest;
+use App\Http\Requests\Coach\BulkUpdateAvailabilityRequest;
+use App\Http\Requests\Coach\RequestReleaseRequest;
 
 class AvailabilityController extends Controller
 {
@@ -180,12 +183,8 @@ class AvailabilityController extends Controller
     /**
      * Toggle a single 2D1N date pair availability.
      */
-    public function toggle(Request $request): JsonResponse|RedirectResponse
+    public function toggle(ToggleAvailabilityRequest $request): JsonResponse|RedirectResponse
     {
-        $request->validate([
-            'date' => 'required|date',
-        ]);
-
         $coach = Auth::user();
         $startDate = Carbon::parse($request->input('date'))->startOfDay();
 
@@ -290,14 +289,8 @@ class AvailabilityController extends Controller
     /**
      * Bulk Edit Mode: Apply availability status across multiple selected date pairs.
      */
-    public function bulkUpdate(Request $request): JsonResponse|RedirectResponse
+    public function bulkUpdate(BulkUpdateAvailabilityRequest $request): JsonResponse|RedirectResponse
     {
-        $request->validate([
-            'dates' => 'required|array|min:1',
-            'dates.*' => 'required|date',
-            'status' => 'required|in:available,unavailable,remove',
-        ]);
-
         $coach = Auth::user();
         $targetStatus = $request->input('status');
         $rawDates = $request->input('dates');
@@ -395,14 +388,8 @@ class AvailabilityController extends Controller
      * Submit an Emergency Release Request for an assigned batch/date.
      * Emergency releases may be requested at any time.
      */
-    public function requestRelease(Request $request): RedirectResponse
+    public function requestRelease(RequestReleaseRequest $request): RedirectResponse
     {
-        $request->validate([
-            'batch_id' => 'required|exists:batches,id',
-            'dive_date' => 'required|date',
-            'reason' => 'required|string|min:10|max:1000',
-        ]);
-
         $coach = Auth::user();
         $batch = Batch::findOrFail($request->input('batch_id'));
         $diveDate = Carbon::parse($request->input('dive_date'))->startOfDay();

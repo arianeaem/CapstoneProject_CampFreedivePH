@@ -74,14 +74,12 @@
         <form method="GET" action="{{ route('admin.pricing.triggered', $rule) }}" class="flex flex-col sm:flex-row sm:items-end gap-3 text-sm">
             <div>
                 <label class="block font-semibold text-[#6E6E73] mb-1">Dive Date From</label>
-                <input type="date" name="date_from" value="{{ request('date_from') }}"
-                       class="text-sm rounded-lg border border-[#D1D1D6] px-2.5 py-1.5 bg-[#F2F2F7] focus:bg-white focus:border-[#780000]">
+                <x-date-picker name="date_from" :value="request('date_from')" placeholder="Any date" />
             </div>
 
             <div>
                 <label class="block font-semibold text-[#6E6E73] mb-1">Dive Date To</label>
-                <input type="date" name="date_to" value="{{ request('date_to') }}"
-                       class="text-sm rounded-lg border border-[#D1D1D6] px-2.5 py-1.5 bg-[#F2F2F7] focus:bg-white focus:border-[#780000]">
+                <x-date-picker name="date_to" :value="request('date_to')" placeholder="Any date" />
             </div>
 
             <div class="flex items-center gap-2">

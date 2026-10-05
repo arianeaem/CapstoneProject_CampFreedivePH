@@ -33,6 +33,43 @@ class AdminBatchModuleTest extends TestCase
         $response->assertSee('Batch 2');
     }
 
+    public function test_batches_can_be_searched_and_filtered_by_coach(): void
+    {
+        $admin = User::where('email', 'admin@campfreedive.ph')->first();
+        $coach = User::factory()->create(['role' => 'coach', 'status' => 'active', 'name' => 'Zelda Coachman']);
+
+        $withCoach = Batch::create([
+            'name' => 'Coached Batch', 'batch_code' => 'ZC-COACHED-01',
+            'start_date' => Carbon::today()->addDays(40)->toDateString(), 'end_date' => Carbon::today()->addDays(41)->toDateString(),
+            'status' => 'open',
+        ]);
+        $withoutCoach = Batch::create([
+            'name' => 'Uncoached Batch', 'batch_code' => 'ZC-UNCOACHED-02',
+            'start_date' => Carbon::today()->addDays(47)->toDateString(), 'end_date' => Carbon::today()->addDays(48)->toDateString(),
+            'status' => 'open',
+        ]);
+        \App\Models\CoachAvailability::create([
+            'coach_id' => $coach->id, 'date' => $withCoach->start_date->toDateString(), 'status' => 'assigned', 'notes' => 'Team for ZC-COACHED-01',
+        ]);
+
+        $ids = fn ($response) => collect($response->viewData('batches')->items())->pluck('id')->all();
+
+        // Search by (part of) the coach's name, any letter case
+        $bySearch = $this->actingAs($admin)->get('/admin/batches?per_page=100&search=zelda');
+        $this->assertContains($withCoach->id, $ids($bySearch));
+        $this->assertNotContains($withoutCoach->id, $ids($bySearch));
+
+        // Coach filter dropdown
+        $byCoach = $this->actingAs($admin)->get('/admin/batches?per_page=100&coach=' . $coach->id);
+        $this->assertSame([$withCoach->id], $ids($byCoach));
+        $byCoach->assertSee('id="filter-coach"', false);
+        $byCoach->assertSee('Zelda Coachman');
+
+        // Normal batch search still works
+        $byCode = $this->actingAs($admin)->get('/admin/batches?per_page=100&search=zc-uncoached');
+        $this->assertSame([$withoutCoach->id], $ids($byCode));
+    }
+
     public function test_admin_can_access_create_batch_page(): void
     {
         $admin = User::where('email', 'admin@campfreedive.ph')->first();

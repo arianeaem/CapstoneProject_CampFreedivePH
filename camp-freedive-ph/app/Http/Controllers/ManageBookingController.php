@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ManageBooking\RescheduleBookingRequest;
 use App\Mail\CancellationRequestedMail;
 use App\Mail\RescheduleRequestedMail;
 use App\Models\Booking;
@@ -15,6 +16,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
+use App\Http\Requests\ManageBooking\FindBookingRequest;
+use App\Http\Requests\ManageBooking\CancelBookingRequest;
 
 /**
  * Customer Self-Service Booking Management Controller.
@@ -58,16 +61,8 @@ class ManageBookingController extends Controller
      * @param Request $request Contains `booking_number` and `pin`.
      * @return RedirectResponse Redirects to self-service dashboard on success.
      */
-    public function search(Request $request): RedirectResponse
+    public function search(FindBookingRequest $request): RedirectResponse
     {
-        $request->validate([
-            'booking_number' => ['required', 'string', 'regex:/^CFP-\d{4}-[A-Za-z0-9]{4,10}$/'],
-            'pin' => ['required', 'digits:4'],
-        ], [
-            'booking_number.regex' => 'Please enter a valid booking reference number (e.g. CFP-2026-XXXXX).',
-            'pin.digits' => 'The PIN must be exactly 4 digits.',
-        ]);
-
         $booking = Booking::where('booking_number', strtoupper(trim($request->booking_number)))
             ->where('pin', trim($request->pin))
             ->first();
@@ -114,8 +109,8 @@ class ManageBookingController extends Controller
 
         if (!$isAuthenticated) {
             $msg = $request->has('pin')
-                ? 'Invalid PIN. Please enter your 4-digit Security PIN.'
-                : 'Please enter your 4-digit Security PIN to access your booking.';
+                ? 'Invalid PIN. Please enter your 4-digit PIN.'
+                : 'Please enter your 4-digit PIN to access your booking.';
 
             return redirect()->route('manage.index', ['number' => $booking->booking_number])
                 ->with('info', $msg);
@@ -147,34 +142,9 @@ class ManageBookingController extends Controller
      * @param string $booking_number Target booking identifier.
      * @return RedirectResponse Redirects back with status feedback.
      */
-    public function reschedule(Request $request, string $booking_number): RedirectResponse
+    public function reschedule(RescheduleBookingRequest $request, string $booking_number): RedirectResponse
     {
-        $validated = $request->validate([
-            'pin' => ['required', 'digits:4'],
-            'requested_start_date' => ['required', 'date', 'after_or_equal:today'],
-            'requested_end_date' => [
-                'required',
-                'date',
-                function ($attribute, $value, $fail) use ($request) {
-                    $startDate = $request->input('requested_start_date');
-                    if (!$startDate) {
-                        return;
-                    }
-                    try {
-                        $start = Carbon::parse($startDate)->startOfDay();
-                        $end = Carbon::parse($value)->startOfDay();
-                        if ($start->copy()->addDay()->format('Y-m-d') !== $end->format('Y-m-d')) {
-                            $fail('The requested end date must be exactly one calendar day after the start date.');
-                        }
-                    } catch (\Throwable $e) {
-                        $fail('The requested end date is invalid.');
-                    }
-                },
-            ],
-            'reason' => 'nullable|string|max:500',
-        ], [
-            'pin.digits' => 'The PIN must be exactly 4 digits.',
-        ]);
+        $validated = $request->validated();
 
         $booking = Booking::where('booking_number', strtoupper(trim($booking_number)))
             ->where('pin', trim($validated['pin']))
@@ -235,15 +205,9 @@ class ManageBookingController extends Controller
      * @param string $booking_number Target booking identifier.
      * @return RedirectResponse Redirects back with status feedback.
      */
-    public function cancel(Request $request, string $booking_number): RedirectResponse
+    public function cancel(CancelBookingRequest $request, string $booking_number): RedirectResponse
     {
-        $validated = $request->validate([
-            'pin' => ['required', 'digits:4'],
-            'confirm_cancel_ack' => 'required|accepted',
-            'reason' => 'nullable|string|max:500',
-        ], [
-            'pin.digits' => 'The PIN must be exactly 4 digits.',
-        ]);
+        $validated = $request->validated();
 
         $booking = Booking::where('booking_number', strtoupper(trim($booking_number)))
             ->where('pin', trim($validated['pin']))

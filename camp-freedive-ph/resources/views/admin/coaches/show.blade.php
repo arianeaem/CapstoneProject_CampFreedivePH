@@ -307,8 +307,8 @@
     </div>
 
     <!-- Reassign Student Modal -->
-    <div x-show="openReassignModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openReassignModal = false">
+    <div x-show="openReassignModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openReassignModal = false">
             <h3 class="text-lg font-bold text-[#1D1D1F]">Reassign Student Away</h3>
             <p class="text-sm text-[#6E6E73]">
                 Reassign <strong class="text-[#1D1D1F]" x-text="selectedParticipantName"></strong> away from Coach {{ $coach->name }} to another coach.

@@ -178,8 +178,8 @@
     </div>
 
     <!-- Balance Settlement Modal -->
-    <div x-show="openBalanceModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-[#E5E5EA]" @click.outside="openBalanceModal = false">
+    <div x-show="openBalanceModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openBalanceModal = false">
             <h3 class="text-lg font-bold text-[#1D1D1F]">Record Balance Settlement</h3>
             <p class="text-sm text-[#6E6E73]">
                 Collect remaining balance of <strong class="text-[#780000]">₱{{ number_format($payment->booking->balance_amount, 2) }}</strong> for Booking #{{ $payment->booking->booking_number }}.

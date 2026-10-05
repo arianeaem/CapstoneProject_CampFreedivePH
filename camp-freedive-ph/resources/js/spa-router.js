@@ -341,6 +341,15 @@ class SPARouter {
         // Replace container inner HTML
         targetContainer.innerHTML = sourceContainer.innerHTML;
 
+        // Swap and run the page's pushed scripts (@stack('scripts')) so components they define
+        // (e.g. x-data="coachAvailabilityCalendar(...)") exist before Alpine initializes the new page
+        const targetScripts = document.getElementById('spa-page-scripts');
+        const sourceScripts = newDoc.getElementById('spa-page-scripts');
+        if (targetScripts) {
+            targetScripts.innerHTML = sourceScripts ? sourceScripts.innerHTML : '';
+            this.executeScripts(targetScripts);
+        }
+
         // Execute any embedded scripts
         this.executeScripts(targetContainer);
 

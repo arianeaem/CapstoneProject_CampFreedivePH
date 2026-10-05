@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Coach;
 
+use Illuminate\Support\Facades\Gate;
 use App\Http\Controllers\Controller;
 use App\Models\CoachOpening;
 use App\Models\CoachRequest;
@@ -121,12 +122,7 @@ class RequestController extends Controller
      */
     public function withdraw(CoachRequest $coachRequest): RedirectResponse
     {
-        $coach = Auth::user();
-
-        // Enforce ownership
-        if ($coachRequest->coach_id !== $coach->id) {
-            abort(403, 'Unauthorized action.');
-        }
+        Gate::authorize('withdraw', $coachRequest);
 
         // Only pending requests can be withdrawn
         if ($coachRequest->status !== 'pending') {

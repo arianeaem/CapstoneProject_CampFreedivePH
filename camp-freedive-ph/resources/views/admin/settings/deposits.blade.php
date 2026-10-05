@@ -20,12 +20,7 @@
     </div>
 
     @if($errors->any())
-        <div class="p-4 rounded-xl bg-rose-50 text-rose-800 flex items-start gap-3 shadow-2xs">
-            <svg class="w-5 h-5 text-rose-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
+        <div class="banner banner-error flex items-start gap-3">
             <div>
                 <p class="font-bold text-sm">Please correct the errors below:</p>
                 <ul class="list-disc list-inside text-xs text-rose-700 mt-1 space-y-0.5">
