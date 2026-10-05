@@ -1,0 +1,706 @@
+{
+  "wind_speed": {
+    "cv_summary": {
+      "1": {
+        "cv_persistence_mae": 1.7519933800544056,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "3": {
+        "cv_persistence_mae": 1.8035093712431685,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "6": {
+        "cv_persistence_mae": 1.8708521103396258,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "12": {
+        "cv_persistence_mae": 1.8904000991567396,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "24": {
+        "cv_persistence_mae": 1.7505533221345313,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "48": {
+        "cv_persistence_mae": 1.7912235920349293,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "72": {
+        "cv_persistence_mae": 1.8222370350883967,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "120": {
+        "cv_persistence_mae": 1.8402354505391028,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "168": {
+        "cv_persistence_mae": 1.8713049084646247,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      },
+      "240": {
+        "cv_persistence_mae": 1.9500741884646864,
+        "cv_climatology_mae": 1.4168885447948876,
+        "selected_winner": "climatology"
+      }
+    },
+    "holdout_benchmark": [
+      {
+        "horizon_h": 1,
+        "lead_from_last_obs_h": 121,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.523268531255983,
+        "holdout_mae_clim_ref": 1.523268531255983,
+        "holdout_mae_persistence": 1.8200494118231052,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 3,
+        "lead_from_last_obs_h": 123,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5232598107240751,
+        "holdout_mae_clim_ref": 1.5232598107240751,
+        "holdout_mae_persistence": 1.8681347566939281,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 6,
+        "lead_from_last_obs_h": 126,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.523311328361784,
+        "holdout_mae_clim_ref": 1.523311328361784,
+        "holdout_mae_persistence": 1.9460839914751027,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 12,
+        "lead_from_last_obs_h": 132,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.522891628320612,
+        "holdout_mae_clim_ref": 1.522891628320612,
+        "holdout_mae_persistence": 2.002355760611945,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 24,
+        "lead_from_last_obs_h": 144,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5222315322720477,
+        "holdout_mae_clim_ref": 1.5222315322720477,
+        "holdout_mae_persistence": 1.8511273561354606,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 48,
+        "lead_from_last_obs_h": 168,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.523520013755634,
+        "holdout_mae_clim_ref": 1.523520013755634,
+        "holdout_mae_persistence": 1.952312778542991,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 72,
+        "lead_from_last_obs_h": 192,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5246761699133757,
+        "holdout_mae_clim_ref": 1.5246761699133757,
+        "holdout_mae_persistence": 2.0424749653601935,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 120,
+        "lead_from_last_obs_h": 240,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5216783496697226,
+        "holdout_mae_clim_ref": 1.5216783496697226,
+        "holdout_mae_persistence": 2.118992228807597,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 168,
+        "lead_from_last_obs_h": 288,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.523223047610485,
+        "holdout_mae_clim_ref": 1.523223047610485,
+        "holdout_mae_persistence": 2.1578742046442967,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 240,
+        "lead_from_last_obs_h": 360,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5259475225795265,
+        "holdout_mae_clim_ref": 1.5259475225795265,
+        "holdout_mae_persistence": 2.21853879048679,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      }
+    ]
+  },
+  "wind_gust": {
+    "cv_summary": {
+      "1": {
+        "cv_persistence_mae": 2.7826679557634235,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "3": {
+        "cv_persistence_mae": 2.849972588087715,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "6": {
+        "cv_persistence_mae": 2.975863901602583,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "12": {
+        "cv_persistence_mae": 3.0636871092976676,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "24": {
+        "cv_persistence_mae": 2.8137516492002788,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "48": {
+        "cv_persistence_mae": 2.8811429708306915,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "72": {
+        "cv_persistence_mae": 2.918889161492263,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "120": {
+        "cv_persistence_mae": 2.9696105204797356,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "168": {
+        "cv_persistence_mae": 3.0258849943615154,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      },
+      "240": {
+        "cv_persistence_mae": 3.1271520614870525,
+        "cv_climatology_mae": 2.2202622323921593,
+        "selected_winner": "climatology"
+      }
+    },
+    "holdout_benchmark": [
+      {
+        "horizon_h": 1,
+        "lead_from_last_obs_h": 121,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5675639356158753,
+        "holdout_mae_clim_ref": 2.5675639356158753,
+        "holdout_mae_persistence": 2.990537741129927,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 3,
+        "lead_from_last_obs_h": 123,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5676406435672963,
+        "holdout_mae_clim_ref": 2.5676406435672963,
+        "holdout_mae_persistence": 3.0518969102503064,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 6,
+        "lead_from_last_obs_h": 126,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5676893023354403,
+        "holdout_mae_clim_ref": 2.5676893023354403,
+        "holdout_mae_persistence": 3.1619957286229265,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 12,
+        "lead_from_last_obs_h": 132,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5681998138886306,
+        "holdout_mae_clim_ref": 2.5681998138886306,
+        "holdout_mae_persistence": 3.240678088937181,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 24,
+        "lead_from_last_obs_h": 144,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.569051325255887,
+        "holdout_mae_clim_ref": 2.569051325255887,
+        "holdout_mae_persistence": 3.079803863051375,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 48,
+        "lead_from_last_obs_h": 168,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.572878071268412,
+        "holdout_mae_clim_ref": 2.572878071268412,
+        "holdout_mae_persistence": 3.2295834439230338,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 72,
+        "lead_from_last_obs_h": 192,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.574854019135476,
+        "holdout_mae_clim_ref": 2.574854019135476,
+        "holdout_mae_persistence": 3.350038986267348,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 120,
+        "lead_from_last_obs_h": 240,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5701488701807564,
+        "holdout_mae_clim_ref": 2.5701488701807564,
+        "holdout_mae_persistence": 3.4054498469284455,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 168,
+        "lead_from_last_obs_h": 288,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5692357435558293,
+        "holdout_mae_clim_ref": 2.5692357435558293,
+        "holdout_mae_persistence": 3.547915359075001,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 240,
+        "lead_from_last_obs_h": 360,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 2.5792985497821537,
+        "holdout_mae_clim_ref": 2.5792985497821537,
+        "holdout_mae_persistence": 3.5288557272267798,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      }
+    ]
+  },
+  "slp": {
+    "cv_summary": {
+      "1": {
+        "cv_persistence_mae": 1.8788699306746812,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "3": {
+        "cv_persistence_mae": 2.133233358582246,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "6": {
+        "cv_persistence_mae": 2.4099052474265044,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "12": {
+        "cv_persistence_mae": 2.020892385559143,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "24": {
+        "cv_persistence_mae": 1.9521487908170478,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "48": {
+        "cv_persistence_mae": 2.0486952945069103,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "72": {
+        "cv_persistence_mae": 2.0912017281062982,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "120": {
+        "cv_persistence_mae": 2.082565934942384,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "168": {
+        "cv_persistence_mae": 2.0992181303911845,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      },
+      "240": {
+        "cv_persistence_mae": 2.1341386098419366,
+        "cv_climatology_mae": 1.4743727691038122,
+        "selected_winner": "climatology"
+      }
+    },
+    "holdout_benchmark": [
+      {
+        "horizon_h": 1,
+        "lead_from_last_obs_h": 121,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5378950881258868,
+        "holdout_mae_clim_ref": 1.5378950881258868,
+        "holdout_mae_persistence": 1.9303666328773277,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 3,
+        "lead_from_last_obs_h": 123,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.537779221107793,
+        "holdout_mae_clim_ref": 1.537779221107793,
+        "holdout_mae_persistence": 2.180176099738307,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 6,
+        "lead_from_last_obs_h": 126,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.537754679577228,
+        "holdout_mae_clim_ref": 1.537754679577228,
+        "holdout_mae_persistence": 2.460457316222011,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 12,
+        "lead_from_last_obs_h": 132,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5374335225067195,
+        "holdout_mae_clim_ref": 1.5374335225067195,
+        "holdout_mae_persistence": 2.079596272520443,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 24,
+        "lead_from_last_obs_h": 144,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5375461337006144,
+        "holdout_mae_clim_ref": 1.5375461337006144,
+        "holdout_mae_persistence": 1.9685389542375378,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 48,
+        "lead_from_last_obs_h": 168,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.540482636968402,
+        "holdout_mae_clim_ref": 1.540482636968402,
+        "holdout_mae_persistence": 2.048938473734535,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 72,
+        "lead_from_last_obs_h": 192,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5439926351192432,
+        "holdout_mae_clim_ref": 1.5439926351192432,
+        "holdout_mae_persistence": 2.1103563260223743,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 120,
+        "lead_from_last_obs_h": 240,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5462915277390246,
+        "holdout_mae_clim_ref": 1.5462915277390246,
+        "holdout_mae_persistence": 2.1942556711076846,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 168,
+        "lead_from_last_obs_h": 288,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5416321511427085,
+        "holdout_mae_clim_ref": 1.5416321511427085,
+        "holdout_mae_persistence": 2.202727820453311,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 240,
+        "lead_from_last_obs_h": 360,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 1.5474453977955904,
+        "holdout_mae_clim_ref": 1.5474453977955904,
+        "holdout_mae_persistence": 2.164242847121448,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      }
+    ]
+  },
+  "wind_dir": {
+    "cv_summary": {
+      "1": {
+        "cv_persistence_mae": 47.0374538807885,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "3": {
+        "cv_persistence_mae": 48.18452489473153,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "6": {
+        "cv_persistence_mae": 50.354330305414045,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "12": {
+        "cv_persistence_mae": 52.33447872000059,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "24": {
+        "cv_persistence_mae": 48.73357616739034,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "48": {
+        "cv_persistence_mae": 50.3629319827185,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "72": {
+        "cv_persistence_mae": 50.90333001585058,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "120": {
+        "cv_persistence_mae": 51.978303015326986,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "168": {
+        "cv_persistence_mae": 54.628399674806985,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      },
+      "240": {
+        "cv_persistence_mae": 57.66578096034713,
+        "cv_climatology_mae": 43.8082025982874,
+        "selected_winner": "climatology"
+      }
+    },
+    "holdout_benchmark": [
+      {
+        "horizon_h": 1,
+        "lead_from_last_obs_h": 121,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.591715450544083,
+        "holdout_mae_clim_ref": 26.591715450544083,
+        "holdout_mae_persistence": 39.35092481170895,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 3,
+        "lead_from_last_obs_h": 123,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.589005288015475,
+        "holdout_mae_clim_ref": 26.589005288015475,
+        "holdout_mae_persistence": 40.38034691052733,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 6,
+        "lead_from_last_obs_h": 126,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.58087027036412,
+        "holdout_mae_clim_ref": 26.58087027036412,
+        "holdout_mae_persistence": 42.16508676857777,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 12,
+        "lead_from_last_obs_h": 132,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.57074703012376,
+        "holdout_mae_clim_ref": 26.57074703012376,
+        "holdout_mae_persistence": 44.1501023048155,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 24,
+        "lead_from_last_obs_h": 144,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.57466746379045,
+        "holdout_mae_clim_ref": 26.57466746379045,
+        "holdout_mae_persistence": 40.05250177962752,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 48,
+        "lead_from_last_obs_h": 168,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.605239458494875,
+        "holdout_mae_clim_ref": 26.605239458494875,
+        "holdout_mae_persistence": 40.68840292275599,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 72,
+        "lead_from_last_obs_h": 192,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.63979622249146,
+        "holdout_mae_clim_ref": 26.63979622249146,
+        "holdout_mae_persistence": 41.32975280726886,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 120,
+        "lead_from_last_obs_h": 240,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.359591717495427,
+        "holdout_mae_clim_ref": 26.359591717495427,
+        "holdout_mae_persistence": 41.21055930597151,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 168,
+        "lead_from_last_obs_h": 288,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.288918734033135,
+        "holdout_mae_clim_ref": 26.288918734033135,
+        "holdout_mae_persistence": 38.92605074870482,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      },
+      {
+        "horizon_h": 240,
+        "lead_from_last_obs_h": 360,
+        "selected_model": "climatology",
+        "holdout_mae_selected": 26.36248637103646,
+        "holdout_mae_clim_ref": 26.36248637103646,
+        "holdout_mae_persistence": 38.51961047034769,
+        "delta_mae": 0.0,
+        "delta_ci_95_lower": 0.0,
+        "delta_ci_95_upper": 0.0,
+        "skill_pct_vs_clim": 0.0
+      }
+    ]
+  }
+}

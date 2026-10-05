@@ -719,11 +719,12 @@ def assess_booking(request: BookingAssessmentRequest):
     # Generate multi-horizon physics forecast with quantiles using the routed bucket
     session_physics = None
     try:
-        sample_vec = np.ones((133,), dtype=np.float32) * 1.5
-        sample_vec[132] = float(session_routed_h)
+        exp_dim = multihorizon_router.get_expected_feature_count()
+        sample_vec = np.ones((exp_dim,), dtype=np.float32) * 1.5
         if len(raw) >= 48:
             lagged_df = build_lagged_features(raw)
-            sample_vec = np.append(lagged_df.iloc[-1].values.astype(np.float32), float(session_routed_h))
+            vec = lagged_df.iloc[-1].values.astype(np.float32)
+            sample_vec = np.pad(vec, (0, max(0, exp_dim - len(vec))))[:exp_dim]
         session_physics, _ = multihorizon_router.generate_physics_forecast(
             horizon=session_routed_h,
             feature_vector=sample_vec,
@@ -766,12 +767,9 @@ def get_multi_horizon_physics(request: MultiHorizonForecastRequest):
     horizon = int(request.horizon_hours)
     now_utc = datetime.now(timezone.utc)
 
-    if request.feature_vector is not None and len(request.feature_vector) >= 132:
+    expected_feat_dim = multihorizon_router.get_expected_feature_count()
+    if request.feature_vector is not None and len(request.feature_vector) == expected_feat_dim:
         vec = np.array(request.feature_vector, dtype=np.float32)
-        if len(vec) == 132:
-            vec = np.append(vec, float(horizon))
-        else:
-            vec[132] = float(horizon)
     elif request.readings is not None and len(request.readings) >= 48:
         raw_df = pd.DataFrame([r.model_dump() for r in request.readings])
         needs_currents = ("current_u" not in raw_df.columns or raw_df["current_u"].isna().any())
@@ -787,12 +785,13 @@ def get_multi_horizon_physics(request: MultiHorizonForecastRequest):
                 raw_df[col] = 1.0
 
         lagged_df = build_lagged_features(raw_df)
-        vec_132 = lagged_df.iloc[-1].values.astype(np.float32)
-        vec = np.append(vec_132, float(horizon))
+        vec = lagged_df.iloc[-1].values.astype(np.float32)
+        if len(vec) != expected_feat_dim:
+            # Pad or truncate cleanly to expected dimension
+            vec = np.pad(vec, (0, max(0, expected_feat_dim - len(vec))))[:expected_feat_dim]
     else:
-        # Default fallback synthetic observation vector for direct evaluation
-        vec = np.ones((133,), dtype=np.float32) * 1.5
-        vec[132] = float(horizon)
+        # Default fallback observation vector sized to expected feature dimension
+        vec = np.ones((expected_feat_dim,), dtype=np.float32) * 1.5
 
     target_ts = pd.Timestamp.now(tz="UTC") + pd.Timedelta(hours=horizon)
     forecast, metadata = multihorizon_router.generate_physics_forecast(
@@ -807,3 +806,37 @@ def get_multi_horizon_physics(request: MultiHorizonForecastRequest):
         metadata=metadata,
         generated_at=now_utc.isoformat(),
     )
+
+
+class SiteForecastRequest(BaseModel):
+    latitude: float = Field(..., description="Latitude of target site")
+    longitude: float = Field(..., description="Longitude of target site")
+    issued_at: Optional[str] = Field(None, description="ISO 8601 timestamp string of forecast issue time")
+    days: int = Field(10, description="Forecast horizon in days (default 10, max 16)")
+    force_stale: bool = Field(False, description="Flag to force simulation of stale store fallback")
+
+
+@app.post("/forecast/site")
+def forecast_site_endpoint(request: SiteForecastRequest):
+    """
+    Primary Operational Endpoint for Camp FreedivePH Site Forecasting.
+    Implements multi-source horizon cutoffs (hs: 48h, current_speed: 72h),
+    conformal quantile bounds, separate anomaly & quantile interpolation,
+    graceful climatology degradation, and out-of-area guardrails.
+    """
+    from src.serve.site_forecaster import get_site_forecaster, OutOfAreaError
+    forecaster = get_site_forecaster()
+    try:
+        return forecaster.forecast_site(
+            lat=request.latitude,
+            lon=request.longitude,
+            issued_at=request.issued_at,
+            days=request.days,
+            force_stale=request.force_stale
+        )
+    except OutOfAreaError as e:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "out_of_area", "message": str(e)}
+        )
+

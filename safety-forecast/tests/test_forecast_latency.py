@@ -8,6 +8,10 @@ Run with:
     pytest tests/test_forecast_latency.py --benchmark-only (if pytest-benchmark is installed)
 """
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import time
 import logging
 import pytest
@@ -26,8 +30,10 @@ ALL_HORIZONS = [1, 6, 12, 24, 48, 72, 96, 144, 168]
 
 @pytest.fixture(scope="module")
 def sample_features():
+    from src.serve.model_router import get_expected_feature_count
+    feat_dim = get_expected_feature_count()
     np.random.seed(42)
-    return np.random.uniform(low=0.1, high=5.0, size=(133,)).astype(np.float32)
+    return np.random.uniform(low=0.1, high=5.0, size=(feat_dim,)).astype(np.float32)
 
 
 @pytest.mark.parametrize("horizon", ALL_HORIZONS)

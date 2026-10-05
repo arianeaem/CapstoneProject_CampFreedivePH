@@ -47,6 +47,21 @@ def build_training_features() -> pd.DataFrame:
     df_raw = pd.read_parquet(interim_path)
     print(f"  Raw collocated shape: {df_raw.shape}")
 
+    # Enforce cutoff rule: training features strictly use verified rows only
+    if "is_verified" in df_raw.columns:
+        n_before = len(df_raw)
+        df_raw = df_raw[df_raw["is_verified"] == True].copy()
+        print(f"  Filtered to {len(df_raw)} verified rows (excluded {n_before - len(df_raw)} provisional/forecast rows)")
+    elif "is_provisional" in df_raw.columns or "is_forecast" in df_raw.columns:
+        mask = pd.Series(True, index=df_raw.index)
+        if "is_provisional" in df_raw.columns:
+            mask = mask & (~df_raw["is_provisional"])
+        if "is_forecast" in df_raw.columns:
+            mask = mask & (~df_raw["is_forecast"])
+        n_before = len(df_raw)
+        df_raw = df_raw[mask].copy()
+        print(f"  Filtered to {len(df_raw)} verified rows (excluded {n_before - len(df_raw)} provisional/forecast rows)")
+
     # Compute physics and cyclical features
     df_feat = compute_marine_physics_features(df_raw)
 

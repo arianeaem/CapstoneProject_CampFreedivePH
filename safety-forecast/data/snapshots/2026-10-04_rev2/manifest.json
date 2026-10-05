@@ -1,0 +1,90 @@
+{
+  "manifest_version": "1.2",
+  "snapshot_id": "2026-10-04_rev2",
+  "supersedes": "2026-10-04_rev1",
+  "created_at_utc": "2026-10-03T23:50:00.000000+00:00",
+  "download_date": "2026-10-04",
+  "index_timezone": "Asia/Manila",
+  "site": {
+    "name": "Camp FreedivePH (Bagalangit / Mainit Point, Mabini, Batangas)",
+    "latitude": 13.6874,
+    "longitude": 120.8931
+  },
+  "files": {
+    "cmems_waves.parquet": {
+      "sha256": "15b14e0baa6312acc266b7d504e95fd35b217cc2bc88680bc56c9bc9f3cdb449",
+      "row_count": 34366,
+      "start_time_utc": "2022-11-01T03:00:00+00:00",
+      "end_time_utc": "2026-10-03T00:00:00+00:00",
+      "columns": [
+        "hs",
+        "tp",
+        "swell_height",
+        "wind_wave_height",
+        "wave_is_interpolated",
+        "is_provisional"
+      ],
+      "dataset_id": "cmems_mod_glo_wav_anfc_0.083deg_PT3H-i",
+      "dataset_version": "202411",
+      "cell_center": {
+        "lat": 13.6667,
+        "lon": 120.9167
+      },
+      "distance_from_site_km": 3.43,
+      "location_description": "Maricaban Strait wave analysis cell",
+      "operational_lag_hours": 12,
+      "native_time_step_hours": 3,
+      "provisional_rows_count": 12,
+      "file_size_bytes": 638222
+    },
+    "cmems_currents.parquet": {
+      "sha256": "5d44843315ac581b0ba0a56ddd74e6adb3b71f4ca06c36db57d92691e1142070",
+      "row_count": 51889,
+      "start_time_utc": "2020-11-01T00:00:00+00:00",
+      "end_time_utc": "2026-10-03T00:00:00+00:00",
+      "columns": [
+        "current_u",
+        "current_v",
+        "eulerian_u",
+        "eulerian_v",
+        "tide_u",
+        "tide_v",
+        "stokes_u",
+        "stokes_v",
+        "current_speed",
+        "current_dir",
+        "eulerian_speed",
+        "eulerian_dir",
+        "tide_speed",
+        "tide_dir",
+        "stokes_speed",
+        "stokes_dir",
+        "current_is_interpolated",
+        "is_provisional"
+      ],
+      "dataset_id": "cmems_mod_glo_phy_anfc_merged-uv_PT1H-i",
+      "dataset_version": "202211",
+      "cell_center": {
+        "lat": 13.6667,
+        "lon": 120.8333
+      },
+      "distance_from_site_km": 6.86,
+      "location_description": "Balayan Bay entrance / Verde Island Passage numerical model current cell",
+      "operational_lag_hours": 24,
+      "native_time_step_hours": 1,
+      "provisional_rows_count": 24,
+      "file_size_bytes": 2318708
+    }
+  },
+  "pending_sources": {
+    "era5": "Ingestion active (~46/72 months). Verified i10fg 0 NaNs. Will be sealed in subsequent snapshot.",
+    "imerg": "Ingestion active (~6/60 months). Verified OPeNDAP 503 transient causes on 2020-10-01. Will be sealed in subsequent snapshot."
+  },
+  "governance_rules": {
+    "read_only": true,
+    "interim_access_prohibited": true,
+    "provisional_policy_clarification": "Dual-policy specification: 1) Static Archive Quarantine: The parquet is_provisional boolean flags the trailing L rows (12h waves, 24h currents) anchored to the end of the file (file_end_time_utc - operational_lag) for conservative batch training quarantine. 2) Operational Serving Cutoff: Live inference dynamically computes cutoff_utc = issue_time_utc - operational_lag. For an issue time of ~22:00 UTC Oct 3 on data ending 00:00 UTC Oct 3, the serving cutoff is ~2h for currents and 0h for waves.",
+    "era5t_reanalysis_revision_warning": "ERA5T data for the latest active month is provisional and subject to revision by ECMWF.",
+    "model_tide_caveat": "Tidal velocities (utide, vtide) represent 1/12 degree numerical model physics at the 6.86 km offshore cell (13.6667N, 120.8333E), not an in-situ pier tide gauge."
+  }
+}

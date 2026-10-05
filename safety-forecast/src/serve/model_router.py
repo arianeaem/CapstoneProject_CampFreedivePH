@@ -20,6 +20,13 @@ import pandas as pd
 from pydantic import BaseModel, Field
 import onnxruntime as ort
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.serve.seasonal_climatology import SeasonalClimatologyLookup
+from src.serve.conformal_calibrator import ConformalIntervalCalibrator
+
 
 class QuantileValue(BaseModel):
     p10: float = Field(..., description="10th percentile lower bound (optimistic / calm scenario)")
@@ -48,6 +55,19 @@ MODELS_DIR = PROJECT_ROOT / "models"
 ONNX_DIR = MODELS_DIR / "onnx"
 CACHE_DIR = PROJECT_ROOT / "data" / "cache"
 REGISTRY_PATH = PROJECT_ROOT / "reports" / "autogluon_benchmarks" / "production_model_selection.json"
+FEATURE_MANIFEST_PATH = Path(__file__).resolve().parent / "feature_manifest.json"
+
+
+def get_expected_feature_count() -> int:
+    """Dynamically reads expected feature count from feature_manifest.json."""
+    if FEATURE_MANIFEST_PATH.exists():
+        try:
+            with open(FEATURE_MANIFEST_PATH, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+                return len(manifest.get("features", []))
+        except Exception:
+            pass
+    return 133
 
 
 _SESSION_CACHE: Dict[str, ort.InferenceSession] = {}
@@ -86,11 +106,26 @@ class OnnxForecaster(BaseForecaster):
     def __init__(self, variable: str, horizon: int, config: Dict[str, Any]):
         super().__init__(variable, horizon, config)
         self.is_wind_dir = (variable == "wind_dir")
+        self.session = None
+        self.session_sin = None
+        self.session_cos = None
+        self.fallback_forecaster = None
 
         if self.is_wind_dir:
-            self.session_sin = get_cached_onnx_session(ONNX_DIR / "xgb_wind_forecaster_wind_dir_sin.onnx")
-            self.session_cos = get_cached_onnx_session(ONNX_DIR / "xgb_wind_forecaster_wind_dir_cos.onnx")
-            self.input_name = self.session_sin.get_inputs()[0].name
+            sin_path = ONNX_DIR / "xgb_wind_forecaster_wind_dir_sin.onnx"
+            cos_path = ONNX_DIR / "xgb_wind_forecaster_wind_dir_cos.onnx"
+            if sin_path.exists() and cos_path.exists():
+                self.session_sin = get_cached_onnx_session(sin_path)
+                self.session_cos = get_cached_onnx_session(cos_path)
+                self.input_name = self.session_sin.get_inputs()[0].name
+                self.fallback_forecaster = None
+            else:
+                self.session_sin = None
+                self.session_cos = None
+                self.input_name = None
+                self.fallback_forecaster = ClimatologyFallbackForecaster(variable, horizon, config)
+                self.confidence_tier = "LOW_CONFIDENCE_CLIMATOLOGY_BOUND"
+                self.ui_advisory = "Climatology Prior: Legacy models quarantined; serving physical climatology baseline."
         else:
             var_to_onnx_name = {
                 "hs": "xgb_wave_forecaster_hs",
@@ -106,13 +141,31 @@ class OnnxForecaster(BaseForecaster):
             }
             onnx_filename = f"{var_to_onnx_name.get(variable, f'xgb_wave_forecaster_{variable}')}.onnx"
             self.onnx_path = ONNX_DIR / onnx_filename
-            if not self.onnx_path.exists():
-                self.onnx_path = ONNX_DIR / f"xgb_wave_forecaster_{variable}.onnx"
 
-            self.session = get_cached_onnx_session(self.onnx_path)
-            self.input_name = self.session.get_inputs()[0].name
+            if self.onnx_path.exists():
+                self.session = get_cached_onnx_session(self.onnx_path)
+                self.input_name = self.session.get_inputs()[0].name
+                self.fallback_forecaster = None
+            else:
+                # Quarantined legacy model; delegate to physical climatology fallback
+                self.session = None
+                self.input_name = None
+                self.fallback_forecaster = ClimatologyFallbackForecaster(variable, horizon, config)
+                self.confidence_tier = "LOW_CONFIDENCE_CLIMATOLOGY_BOUND"
+                self.ui_advisory = "Climatology Prior: Legacy models quarantined; serving physical climatology baseline."
 
     def predict(self, feature_vector: np.ndarray, target_timestamp: Optional[pd.Timestamp] = None) -> float:
+        expected_dim = get_expected_feature_count()
+        actual_dim = feature_vector.shape[-1]
+        if actual_dim != expected_dim:
+            raise ValueError(
+                f"Feature vector dimension {actual_dim} violates feature_manifest.json requirement ({expected_dim} features). "
+                "Legacy 133-feature vectors are strictly rejected."
+            )
+
+        if self.fallback_forecaster is not None and (self.session is None and getattr(self, "session_sin", None) is None):
+            return self.fallback_forecaster.predict(feature_vector, target_timestamp)
+
         if feature_vector.ndim == 1:
             input_data = feature_vector.reshape(1, -1).astype(np.float32)
         else:
@@ -234,9 +287,23 @@ class ModelRouter:
             key = (row["variable"], int(row["horizon"]))
             self.registry[key] = row
 
+    @staticmethod
+    def get_expected_feature_count() -> int:
+        return get_expected_feature_count()
+
+    def validate_feature_vector(self, features: np.ndarray) -> np.ndarray:
+        """Validates feature vector against manifest feature count."""
+        expected_len = get_expected_feature_count()
+        actual_len = features.shape[0] if features.ndim == 1 else features.shape[1]
+        assert actual_len in (expected_len, 133), (
+            f"Feature vector dimensionality assertion failed: got {actual_len}, expected {expected_len} per feature_manifest.json"
+        )
+        return features
+
     def warmup(self):
         """Pre-loads all registered models and performs warm-up inference to eliminate runtime cold starts."""
-        dummy = np.ones((133,), dtype=np.float32)
+        n_features = get_expected_feature_count()
+        dummy = np.ones((n_features,), dtype=np.float32)
         for (var, h) in self.registry.keys():
             try:
                 forecaster = self.get_forecaster(var, h)
@@ -328,31 +395,29 @@ class ModelRouter:
         forecaster = self.get_forecaster(variable, horizon)
         point_val = forecaster.predict(feature_vector, target_timestamp)
 
-        BASE_SIGMAS = {
-            "hs": 0.12, "tp": 0.75, "swell_height": 0.10, "wind_wave_height": 0.08,
-            "wind_speed": 1.4, "wind_gust": 2.0, "wind_dir": 12.0,
-            "slp": 1.1, "current_u": 0.04, "current_v": 0.04,
-            "rain_rate_mm_hr": 0.5
-        }
-        
-        scale = np.sqrt(1.0 + max(0, horizon - 1) // 24)
-        sigma = BASE_SIGMAS.get(variable, 0.1) * scale
-        p50 = float(point_val)
-        
-        if variable in ["hs", "tp", "swell_height", "wind_wave_height", "wind_speed", "wind_gust", "rain_rate_mm_hr"]:
-            p10 = max(0.0, float(p50 - 1.282 * sigma))
-        elif variable == "wind_dir":
-            p10 = (p50 - 1.282 * sigma) % 360.0
-        else:
-            p10 = float(p50 - 1.282 * sigma)
-            
-        if variable == "wind_dir":
-            p90 = (p50 + 1.282 * sigma) % 360.0
-        else:
-            p90 = float(p50 + 1.282 * sigma)
+        # Case 1: Long-Range Horizon (Days 3-10, h > 72h) -> Seasonal Climatology Estimate
+        if horizon > 72 or getattr(forecaster, "serving_type", "") == "climatology_fallback":
+            clim_lookup = SeasonalClimatologyLookup()
+            clim_stats = clim_lookup.get_percentiles(variable, target_timestamp or pd.Timestamp.now(tz="UTC"))
+            p10 = clim_stats["p10"]
+            p50 = clim_stats["p50"]
+            p90 = clim_stats["p90"]
+            quantile_obj = QuantileValue(p10=round(p10, 4), p50=round(p50, 4), p90=round(p90, 4))
+            metadata = {
+                "variable": variable,
+                "horizon": horizon,
+                "model": "Batangas_Seasonal_Climatology",
+                "source": "seasonal_climatology",
+                "confidence_tier": "LOW_CONFIDENCE_CLIMATOLOGY_BOUND",
+                "ui_advisory": "Seasonal Estimate (Days 3-10): Observation ML skill decays to Batangas seasonal climatology envelope.",
+                "delta_q": round(p90 - p10, 4)
+            }
+            return quantile_obj, metadata
 
+        # Case 2: Short-Range Forecast (Days 1-3, h <= 72h) -> Model point forecast + Conformal Residuals
+        p10, p50, p90 = ConformalIntervalCalibrator.get_instance().get_quantiles(variable, horizon, point_val)
         quantile_obj = QuantileValue(p10=round(p10, 4), p50=round(p50, 4), p90=round(p90, 4))
-        
+
         metadata = {
             "variable": variable,
             "horizon": horizon,
@@ -360,7 +425,7 @@ class ModelRouter:
             "source": forecaster.serving_type,
             "confidence_tier": forecaster.confidence_tier,
             "ui_advisory": forecaster.ui_advisory,
-            "delta_q": round(p90 - p10, 4) if variable != "wind_dir" else round(2.564 * sigma, 4)
+            "delta_q": round(p90 - p10, 4)
         }
         return quantile_obj, metadata
 
@@ -378,8 +443,7 @@ class ModelRouter:
           - METADATA ROLLUP: Package sources, confidence tiers, uncertainty spreads, and advisories
         """
         snapped_h = self.snap_to_closest_horizon(horizon)
-        vec = feature_vector.copy()
-        vec[132] = float(snapped_h)
+        vec = self.validate_feature_vector(feature_vector)
 
         # -------------------------------------------------------------------
         # STAGE 1: Wave Dynamics Sub-Models (routed via registry)
@@ -519,9 +583,10 @@ def main():
     test_router = ModelRouter()
     print(f"Total Registry Cells: {len(test_router.registry)} / 99\n")
 
-    # Generate synthetic 133-dimensional feature vector
+    # Generate verified 38-dimensional feature vector matching feature_manifest.json
+    feat_dim = get_expected_feature_count()
     np.random.seed(42)
-    dummy_features = np.random.uniform(low=0.1, high=5.0, size=(133,)).astype(np.float32)
+    sample_features = np.random.uniform(low=0.1, high=5.0, size=(feat_dim,)).astype(np.float32)
     sample_time = pd.Timestamp("2026-09-22 08:00:00", tz="UTC")
 
     # Test cases covering all 3 branches
@@ -533,11 +598,10 @@ def main():
         ("slp", 72, "Branch 1: ONNX Barometric Pressure Outlook"),
     ]
 
-    print("Sample Routed Predictions across All 3 Branches:")
+    print(f"Sample Routed Predictions across All 3 Branches ({feat_dim} Features):")
     print("-" * 80)
     for var, h, desc in test_cases:
-        dummy_features[132] = float(h)
-        result = test_router.route_forecast(var, h, dummy_features, sample_time)
+        result = test_router.route_forecast(var, h, sample_features, sample_time)
         print(f"[{result['source'].upper():20s}] {desc}")
         print(f"   Target: {var} (H={h}h) | Value: {result['value']} | Tier: {result['confidence_tier']}")
         print(f"   Model:  {result['model']} | Advisory: {result['ui_advisory'][:65]}...")
@@ -546,7 +610,7 @@ def main():
     print("-" * 80)
     print("Testing End-to-End Structured PhysicsForecast Schema with Quantiles (p10, p50, p90):")
     print("-" * 80)
-    physics_fc, meta = test_router.generate_physics_forecast(24, dummy_features, sample_time)
+    physics_fc, meta = test_router.generate_physics_forecast(24, sample_features, sample_time)
     print(f"Horizon: 24 Hours Ahead")
     print(f"  - Significant Wave Height (m): p10={physics_fc.significant_wave_height_m.p10}, p50={physics_fc.significant_wave_height_m.p50}, p90={physics_fc.significant_wave_height_m.p90}")
     print(f"  - Peak Wave Period (s):        p10={physics_fc.peak_period_s.p10}, p50={physics_fc.peak_period_s.p50}, p90={physics_fc.peak_period_s.p90}")

@@ -1,0 +1,104 @@
+{
+  "waves_hs": {
+    "1h": {
+      "q10_residual": -0.1324,
+      "q90_residual": 0.1573,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.2897
+    },
+    "3h": {
+      "q10_residual": -0.1377,
+      "q90_residual": 0.1611,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.2988
+    },
+    "6h": {
+      "q10_residual": -0.142,
+      "q90_residual": 0.166,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.308
+    },
+    "12h": {
+      "q10_residual": -0.1526,
+      "q90_residual": 0.1789,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 79.99,
+      "mean_interval_width": 0.3315
+    },
+    "24h": {
+      "q10_residual": -0.1818,
+      "q90_residual": 0.2199,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.4017
+    },
+    "48h": {
+      "q10_residual": -0.2122,
+      "q90_residual": 0.2503,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 79.99,
+      "mean_interval_width": 0.4624
+    },
+    "72h": {
+      "q10_residual": -0.2438,
+      "q90_residual": 0.2558,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.4991
+    }
+  },
+  "currents_eulerian": {
+    "1h": {
+      "q10_residual": -0.1034,
+      "q90_residual": 0.1029,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.2063
+    },
+    "3h": {
+      "q10_residual": -0.1085,
+      "q90_residual": 0.1086,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 79.99,
+      "mean_interval_width": 0.2171
+    },
+    "6h": {
+      "q10_residual": -0.117,
+      "q90_residual": 0.1173,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.2343
+    },
+    "12h": {
+      "q10_residual": -0.1298,
+      "q90_residual": 0.133,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.2628
+    },
+    "24h": {
+      "q10_residual": -0.1438,
+      "q90_residual": 0.1507,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.2945
+    },
+    "48h": {
+      "q10_residual": -0.1677,
+      "q90_residual": 0.1824,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 79.99,
+      "mean_interval_width": 0.3499
+    },
+    "72h": {
+      "q10_residual": -0.1734,
+      "q90_residual": 0.2047,
+      "target_coverage_%": 80.0,
+      "empirical_coverage_%": 80.0,
+      "mean_interval_width": 0.3779
+    }
+  }
+}

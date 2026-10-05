@@ -65,13 +65,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Squall / Hard Gate Wind Gust Event Threshold
+    | High Gust / Tactical Hard Gate Threshold
     |--------------------------------------------------------------------------
     |
-    | A squall event is flagged if any hour during 06:00–18:00 PHT has
+    | A high gust event is flagged if any hour during 06:00–18:00 PHT has
     | wind gust >= 48.0 km/h (13.33 m/s). Matches the tactical Hard Gate limit.
+    | Renamed from squall to high_gust per project terminology guidelines.
     |
     */
+    'high_gust_event' => [
+        'gust_threshold_kmh' => 48.0,
+        'gust_threshold_ms'  => 13.333,
+    ],
+    // Backward compatibility alias
     'squall_event' => [
         'gust_threshold_kmh' => 48.0,
         'gust_threshold_ms'  => 13.333,
@@ -106,16 +112,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Adverse Tail Quantile Definitions
+    | Adverse Tail Quantile Definitions & Operational Comparison
     |--------------------------------------------------------------------------
     |
-    | Specifies which tail represents unfavorable / hazardous conditions:
-    |   - P90 (Upper tail): Higher values are dangerous (waves, current, wind, gust, rain).
-    |   - P10 (Lower tail): Lower values are dangerous (wave period / short chop, low pressure).
+    | Statistical Tails:
+    |   - P90 upper tail for: hs, swell_height, wind_wave_height, current_speed, wind_speed, wind_gust, rain_daily_mm
+    |   - P10 lower tail for: tp, slp
+    |
+    | Tail Evaluation Rule:
+    |   Evaluated strictly when source == 'model'.
+    |   Applies the canonical scoring functions to upper quantiles (e.g. scoreWaveHeight on hs_p90,
+    |   where 1.0m yields score 4 and 1.8m triggers the hard gate) and compares against the p50 tier.
+    | The p90 comparison reuses the existing scoreWaveHeight and
+    | scoreOceanCurrent bands. These are scoring thresholds, not a separate
+    | tiering system: a p90 score of 4 raises an otherwise lower p50 tier to
+    | High Risk, while the existing hard-gate ceilings raise it to Critical Risk.
     |
     */
     'adverse_tails' => [
         'p90' => ['hs', 'swell_height', 'wind_wave_height', 'current_speed', 'wind_speed', 'wind_gust', 'rain_daily_mm'],
         'p10' => ['tp', 'slp'],
+        'thresholds' => [
+            'hs' => [
+                'elevate_score' => 1.00, // scoreWaveHeight() band 4 starts at 1.00 m
+                'hard_gate'     => 1.80, // existing physics hard gate ceiling
+            ],
+            'current_speed' => [
+                'elevate_score' => 0.80, // scoreOceanCurrent() hard-gate band
+                'hard_gate'     => 0.80, // existing physics hard gate ceiling
+            ],
+        ],
     ],
 ];
