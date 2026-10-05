@@ -83,13 +83,13 @@ Combined, **GBDT / Tabular & Ensembles win in 77.8% of all operational cells**.
 3. **Interpretability Need**: Camp Freedive-PH requires fast, deterministic physical numbers to feed into Coast Guard hard-gates. Multi-head self-attention heatmaps and variable selection weights are **not consumed downstream** by the Laravel booking portal.
 
 > [!IMPORTANT]
-> **Key Finding — The Multivariate Covariate Opportunity (Phase 4 Backlog)**:
+> **Key Finding — The Multivariate Covariate Opportunity (Future Work Backlog)**:
 > In the univariate production benchmark (Section 7), single-channel `DirectTabular` for `slp` at $H=24\text{h}$ scored $\text{MASE} = 1.497$. However, when cross-channel physical covariates (wind speed, wind gusts, and wave steepness) were introduced in the ablation probe, the MASE dropped $>2.5\times$ to **$0.6210$ (GBDT)** and **$0.4893$ (TFT)**.
 > 
-> This reveals a major physical insight: **barometric pressure and long-lead wind variables are strongly driven by cross-channel thermodynamic coupling**. Rather than being a flaw in model architecture, this represents a prioritized optimization backlog item for **Phase 4**:
-> * **Phase 4 Action Item**: Train multivariate GBDT (`DirectTabular` / LightGBM) utilizing cross-channel lags across all 11 variables. This captures the $>2.5\times$ accuracy improvement for `slp` while preserving sub-5ms ONNX serving latency.
+> This reveals a major physical insight: **barometric pressure and long-lead wind variables are strongly driven by cross-channel thermodynamic coupling**. Rather than being a flaw in model architecture, this represents a prioritized optimization backlog item for **future work**:
+> * **Future Action Item**: Train multivariate GBDT (`DirectTabular` / LightGBM) utilizing cross-channel lags across all 11 variables. This captures the $>2.5\times$ accuracy improvement for `slp` while preserving sub-5ms ONNX serving latency.
 
-**Verdict**: TFT is **rejected for Phase 1 production deployment** due to latency and resource constraints. The multivariate feature engineering benefit will be harvested via fast multivariate GBDT in Phase 4.
+**Verdict**: TFT is **rejected for production deployment** due to latency and resource constraints. The multivariate feature engineering benefit will be harvested via fast multivariate GBDT in future work.
 
 ---
 

@@ -2,12 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Mail\BookingDetailsUpdatedMail;
 use App\Models\Booking;
 use App\Models\CancellationRequest;
 use App\Models\RescheduleRequest;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class AdminBookingManagementTest extends TestCase
@@ -160,6 +162,9 @@ class AdminBookingManagementTest extends TestCase
             'downpayment_amount',
         ]);
 
+        Mail::fake();
+        $originalEmail = $booking->contact_email;
+
         $participantsData = $booking->participants->map(function ($p, $index) {
             return [
                 'id' => $p->id,
@@ -196,6 +201,14 @@ class AdminBookingManagementTest extends TestCase
         // Verify immutable system audit log
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'BOOKING_DATA_MODIFIED',
+        ]);
+        // Customer is emailed the changes at both the new and the previous address
+        Mail::assertSent(BookingDetailsUpdatedMail::class, fn ($mail) => $mail->hasTo('ariane.updated@example.com')
+            && collect($mail->changes)->contains(fn ($c) => $c['label'] === 'Contact Email' && $c['new'] === 'ariane.updated@example.com'));
+        Mail::assertSent(BookingDetailsUpdatedMail::class, fn ($mail) => $mail->hasTo($originalEmail));
+        $this->assertDatabaseHas('notification_logs', [
+            'booking_id' => $booking->id,
+            'recipient_email' => 'ariane.updated@example.com',
         ]);
     }
 

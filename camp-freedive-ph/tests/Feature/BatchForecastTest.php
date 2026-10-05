@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 /**
- * Phase 1: the forecast is made per REAL scheduled batch, stored apart from actual data,
+ * The forecast is made per REAL scheduled batch, stored apart from actual data,
  * rolled up per month, and used by Dynamic Pricing for that batch's date.
  */
 class BatchForecastTest extends TestCase
@@ -214,7 +214,7 @@ class BatchForecastTest extends TestCase
         $response->assertSee('B-SHOWN');
         $response->assertSee('Use these numbers as a rough guide');
         $response->assertSee('not yet more accurate than looking at past months');
-        // Phase 1: one forecast view only. The weekly outlook stays in Reports & Analytics.
+        // One forecast view only. The weekly outlook stays in Reports & Analytics.
         $response->assertDontSee('90-day outlook');
     }
 }

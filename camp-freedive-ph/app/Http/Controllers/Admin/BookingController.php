@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Requests\Admin\Bookings\UpdateBookingRequest;
 use App\Http\Requests\Admin\Bookings\StoreBookingRequest;
 use App\Http\Controllers\Controller;
+use App\Mail\BookingDetailsUpdatedMail;
 use App\Models\Booking;
 use App\Models\BookingParticipant;
 use App\Models\BookingStatusLog;
+use App\Models\NotificationLog;
 use App\Models\Payment;
 use App\Services\AuditLogger;
 use App\Services\BatchManagementService;
@@ -18,6 +20,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 use App\Http\Requests\Admin\Bookings\UpdateBookingStatusRequest;
 
@@ -393,6 +397,10 @@ class BookingController extends Controller
             $diffs[] = "Carpool Hub: " . ($booking->pickup_location ?: 'None') . " " . ($pickupLocation ?: 'None');
         }
 
+        // Captured before the update so the customer email can show old vs new values
+        $customerChanges = $this->collectCustomerChanges($booking, $validated, $pickupLocation);
+        $previousEmail = $booking->contact_email;
+
         DB::transaction(function () use (
             $booking,
             $validated,
@@ -471,8 +479,84 @@ class BookingController extends Controller
             $request
         );
 
+        $notified = !empty($customerChanges)
+            && $this->notifyCustomerOfEdit($booking->fresh(), $customerChanges, $previousEmail, $currentUser);
+
         return redirect()->route('admin.bookings.show', $booking)
-            ->with('success', "Booking #{$booking->booking_number} updated successfully.");
+            ->with('success', "Booking #{$booking->booking_number} updated successfully." . ($notified ? ' The customer has been notified of the changes.' : ''));
+    }
+
+    /**
+     * Customer-facing list of changed fields (label, old, new) for the booking-updated email.
+     */
+    protected function collectCustomerChanges(Booking $booking, array $validated, ?string $pickupLocation): array
+    {
+        $changes = [];
+        $add = function (string $label, $old, $new) use (&$changes) {
+            $old = ($old === null || $old === '') ? '-' : (string) $old;
+            $new = ($new === null || $new === '') ? '-' : (string) $new;
+            if ($old !== $new) {
+                $changes[] = ['label' => $label, 'old' => $old, 'new' => $new];
+            }
+        };
+        $date = fn ($value) => $value ? Carbon::parse($value)->format('M d, Y') : null;
+
+        $add('Dive Dates', $date($booking->start_date), $date($validated['start_date']));
+        $add('Contact Name', $booking->contact_name, $validated['contact_name']);
+        $add('Contact Email', $booking->contact_email, $validated['contact_email']);
+        $add('Contact Phone', $booking->contact_phone, $validated['contact_phone']);
+        $add('Facebook', $booking->contact_facebook, $validated['contact_facebook'] ?? null);
+        if ($booking->pickup_option === 'carpool') {
+            $add('Carpool Pickup', $booking->pickup_location, $pickupLocation);
+        }
+
+        $participants = $booking->participants()->get()->keyBy('id');
+        foreach ($validated['participants'] as $pData) {
+            $participant = !empty($pData['id']) ? $participants->get((int) $pData['id']) : null;
+            if (!$participant) {
+                continue;
+            }
+            $who = "Participant ({$participant->name})";
+            $add("{$who} Name", $participant->name, $pData['name']);
+            $add("{$who} Birthdate", $date($participant->birthdate), $date($pData['birthdate'] ?? null));
+            $add("{$who} Gender", $participant->gender, $pData['gender'] ?? null);
+            $add("{$who} Health Condition", $participant->health_condition, $pData['health_condition'] ?? 'None declared');
+            $add("{$who} Swimmer Status", $participant->swimmer_status, $pData['swimmer_status'] ?? 'swimmer');
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Email the customer about an admin edit; the previous address is also notified when the email itself changed.
+     */
+    protected function notifyCustomerOfEdit(Booking $booking, array $changes, ?string $previousEmail, $currentUser): bool
+    {
+        $recipients = array_values(array_unique(array_filter([$booking->contact_email, $previousEmail])));
+        $sent = false;
+
+        foreach ($recipients as $email) {
+            try {
+                Mail::to($email)->send(new BookingDetailsUpdatedMail($booking, $changes));
+
+                NotificationLog::create([
+                    'batch_id' => $booking->batch_id,
+                    'booking_id' => $booking->id,
+                    'recipient_email' => $email,
+                    'recipient_name' => $booking->contact_name,
+                    'subject' => "Booking Details Updated - Booking #{$booking->booking_number}",
+                    'message_body' => implode('; ', array_map(fn ($c) => "{$c['label']}: {$c['old']} -> {$c['new']}", $changes)),
+                    'channel' => 'email',
+                    'sent_by' => $currentUser->id,
+                    'sent_at' => now(),
+                ]);
+                $sent = true;
+            } catch (\Throwable $e) {
+                Log::warning("Failed to send booking-updated email to {$email} for booking #{$booking->booking_number}: " . $e->getMessage());
+            }
+        }
+
+        return $sent;
     }
 
     /**

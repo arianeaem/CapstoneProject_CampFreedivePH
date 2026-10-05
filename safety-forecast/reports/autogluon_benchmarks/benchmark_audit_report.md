@@ -4,7 +4,7 @@
 **Repository Location**: `reports/autogluon_benchmarks/v1/`  
 **Evaluation Scope**: 11 Variables $\times$ 9 Horizons ($H \in [1, 6, 12, 24, 48, 72, 96, 144, 168]$ hours)  
 **Verification Date**: September 15, 2026  
-**Status**: Formally Verified & Ready for Phase 1 ONNX Export  
+**Status**: Formally Verified & Ready for ONNX Export  
 
 ---
 
@@ -104,7 +104,7 @@ All benchmark outputs have been permanently relocated from the ephemeral cache i
 
 ---
 
-## 6. Multivariate Cross-Channel Covariate Opportunity (Phase 4 Research Backlog)
+## 6. Multivariate Cross-Channel Covariate Opportunity (Future Research Backlog)
 
 ### Key Empirical Discovery:
 During the model evaluation phase, a multivariate ablation probe on Barometric Pressure (`slp`) at $H=24\text{h}$ with cross-channel covariates (wind speed, wind gusts, wave steepness) revealed:
@@ -115,5 +115,5 @@ During the model evaluation phase, a multivariate ablation probe on Barometric P
 
 ### Analysis & Next Steps:
 1. **Physical Mechanism**: Barometric pressure and long-lead wind dynamics in Batangas are driven by cross-channel thermodynamic coupling (synoptic pressure changes precede local wind shifts and wave growth).
-2. **Phase 1 Priority**: The Phase 1 ONNX pipeline delivers a robust, tested baseline for all 11 variables across 9 horizons.
-3. **Phase 4 Backlog Item**: Rather than discarding the multivariate findings, we log a dedicated **Phase 4 Re-Benchmarking Experiment** to train multivariate GBDT models with 11-channel cross-lag features. This will harvest the $>2.4\times$ accuracy improvement for `slp` while maintaining sub-5ms ONNX serving latency.
+2. **Current Priority**: The ONNX pipeline delivers a robust, tested baseline for all 11 variables across 9 horizons.
+3. **Future Backlog Item**: Rather than discarding the multivariate findings, we log a dedicated **Re-Benchmarking Experiment** to train multivariate GBDT models with 11-channel cross-lag features. This will harvest the $>2.4\times$ accuracy improvement for `slp` while maintaining sub-5ms ONNX serving latency.

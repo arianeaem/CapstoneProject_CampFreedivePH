@@ -2,17 +2,18 @@
 Incremental Pipeline Runner: Scoped Re-Export & Scoped Testing for Changed Cells
 ================================================================================
 Triggered automatically after quarterly re-benchmarking (ml:rebenchmark).
-Detects cells where the winning model changed and cleared Phase 0 Step 5 margin/TFT bars.
-Executes scoped re-export (Phase 1), scoped router update & quantile check (Phase 2),
-and scoped latency/SLA regression tests (Phase 3) ONLY for the changed cells.
+Detects cells where the winning model changed and cleared the promotion margin / TFT guardrail rules.
+Runs three scoped stages ONLY for the changed cells:
+  1. Export:   serving path assignment + ONNX smoke check
+  2. Router:   router cache refresh + quantile verification
+  3. Latency:  p95 latency SLA regression test
 """
 
 import sys
-import os
 import json
 import time
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 import pandas as pd
 
@@ -24,16 +25,26 @@ PROD_JSON_PATH = PROJECT_ROOT / "reports" / "autogluon_benchmarks" / "production
 ONNX_DIR = PROJECT_ROOT / "models" / "onnx"
 FEATURES_JSON = ONNX_DIR / "forecaster_features.json"
 
-from src.serve.model_router import ModelRouter, clear_router_caches
+from src.serve.model_router import ModelRouter, clear_router_caches, get_expected_feature_count
+
+LATENCY_BUDGET_MS = 350.0
+VALID_CONFIDENCE_TIERS = {
+    "HIGH_CONFIDENCE",
+    "MODERATE_CONFIDENCE",
+    "LOW_CONFIDENCE_ML_UNCERTAIN",
+    "LOW_CONFIDENCE_CLIMATOLOGY_BOUND",
+}
+
+ProdMap = Dict[Tuple[str, int], Dict[str, Any]]
 
 
-def detect_changed_cells(margin_threshold: float = 0.02, tft_margin_threshold: float = 0.05) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+def detect_changed_cells(margin_threshold: float = 0.02, tft_margin_threshold: float = 0.05) -> Tuple[List[Dict[str, Any]], ProdMap]:
     """
     Compares latest leaderboard against production_model_selection.json.
-    Returns only cells that qualify for promotion under Phase 0 Step 5 bars.
+    Returns only cells that qualify for promotion under the margin / TFT guardrail rules.
     """
     if not LB_PATH.exists() or not PROD_JSON_PATH.exists():
-        print(f"[IncrementalPipeline] Error: Leaderboard or production config not found.")
+        print("[IncrementalPipeline] Error: Leaderboard or production config not found.")
         return [], {}
 
     full_lb = pd.read_csv(LB_PATH)
@@ -99,15 +110,15 @@ def detect_changed_cells(margin_threshold: float = 0.02, tft_margin_threshold: f
     return changed_cells, prod_map
 
 
-def run_scoped_phase1_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
+def run_scoped_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Phase 1: Scoped export / serving path assignment and parity check for a single changed cell.
+    Scoped export: serving path assignment and ONNX smoke check for a single changed cell.
     """
     var = changed_cell["variable"]
     h = changed_cell["horizon"]
     new_model = changed_cell["new_model"]
 
-    print(f"\n[PHASE 1: SCOPED EXPORT] Processing ({var}, H={h}h) -> {new_model}")
+    print(f"\n[SCOPED EXPORT] Processing ({var}, H={h}h) -> {new_model}")
 
     # Determine serving path
     if "XGBoost" in new_model or "DirectTabular" in new_model or "GBDT" in new_model:
@@ -117,21 +128,28 @@ def run_scoped_phase1_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
             # Fall back to root ONNX forecaster target
             target_onnx = ONNX_DIR / f"xgb_wave_forecaster_{var}.onnx" if "wave" in var or var in ["hs", "tp", "swell_height", "wind_wave_height"] else ONNX_DIR / f"xgb_wind_forecaster_{var}.onnx"
 
-        serving_path = str(target_onnx.relative_to(PROJECT_ROOT)).replace("\\", "/") if target_onnx.exists() else "python_native"
-        print(f"  Serving Branch: ONNX Fast Runtime ({serving_path})")
+        if target_onnx.exists():
+            serving_path = str(target_onnx.relative_to(PROJECT_ROOT)).replace("\\", "/")
+            print(f"  Serving Branch: ONNX Fast Runtime ({serving_path})")
+        else:
+            serving_path = "python_native"
+            print(f"  Serving Branch: Python Native (no ONNX artifact found for {new_model})")
     else:
         serving_path = "python_native"
         print(f"  Serving Branch: Python Native ({new_model})")
 
-    # Run scoped parity verification if ONNX file is present
+    # Smoke check: the exported ONNX graph loads and returns one output per input row.
+    # This verifies the artifact runs; it does not compare against the native model.
     parity_passed = True
     if serving_path != "python_native" and Path(PROJECT_ROOT / serving_path).exists():
         import onnxruntime as ort
         sess = ort.InferenceSession(str(PROJECT_ROOT / serving_path), providers=["CPUExecutionProvider"])
-        test_input = np.random.uniform(0.1, 5.0, size=(100, 133)).astype(np.float32)
+        test_input = np.random.uniform(0.1, 5.0, size=(100, get_expected_feature_count())).astype(np.float32)
         onnx_out = sess.run(None, {"input": test_input})[0]
-        assert onnx_out is not None and len(onnx_out) == 100
-        print(f"  Parity Check: PASS (100 synthetic test points evaluated)")
+        parity_passed = onnx_out is not None and len(onnx_out) == 100
+        if not parity_passed:
+            raise RuntimeError(f"ONNX smoke check failed for ({var}, H={h}h): unexpected output shape")
+        print("  ONNX Smoke Check: PASS (100 synthetic test points evaluated)")
 
     return {
         "variable": var,
@@ -143,13 +161,13 @@ def run_scoped_phase1_export(changed_cell: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def run_scoped_phase2_router_update(changed_cell: Dict[str, Any], prod_map: Dict[str, Any]) -> bool:
+def run_scoped_router_update(changed_cell: Dict[str, Any]) -> bool:
     """
-    Phase 2: Invalidate router session cache and verify quantile outputs for the changed cell.
+    Scoped router update: invalidate the router session cache and verify quantile outputs for the changed cell.
     """
     var = changed_cell["variable"]
     h = changed_cell["horizon"]
-    print(f"\n[PHASE 2: SCOPED ROUTER & QUANTILES] Validating ({var}, H={h}h)")
+    print(f"\n[SCOPED ROUTER & QUANTILES] Validating ({var}, H={h}h)")
 
     # Invalidate session cache
     clear_router_caches()
@@ -157,31 +175,33 @@ def run_scoped_phase2_router_update(changed_cell: Dict[str, Any], prod_map: Dict
 
     # Generate dummy features
     np.random.seed(42)
-    dummy_feat = np.random.uniform(0.1, 5.0, size=(133,)).astype(np.float32)
+    dummy_feat = np.random.uniform(0.1, 5.0, size=(get_expected_feature_count(),)).astype(np.float32)
 
     # Scoped single-variable routed prediction
     val_pred = router.route_forecast(var, h, dummy_feat)
-    assert val_pred is not None and "value" in val_pred, f"Prediction failed for ({var}, {h})"
+    if val_pred is None or "value" not in val_pred:
+        raise RuntimeError(f"Prediction failed for ({var}, {h})")
     print(f"  Prediction Output: {val_pred['value']:.4f} | Serving Source: {val_pred.get('source', 'unknown')}")
 
     # End-to-end multihorizon quantile verification for the affected horizon
     forecast, metadata = router.generate_physics_forecast(h, dummy_feat)
-    assert forecast is not None and metadata is not None
-    assert metadata["overall_confidence"] in ["HIGH_CONFIDENCE", "MODERATE_CONFIDENCE", "LOW_CONFIDENCE_ML_UNCERTAIN", "LOW_CONFIDENCE_CLIMATOLOGY_BOUND"]
+    if forecast is None or metadata is None:
+        raise RuntimeError(f"Multihorizon forecast failed for horizon {h}h")
+    if metadata.get("overall_confidence") not in VALID_CONFIDENCE_TIERS:
+        raise RuntimeError(f"Unexpected confidence tier for horizon {h}h: {metadata.get('overall_confidence')}")
     print(f"  Quantile Validation: PASS (Horizon {h}h -> Confidence Tier: {metadata['overall_confidence']})")
     return True
 
 
-def run_scoped_phase3_latency_check(changed_cell: Dict[str, Any]) -> float:
+def run_scoped_latency_check(changed_cell: Dict[str, Any]) -> float:
     """
-    Phase 3: Scoped latency SLA test (<350ms budget) specifically on the changed cell's horizon.
+    Scoped latency SLA test (<350ms p95 budget) on the changed cell's horizon.
     """
-    var = changed_cell["variable"]
     h = changed_cell["horizon"]
-    print(f"\n[PHASE 3: SCOPED LATENCY SLA] Benchmarking Horizon {h}h")
+    print(f"\n[SCOPED LATENCY SLA] Benchmarking Horizon {h}h")
 
     router = ModelRouter()
-    dummy_feat = np.random.uniform(0.1, 5.0, size=(133,)).astype(np.float32)
+    dummy_feat = np.random.uniform(0.1, 5.0, size=(get_expected_feature_count(),)).astype(np.float32)
 
     # Warmup
     for _ in range(5):
@@ -195,18 +215,19 @@ def run_scoped_phase3_latency_check(changed_cell: Dict[str, Any]) -> float:
 
     p50 = np.percentile(latencies, 50)
     p95 = np.percentile(latencies, 95)
-    print(f"  Latency SLA: p50 = {p50:.2f}ms | p95 = {p95:.2f}ms (Budget: <350ms)")
-    assert p95 < 350.0, f"Latency SLA violated: p95 = {p95:.2f}ms >= 350ms"
-    print(f"  Latency SLA Status: PASS (<350ms budget satisfied)")
-    return p95
+    print(f"  Latency SLA: p50 = {p50:.2f}ms | p95 = {p95:.2f}ms (Budget: <{LATENCY_BUDGET_MS:.0f}ms)")
+    if p95 >= LATENCY_BUDGET_MS:
+        raise RuntimeError(f"Latency SLA violated: p95 = {p95:.2f}ms >= {LATENCY_BUDGET_MS:.0f}ms")
+    print(f"  Latency SLA Status: PASS (<{LATENCY_BUDGET_MS:.0f}ms budget satisfied)")
+    return float(p95)
 
 
-def run_incremental_pipeline(forced_cells: List[Tuple[str, int]] = None):
+def run_incremental_pipeline(forced_cells: Optional[List[Tuple[str, int]]] = None) -> Dict[str, Any]:
     """
-    Orchestrates scoped execution of Phases 1–3 for changed cells only.
+    Orchestrates the scoped export, router and latency stages for changed cells only.
     """
     print("=" * 80)
-    print("INCREMENTAL ML RE-SERVING & REGRESSION PIPELINE (PHASES 1-3)")
+    print("INCREMENTAL ML RE-SERVING & REGRESSION PIPELINE (EXPORT / ROUTER / LATENCY)")
     print("=" * 80)
 
     changed_cells, prod_map = detect_changed_cells()
@@ -231,7 +252,7 @@ def run_incremental_pipeline(forced_cells: List[Tuple[str, int]] = None):
 
     if not changed_cells:
         print("\n[RESULT] No cell winners changed in the latest benchmark.")
-        print("Skipping redundant re-export and re-testing for all 99 unchanged cells.")
+        print(f"Skipping redundant re-export and re-testing for all {len(prod_map)} unchanged cells.")
         print("Production serving config remains intact and verified.")
         print("=" * 80)
         return {"changed_count": 0, "status": "NO_CHANGES_SKIPPED"}
@@ -242,19 +263,16 @@ def run_incremental_pipeline(forced_cells: List[Tuple[str, int]] = None):
 
     results = []
     for c in changed_cells:
-        # Phase 1: Scoped Export
-        p1_res = run_scoped_phase1_export(c)
-        # Phase 2: Scoped Router & Quantile Verification
-        p2_res = run_scoped_phase2_router_update(c, prod_map)
-        # Phase 3: Scoped Latency SLA Check
-        p3_p95 = run_scoped_phase3_latency_check(c)
+        export_res = run_scoped_export(c)
+        router_ok = run_scoped_router_update(c)
+        latency_p95 = run_scoped_latency_check(c)
 
         results.append({
             "variable": c["variable"],
             "horizon": c["horizon"],
-            "phase1": p1_res,
-            "phase2": p2_res,
-            "phase3_p95_ms": p3_p95,
+            "export": export_res,
+            "router_validated": router_ok,
+            "latency_p95_ms": latency_p95,
             "status": "SCOPED_SUCCESS"
         })
 

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 /**
- * Phase 1: one source of truth for demand/season rules, no fabricated forecasts,
+ * One source of truth for demand/season rules, no fabricated forecasts,
  * and Dynamic Pricing consuming the ML forecast.
  */
 class DemandSingleSourceTest extends TestCase

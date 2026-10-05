@@ -99,10 +99,10 @@ class RebenchmarkMLModelsCommand extends Command
                 return self::FAILURE;
             }
 
-            // Execute Scoped Incremental Pipeline (Phases 1–3 for changed cells only)
+            // Execute Scoped Incremental Pipeline (export, router and latency checks for changed cells only)
             $incrementalScript = base_path('../safety-forecast/src/serve/incremental_pipeline.py');
             if (file_exists($incrementalScript)) {
-                $this->info("\nRunning Scoped Incremental Pipeline (Phases 1–3 for changed cells only)...");
+                $this->info("\nRunning Scoped Incremental Pipeline (changed cells only)...");
                 $incrementalProcess = new Process([$pythonBinary, $incrementalScript]);
                 $incrementalProcess->setTimeout(1800);
                 if (is_dir($workingDir)) {

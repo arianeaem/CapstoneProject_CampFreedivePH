@@ -9,7 +9,7 @@ use Carbon\Carbon;
 use Illuminate\View\View;
 
 /**
- * Demand Forecast module (Phase 1) - a standalone sidebar page.
+ * Demand Forecast module - a standalone sidebar page.
  *
  * Shows ONLY ML-generated forecast data (clearly labelled as forecast) next to the
  * actual booking history, plus the single set of High/Medium/Low and

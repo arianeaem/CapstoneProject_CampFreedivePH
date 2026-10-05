@@ -110,7 +110,7 @@
 
                 <div class="space-y-4">
                     <template x-for="(p, index) in participants" :key="index">
-                        <div class="p-4 space-y-3">
+                        <div class="rounded-xl border border-[#E5E5EA] p-4 space-y-3">
                             <div class="flex items-center justify-between">
                                 <span class="font-bold text-[#780000] text-xs uppercase tracking-wider" x-text="'Participant #' + (index + 1)"></span>
                                 <button type="button" 
@@ -364,7 +364,6 @@
                            :aria-checked="boatDive"
                            @keydown.enter.prevent="boatDive = !boatDive"
                            @keydown.space.prevent="boatDive = !boatDive"
-                           @click="boatDive = !boatDive"
                            class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex items-start justify-between gap-3 select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                            :class="boatDive ? 'ring-2 ring-[#780000]' : ''">
                         <input type="checkbox" name="boat_dive" value="1" x-model="boatDive" class="hidden">
@@ -387,7 +386,7 @@
             <div class="p-5 sm:p-6 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between">
                     <h4 class="font-extrabold text-[#1D1D1F] text-base">Booking Cost &amp; Fee Breakdown</h4>
-                    <span class="text-xs font-bold text-[#780000] bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full" x-text="participants.length + ' Diver' + (participants.length > 1 ? 's' : '')"></span>
+                    <span class="text-xs font-bold text-[#780000] bg-red-50 px-2.5 py-0.5 rounded-full" x-text="participants.length + ' Diver' + (participants.length > 1 ? 's' : '')"></span>
                 </div>
 
                 <div class="space-y-2.5 text-xs sm:text-sm border-t border-[#E5E5EA] pt-3">

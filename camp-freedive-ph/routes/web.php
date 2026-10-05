@@ -183,7 +183,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/dynamic-pricing/{rule}/triggered', [\App\Http\Controllers\Admin\PricingRuleController::class, 'triggered'])->name('pricing.triggered');
     Route::get('/pricing/{rule}/triggered', [\App\Http\Controllers\Admin\PricingRuleController::class, 'triggered']);
 
-    // Demand Forecast module (Phase 1)
+    // Demand Forecast module
     Route::get('/demand-forecast', [\App\Http\Controllers\Admin\DemandForecastController::class, 'index'])->name('demand.index');
 
     // Reports & Analytics Module

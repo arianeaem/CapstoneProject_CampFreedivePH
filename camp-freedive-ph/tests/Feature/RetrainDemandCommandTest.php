@@ -31,7 +31,7 @@ class RetrainDemandCommandTest extends TestCase
     }
 
     /**
-     * Phase 1: the nightly demand:retrain schedule is DISABLED so the old flow cannot
+     * The nightly demand:retrain schedule is DISABLED so the old flow cannot
      * overwrite the new 553-record pipeline. The command itself stays available for manual runs.
      */
     public function test_demand_retrain_is_not_scheduled_nightly(): void
@@ -43,7 +43,7 @@ class RetrainDemandCommandTest extends TestCase
             return str_contains($event->command, 'demand:retrain');
         });
 
-        $this->assertNull($retrainEvent, "demand:retrain must not be scheduled during Phase 1");
+        $this->assertNull($retrainEvent, "demand:retrain must not be scheduled nightly");
     }
 
     /**

@@ -253,7 +253,7 @@ def compute_metrics(y_true, y_pred) -> dict:
 
 
 # ------------------------------------------------------------------------------
-# PER-BATCH FORECAST HELPERS (Phase 1: forecast every real scheduled batch)
+# PER-BATCH FORECAST HELPERS (forecast every real scheduled batch)
 # ------------------------------------------------------------------------------
 INTERVAL_Z_80 = 1.2816                 # 80% prediction interval
 DEFAULT_BATCH_CAPACITY = 45
@@ -465,7 +465,7 @@ def run_pipeline():
         except Exception as e:
             print(f"-> Warning: Could not fetch from Laravel ({e}). Continuing with the 553-record history only.")
     else:
-        print("-> Laravel batches NOT used (Phase 1: the 553 actual records are the only training source).")
+        print("-> Laravel batches NOT used (the 553 actual records are the only training source).")
 
     combined = pd.concat([df_base, df_fresh], ignore_index=True) if not df_fresh.empty else df_base.copy()
     combined = combined.drop_duplicates(subset=["batch_date"], keep="last")

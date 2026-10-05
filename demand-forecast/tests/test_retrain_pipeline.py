@@ -1,5 +1,5 @@
 """
-Phase 1 tests for the demand-forecast pipeline.
+Tests for the demand-forecast pipeline.
 
 Run from the demand-forecast folder:
     python -m pytest tests -q

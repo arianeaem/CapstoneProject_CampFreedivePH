@@ -358,6 +358,13 @@
             </div>
         </div>
 
+        <!-- Customer notification notice -->
+        <div class="rounded-xl border border-[#F5D0D0] bg-[#FFF5F5] p-4 text-sm text-[#1D1D1F]">
+            <span class="font-bold text-[#780000]">Note:</span>
+            These changes will be sent to the customer. Once saved, an email listing the updated details will be sent to
+            <strong>{{ $booking->contact_email }}</strong> (and to the new address if you changed the contact email).
+        </div>
+
         <!-- Controls -->
         <div class="flex items-center justify-end gap-3 pt-2">
             <a href="{{ route('admin.bookings.show', $booking) }}" class="btn-secondary px-5 py-2.5 text-sm">Cancel</a>

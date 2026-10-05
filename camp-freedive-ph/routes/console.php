@@ -46,7 +46,7 @@ Schedule::command('forecast:archive-accuracy')
     ->appendOutputTo(storage_path('logs/forecast_accuracy.log'));
 
 /**
- * Nightly demand retraining (demand:retrain) - DISABLED for Phase 1.
+ * Nightly demand retraining (demand:retrain) - DISABLED.
  *
  * The old nightly flow could overwrite the new pipeline's results. Until the new
  * 553-record pipeline is signed off, retraining is run MANUALLY only:
