@@ -2895,7 +2895,7 @@ class WeatherForecastService
                 'wind_dir_circ_mean_deg' => $h['wind_dir_circ_mean_deg'] ?? null,
                 'tier' => $h['tier'],
                 'label' => $h['label'],
-                'adverse_tail_triggered' => $h['adverse_tail_triggered'] ? 1 : 0,
+                'adverse_tail_triggered' => (bool) $h['adverse_tail_triggered'],
                 'created_at' => $nowStr,
                 'updated_at' => $nowStr,
             ];
