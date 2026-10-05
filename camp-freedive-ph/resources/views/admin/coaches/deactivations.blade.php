@@ -161,7 +161,7 @@
                 Are you sure you want to deactivate <strong class="text-[#1D1D1F]" x-text="selectedRequest?.coach?.full_name"></strong>?
             </p>
 
-            <div class="p-3 bg-[#FEF2F2] rounded-xl border border-[#FECACA] text-sm text-[#991B1B]">
+            <div class="banner banner-warning">
                 <strong>Conflict Check:</strong> If this coach has any upcoming 2D1N batch assignments, the system will block deactivation until those sessions are reassigned.
             </div>
 

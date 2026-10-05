@@ -132,7 +132,7 @@ class BookingController extends Controller
                 ]),
                 'exclusions' => (array) $settingService->get('program_pricing.discovery_exclusions', [
                     'Transportation (We arrange carpool)',
-                    'Boat dive (optional sanctuary trip +₱600/pax)',
+                    'Boat dive (optional +₱600/pax)',
                     'Mabini LGU municipal environmental fee & dive pass',
                 ]),
             ],
@@ -151,7 +151,7 @@ class BookingController extends Controller
                 ]),
                 'exclusions' => (array) $settingService->get('program_pricing.fundive_exclusions', [
                     'Transportation (We arrange carpool)',
-                    'Boat dive (optional sanctuary trip +₱600/pax)',
+                    'Boat dive (optional +₱600/pax)',
                     'Mabini LGU municipal environmental fee & dive pass',
                 ]),
             ],
@@ -169,7 +169,7 @@ class BookingController extends Controller
                 ]),
                 'exclusions' => (array) $settingService->get('program_pricing.refinement_exclusions', [
                     'Transportation (We arrange carpool)',
-                    'Boat dive (optional sanctuary trip +₱600/pax)',
+                    'Boat dive (optional +₱600/pax)',
                     'Mabini LGU municipal environmental fee & dive pass',
                 ]),
             ],

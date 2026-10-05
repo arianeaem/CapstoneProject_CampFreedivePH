@@ -13,7 +13,7 @@
     openOverrideModal: false,
     openCancelModal: false,
     openActionsMenu: false,
-    cancelReason: '{{ $overallClassification === 'Critical Risk' ? 'Critical Risk' : 'Elevated Marine Conditions (Moderate/High Risk)' }}'
+    cancelReason: '{{ $overallClassification === 'Critical Risk' ? 'Critical Risk sea conditions (strong wind, big waves or currents)' : '' }}'
 }">
     
     <!-- Top Header Bar -->
@@ -96,9 +96,6 @@
                         <button type="button"
                                 @click="openActionsMenu = false; openOverrideModal = true"
                                 class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                            <svg class="w-4 h-4 text-[#6E6E73] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                            </svg>
                             <span>Apply Manual Override</span>
                         </button>
                     @endif
@@ -106,11 +103,6 @@
                     <!-- 2. View Batch Profile -->
                     <a href="{{ route('admin.batches.show', $batch) }}" 
                        class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                        <svg class="w-4 h-4 text-[#6E6E73] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                            <polyline points="15 3 21 3 21 9"></polyline>
-                            <line x1="10" y1="14" x2="21" y2="3"></line>
-                        </svg>
                         <span>View Batch Profile</span>
                     </a>
 
@@ -121,11 +113,6 @@
                         <button type="button"
                                 @click="openActionsMenu = false; openCancelModal = true"
                                 class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                            <svg class="w-4 h-4 text-rose-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/>
-                                <line x1="15" y1="9" x2="9" y2="15"/>
-                                <line x1="9" y1="9" x2="15" y2="15"/>
-                            </svg>
                             <span>Cancel Batch (Weather Risk)</span>
                         </button>
                     @endif
@@ -742,7 +729,7 @@
                     </select>
                 </div>
 
-                <div class="space-y-2 bg-[#F2F2F7] p-3.5 rounded-xl border border-[#E5E5EA]">
+                <div class="space-y-2 p-3.5 rounded-xl">
                     <span class="block font-bold text-[#1D1D1F] mb-1 uppercase tracking-wider text-xs">Active Severe Marine Advisories</span>
 
                     <label class="flex items-center gap-2 cursor-pointer">
@@ -767,7 +754,7 @@
                 </div>
 
                 <!-- Other (non-weather) hazard -->
-                <div class="space-y-2 bg-[#F2F2F7] p-3.5 rounded-xl border border-[#E5E5EA]">
+                <div class="space-y-2 p-3.5 rounded-xl">
                     <label for="other-hazard" class="block font-bold text-[#1D1D1F] uppercase tracking-wider text-xs">Other Hazard (Not Weather)</label>
                     <select id="other-hazard" name="other_hazard" x-model="otherHazard" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white font-medium">
                         <option value="">None</option>
@@ -790,11 +777,11 @@
                     <textarea name="reason" required rows="2" placeholder="e.g. PAGASA Severe Weather Bulletin #4, or Coast Guard advisory on oil spill near Anilao" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white"></textarea>
                 </div>
 
-                <div class="p-3 bg-[#FEF2F2] rounded-xl border border-[#FECACA]">
+                <div class="banner banner-error">
                     <label class="flex items-start gap-2 cursor-pointer">
                         <input type="checkbox" name="cancel_batch" value="1" class="rounded border-[#D1D1D6] text-[#780000] mt-0.5">
                         <span class="font-bold text-[#991B1B]">
-                            Cancel batch immediately, trigger 100% force majeure refunds, and dispatch cancellation emails.
+                            Also cancel this batch now: every guest gets a full refund and the cancellation email.
                         </span>
                     </label>
                 </div>
@@ -809,52 +796,109 @@
         </div>
     </div>
 
-    <!-- Batch Cancellation Modal -->
+    <!-- Batch Cancellation Panel -->
+    @php
+        $cancelBookings = $batch->bookings->whereNotIn('status', ['cancelled', 'cancelled_by_guest', 'cancelled_by_camp', 'completed', 'no_show']);
+        $cancelGuests = $cancelBookings->sum(fn ($b) => max(1, $b->participants->count()));
+        $cancelPaidBookings = $cancelBookings->where('status', '!=', 'pending_downpayment')->count();
+        $cancelReasonPresets = [
+            'Critical Risk sea conditions (strong wind, big waves or currents)',
+            'Typhoon / storm signal raised by PAGASA',
+            'Coast Guard no-sail order',
+            'Oil spill or water contamination',
+        ];
+    @endphp
     <div x-show="openCancelModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCancelModal = false">
-            <div class="flex items-center justify-between">
-                <h3 class="text-base font-extrabold text-[#DC2626]">Cancel Batch &amp; Dispatch Customer Notifications</h3>
-                <button type="button" @click="openCancelModal = false" aria-label="Close cancellation modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
+        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 space-y-5 shadow-2xl border-l border-[#E5E5EA]"
+             x-data="{ understood: false }" @click.outside="openCancelModal = false">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h3 class="text-lg font-extrabold text-[#1D1D1F]">Cancel this batch</h3>
+                    <p class="text-xs text-[#6E6E73] mt-0.5">{{ $batch->batch_number }} &middot; {{ $batch->formatted_date_range }}</p>
+                </div>
+                <button type="button" @click="openCancelModal = false" aria-label="Close" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">&#10005;</button>
             </div>
 
-            <p class="text-xs text-[#6E6E73]">
-                Confirming whole-batch cancellation will automatically update all connected bookings, initiate <strong>100% full refund eligibility</strong>, and send official cancellation notices to all customers.
-            </p>
+            <!-- Who is affected -->
+            <div class="grid grid-cols-3 gap-2 text-center">
+                <div class="rounded-xl bg-[#F2F2F7] p-3">
+                    <div class="text-xl font-extrabold text-[#1D1D1F]">{{ $cancelBookings->count() }}</div>
+                    <div class="text-[11px] text-[#6E6E73] font-semibold">Bookings</div>
+                </div>
+                <div class="rounded-xl bg-[#F2F2F7] p-3">
+                    <div class="text-xl font-extrabold text-[#1D1D1F]">{{ $cancelGuests }}</div>
+                    <div class="text-[11px] text-[#6E6E73] font-semibold">Divers</div>
+                </div>
+                <div class="rounded-xl bg-[#F2F2F7] p-3">
+                    <div class="text-xl font-extrabold text-[#1D1D1F]">{{ $cancelPaidBookings }}</div>
+                    <div class="text-[11px] text-[#6E6E73] font-semibold">Will get a refund</div>
+                </div>
+            </div>
+
+            <!-- What happens -->
+            <div class="space-y-1.5 text-xs">
+                <p class="font-bold text-[#1D1D1F]">What happens when you confirm</p>
+                <ol class="list-decimal pl-5 space-y-1 text-[#3A3A3C]">
+                    <li>The batch and its {{ $cancelBookings->count() }} active booking(s) are marked <strong>Cancelled by Camp</strong>.</li>
+                    <li>A <strong>full refund (100%)</strong> of what each guest paid is created and waits for you in <strong>Refunds</strong>.</li>
+                    <li>Each guest gets the email below: why it was cancelled, their refund, and that they can ask to move to another date for free instead.</li>
+                </ol>
+                <p class="banner banner-warning mt-2">This cannot be undone.</p>
+            </div>
 
             <form action="{{ route('admin.weather.cancel', $batch) }}" method="POST" class="space-y-4 text-xs">
                 @csrf
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1">
-                        Cancellation Reasons / Marine Hazard Drivers <span class="text-[#780000]">*</span>
+                <div class="space-y-2">
+                    <label for="cancel-reason" class="block font-bold text-[#1D1D1F]">
+                        Why are you cancelling? <span class="text-[#780000]">*</span>
                     </label>
-                    <input type="text" 
-                           name="cancellation_reason" 
-                           x-model="cancelReason" 
-                           required 
+                    <div class="flex flex-wrap gap-1.5">
+                        @foreach($cancelReasonPresets as $preset)
+                            <button type="button" @click="cancelReason = @js($preset)"
+                                    :class="cancelReason === @js($preset) ? 'bg-[#780000] text-white' : 'bg-[#F2F2F7] text-[#3A3A3C] hover:bg-[#E5E5EA]'"
+                                    class="px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors">{{ $preset }}</button>
+                        @endforeach
+                    </div>
+                    <input id="cancel-reason" type="text" name="cancellation_reason" x-model="cancelReason" required maxlength="1000"
+                           placeholder="Pick one above or type your own reason"
                            class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white font-medium">
+                    <p class="text-[#6E6E73]">Guests will read this exact sentence, so keep it simple.</p>
                 </div>
 
-                <!-- Email Notification Preview -->
+                <!-- Email preview: mirrors resources/views/emails/batch_weather_cancellation.blade.php -->
                 <div class="space-y-1.5">
-                    <span class="block font-bold text-[#6E6E73] text-xs uppercase tracking-wider">Outbound Email Notification Preview</span>
-                    <div class="p-4 bg-[#F2F2F7] rounded-xl border border-[#E5E5EA] font-sans text-xs text-[#1D1D1F] whitespace-pre-line leading-relaxed">
-Good day, <strong class="text-[#780000]">[Customer Name]</strong>. Your scheduled date for <strong class="text-[#780000]">{{ $batch->formatted_date_range }}</strong> will be canceled due to:
-
-- <span x-text="cancelReason" class="font-bold"></span>
-
-There will be options for this cancelled schedule:
-- Full refund
-- Reschedule
-
-You can select your preferred option by entering your booking number and PIN in Manage Booking.
+                    <span class="block font-bold text-[#1D1D1F]">Email each guest will receive</span>
+                    <div class="rounded-xl bg-[#F2F2F7] p-2 text-xs text-[#1D1D1F] leading-relaxed">
+                        <div class="px-4 py-2 bg-[#780000] text-white font-extrabold rounded-t-lg">Camp FreedivePH</div>
+                        <div class="p-4 space-y-2.5 bg-white rounded-b-lg">
+                            <p class="text-[11px] text-[#6E6E73]">Subject: Your {{ $batch->start_date->format('M d') }} dive has been cancelled for your safety</p>
+                            <p class="text-sm font-extrabold">Your dive has been cancelled for your safety</p>
+                            <p>Hello <strong>[Guest name]</strong>,</p>
+                            <p>We're sorry, but we had to cancel your freediving trip on <strong>{{ $batch->formatted_date_range }}</strong>. Our safety team decided the sea will not be safe for diving on those dates.</p>
+                            <div class="rounded-lg bg-[#FEF2F2] text-[#991B1B] px-3 py-2">
+                                <strong class="block">Why we cancelled</strong>
+                                <span x-text="cancelReason || '[Your reason]'"></span>
+                            </div>
+                            <div class="rounded-lg bg-[#ECFDF5] text-[#065F46] px-3 py-2">
+                                <strong class="block">You will not lose any money</strong>
+                                We have already started a full refund of the <strong>[amount they paid]</strong>. It goes back to the payment method you used. You don't need to do anything.
+                            </div>
+                            <p><strong>Would you rather dive on another date?</strong> Just reply to this email or message us, and we will move your booking to another available date for free instead of refunding you.</p>
+                            <p class="text-[#6E6E73]">Also shows their booking number, PIN and a "View my booking" button.</p>
+                        </div>
                     </div>
                 </div>
 
-                <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#E5E5EA]">
-                    <button type="button" @click="openCancelModal = false" class="btn-secondary px-3.5 py-1.5 text-xs">Cancel</button>
-                    <button type="submit" class="btn-danger px-4 py-2 text-xs font-bold shadow-2xs">
-                        Confirm Cancellation &amp; Send Emails
+                <label class="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" x-model="understood" class="rounded border-[#D1D1D6] text-[#780000] mt-0.5">
+                    <span class="text-[#1D1D1F]">I understand this cancels <strong>{{ $cancelBookings->count() }} booking(s)</strong>, starts full refunds and emails every guest.</span>
+                </label>
+
+                <div class="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E5EA]">
+                    <button type="button" @click="openCancelModal = false" class="btn-secondary px-3.5 py-1.5 text-xs">Keep batch</button>
+                    <button type="submit" :disabled="!understood || !cancelReason.trim()" class="btn-danger px-4 py-2 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed">
+                        Cancel batch &amp; email guests
                     </button>
                 </div>
             </form>

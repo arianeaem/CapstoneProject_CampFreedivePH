@@ -49,7 +49,7 @@ class ReportsAndAnalyticsTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Reports & Analytics', false);
         $response->assertSee('Revenue', false);
-        $response->assertSee('Net Collections');
+        $response->assertSee('Money kept');
     }
 
     public function test_admin_can_access_reports_dashboard_without_financial_tab(): void
@@ -59,7 +59,7 @@ class ReportsAndAnalyticsTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('Reports & Analytics', false);
         $response->assertSee('Bookings & Demographics', false);
-        $response->assertDontSee('Net Collections');
+        $response->assertDontSee('Money kept');
     }
 
     public function test_coach_cannot_access_reports_dashboard(): void

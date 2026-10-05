@@ -208,9 +208,9 @@ class WeatherSafetyModuleTest extends TestCase
         // Templated notification log created
         $log = NotificationLog::where('batch_id', $batch->id)->first();
         $this->assertNotNull($log);
-        $this->assertStringContainsString('Good day, Juan Dela Cruz', $log->message_body);
-        $this->assertStringContainsString('Full refund', $log->message_body);
-        $this->assertStringContainsString('Reschedule', $log->message_body);
+        $this->assertStringContainsString('Hello Juan Dela Cruz', $log->message_body);
+        $this->assertStringContainsString('full refund of PHP 7,000.00', $log->message_body);
+        $this->assertStringContainsString('move the booking for free', $log->message_body);
     }
 
     public function test_admin_can_access_weather_monitoring_pages(): void

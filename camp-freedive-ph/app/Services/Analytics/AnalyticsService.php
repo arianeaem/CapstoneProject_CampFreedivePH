@@ -21,6 +21,42 @@ use Illuminate\Support\Facades\Schema;
 
 class AnalyticsService
 {
+    /** Booking statuses grouped into plain-language categories (every status lands in exactly one). */
+    public const BOOKING_GROUPS = [
+        'going' => ['confirmed', 'reschedule_requested', 'cancellation_requested', 'rescheduled'],
+        'completed' => ['completed'],
+        'waiting' => ['pending_downpayment'],
+        'cancelled' => ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest'],
+        'no_show' => ['no_show'],
+    ];
+
+    /** Batch statuses grouped the same way. */
+    public const BATCH_GROUPS = [
+        'cancelled' => ['cancelled', 'cancelled_by_camp'],
+        'completed' => ['completed'],
+    ];
+
+    public static function bookingGroup(?string $status): string
+    {
+        foreach (self::BOOKING_GROUPS as $group => $statuses) {
+            if (in_array($status, $statuses, true)) {
+                return $group;
+            }
+        }
+
+        return 'going';
+    }
+
+    /** Swimming ability buckets: every participant lands in exactly one. */
+    public static function swimGroup(?string $status): string
+    {
+        return match ($status) {
+            'non_swimmer' => 'cannot_swim',
+            'confident_swimmer', 'confident', 'advanced' => 'strong',
+            default => 'can_swim',
+        };
+    }
+
     /**
      * Resolve start and end Carbon dates from request preset or custom range.
      */
@@ -96,9 +132,15 @@ class AnalyticsService
                 break;
 
             case 'all_time':
-                $firstBooking = Booking::oldest('created_at')->first();
-                $start = $firstBooking ? $firstBooking->created_at->startOfDay() : $now->copy()->subYears(2)->startOfDay();
-                $end = $now->copy()->endOfDay();
+                // Cover every booking and every batch (including batches already scheduled ahead)
+                $firstBooking = Booking::min('created_at');
+                $firstBatch = Batch::min('start_date');
+                $lastBatch = Batch::max('end_date');
+                $earliest = collect([$firstBooking, $firstBatch])->filter()->map(fn ($d) => Carbon::parse($d, 'Asia/Manila'))->min();
+                $start = $earliest ? $earliest->startOfDay() : $now->copy()->subYears(2)->startOfDay();
+                $end = $lastBatch && Carbon::parse($lastBatch, 'Asia/Manila')->gt($now)
+                    ? Carbon::parse($lastBatch, 'Asia/Manila')->endOfDay()
+                    : $now->copy()->endOfDay();
                 $priorStart = $start->copy()->subYears(2);
                 $priorEnd = $start->copy()->subSecond();
                 $label = 'All Time';
@@ -189,10 +231,13 @@ class AnalyticsService
 
         $netRevenue = max(0, $grossRevenue - $refundsProcessed);
 
-        // Outstanding Receivables in Period
-        $outstandingReceivables = (float) Booking::where('status', 'confirmed')
+        // Still to collect: price minus what was actually paid, for bookings that are still going.
+        // (balance_amount is not cleared when a guest pays in full, so it cannot be summed directly.)
+        $outstandingReceivables = (float) Booking::whereIn('status', array_merge(self::BOOKING_GROUPS['going'], self::BOOKING_GROUPS['completed']))
             ->whereBetween('created_at', [$start, $end])
-            ->sum('balance_amount');
+            ->withSum(['payments as paid_sum' => fn ($q) => $q->whereIn('status', ['completed', 'paid'])], 'amount')
+            ->get(['id', 'total_amount'])
+            ->sum(fn ($b) => max(0, (float) $b->total_amount - (float) $b->paid_sum));
 
         // Prior Period for Delta calculation
         $priorGross = (float) $paymentTotals->prior_gross;
@@ -339,13 +384,27 @@ class AnalyticsService
     {
         $bookingsQuery = Booking::whereBetween('created_at', [$start, $end]);
 
-        $totalBookings = (clone $bookingsQuery)->count();
-        $confirmedBookings = (clone $bookingsQuery)->where('status', 'confirmed')->count();
-        $pendingBookings = (clone $bookingsQuery)->where('status', 'pending_downpayment')->count();
-        $cancelledBookings = (clone $bookingsQuery)->whereIn('status', ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest'])->count();
+        // One count per status, then folded into groups so the groups always add up to the total
+        $statusCounts = (clone $bookingsQuery)->selectRaw('status, COUNT(*) AS c')->groupBy('status')->pluck('c', 'status');
+        $statusGroups = array_fill_keys(array_keys(self::BOOKING_GROUPS), 0);
+        foreach ($statusCounts as $status => $c) {
+            $statusGroups[self::bookingGroup($status)] += (int) $c;
+        }
 
-        $totalParticipants = BookingParticipant::whereHas('booking', fn($q) => $q->whereBetween('created_at', [$start, $end]))->count();
-        $confirmedParticipants = BookingParticipant::whereHas('booking', fn($q) => $q->where('status', 'confirmed')->whereBetween('created_at', [$start, $end]))->count();
+        $totalBookings = array_sum($statusGroups);
+        $pendingBookings = $statusGroups['waiting'];
+        $cancelledBookings = $statusGroups['cancelled'];
+        // "Paid" = moved past the downpayment step (going, finished, no-show, or cancelled after paying)
+        $paidBookings = $totalBookings - $pendingBookings;
+        $confirmedBookings = $statusGroups['going'] + $statusGroups['completed'];
+
+        $paxByStatus = BookingParticipant::join('bookings', 'bookings.id', '=', 'booking_participants.booking_id')
+            ->whereBetween('bookings.created_at', [$start, $end])
+            ->selectRaw('bookings.status, COUNT(*) AS c')
+            ->groupBy('bookings.status')
+            ->pluck('c', 'status');
+        $totalParticipants = (int) $paxByStatus->sum();
+        $confirmedParticipants = (int) $paxByStatus->filter(fn ($c, $status) => in_array(self::bookingGroup($status), ['going', 'completed'], true))->sum();
 
         // Prior period booking count for delta
         $priorBookings = Booking::whereBetween('created_at', [$priorStart, $priorEnd])->count();
@@ -381,10 +440,12 @@ class AnalyticsService
             $q->where('class_type', 'discovery')->whereBetween('created_at', [$start, $end]);
         })->get();
 
+        // Every participant lands in exactly one bucket, so the buckets add up to the total
+        $swimGroups = $discoveryParticipants->countBy(fn ($p) => self::swimGroup($p->swimmer_status));
         $swimmerAbility = [
-            'non_swimmer' => $discoveryParticipants->where('swimmer_status', 'non_swimmer')->count(),
-            'casual_swimmer' => $discoveryParticipants->where('swimmer_status', 'casual_swimmer')->count(),
-            'confident_swimmer' => $discoveryParticipants->where('swimmer_status', 'confident_swimmer')->count(),
+            'cannot_swim' => (int) ($swimGroups['cannot_swim'] ?? 0),
+            'can_swim' => (int) ($swimGroups['can_swim'] ?? 0),
+            'strong' => (int) ($swimGroups['strong'] ?? 0),
             'total' => $discoveryParticipants->count(),
         ];
 
@@ -417,11 +478,13 @@ class AnalyticsService
         // Reschedule & Cancellation Request Stats
         $rescheduleCount = RescheduleRequest::whereBetween('created_at', [$start, $end])->count();
         $cancellationCount = CancellationRequest::whereBetween('created_at', [$start, $end])->count();
-        $conversionRate = $totalBookings > 0 ? round(($confirmedBookings / $totalBookings) * 100, 1) : 0;
+        $conversionRate = $totalBookings > 0 ? round(($paidBookings / $totalBookings) * 100, 1) : 0;
         $cancellationRate = $totalBookings > 0 ? round(($cancelledBookings / $totalBookings) * 100, 1) : 0;
 
         return [
             'total_bookings' => $totalBookings,
+            'status_groups' => $statusGroups,
+            'paid_bookings' => $paidBookings,
             'confirmed_bookings' => $confirmedBookings,
             'pending_bookings' => $pendingBookings,
             'cancelled_bookings' => $cancelledBookings,
@@ -450,39 +513,43 @@ class AnalyticsService
         Batch::preloadAssignedCoaches($batches);
 
         $totalBatches = $batches->count();
-        $completedBatches = $batches->where('status', 'completed')->count();
-        $activeBatches = $batches->whereIn('status', ['confirmed', 'open'])->count();
-        $cancelledBatches = $batches->where('status', 'cancelled')->count();
+        $completedBatches = $batches->whereIn('status', self::BATCH_GROUPS['completed'])->count();
+        $cancelledBatches = $batches->whereIn('status', self::BATCH_GROUPS['cancelled'])->count();
+        // Everything else (open, confirmed, full, ...) is still running
+        $activeBatches = $totalBatches - $completedBatches - $cancelledBatches;
 
-        $totalCapacitySlots = $batches->sum('max_capacity') ?: ($totalBatches * 20);
-        $totalBookedPax = $batches->sum(fn($b) => $b->total_participants_count);
+        // Fill rate only counts batches that actually ran or will run
+        $runningBatches = $batches->whereNotIn('status', self::BATCH_GROUPS['cancelled']);
+        $totalCapacitySlots = $runningBatches->sum(fn ($b) => $b->computed_capacity);
+        $totalBookedPax = $runningBatches->sum(fn ($b) => $b->total_participants_count);
         $avgOccupancy = $totalCapacitySlots > 0 ? round(($totalBookedPax / $totalCapacitySlots) * 100, 1) : 0;
 
         // Weekend vs. Weekday Occupancy
-        $weekendBatches = $batches->filter(fn($b) => in_array(Carbon::parse($b->start_date)->dayOfWeek, [Carbon::SATURDAY, Carbon::SUNDAY]));
-        $weekdayBatches = $batches->filter(fn($b) => !in_array(Carbon::parse($b->start_date)->dayOfWeek, [Carbon::SATURDAY, Carbon::SUNDAY]));
+        $weekendBatches = $runningBatches->filter(fn($b) => in_array(Carbon::parse($b->start_date)->dayOfWeek, [Carbon::SATURDAY, Carbon::SUNDAY]));
+        $weekdayBatches = $runningBatches->filter(fn($b) => !in_array(Carbon::parse($b->start_date)->dayOfWeek, [Carbon::SATURDAY, Carbon::SUNDAY]));
 
         $weekendPax = $weekendBatches->sum(fn($b) => $b->total_participants_count);
-        $weekendCapacity = $weekendBatches->sum('max_capacity') ?: ($weekendBatches->count() * 20);
+        $weekendCapacity = $weekendBatches->sum(fn ($b) => $b->computed_capacity);
         $weekendOccupancy = $weekendCapacity > 0 ? round(($weekendPax / $weekendCapacity) * 100, 1) : 0;
 
         $weekdayPax = $weekdayBatches->sum(fn($b) => $b->total_participants_count);
-        $weekdayCapacity = $weekdayBatches->sum('max_capacity') ?: ($weekdayBatches->count() * 20);
+        $weekdayCapacity = $weekdayBatches->sum(fn ($b) => $b->computed_capacity);
         $weekdayOccupancy = $weekdayCapacity > 0 ? round(($weekdayPax / $weekdayCapacity) * 100, 1) : 0;
 
         // Batches reaching full capacity (>= 90%)
-        $fullCapacityBatches = $batches->filter(fn($b) => ($b->occupancy_percentage ?? 0) >= 90)->count();
+        $fullCapacityBatches = $runningBatches->filter(fn($b) => ($b->occupancy_percentage ?? 0) >= 90)->count();
 
         // Safety Ratio Adherence
         $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
-        $compliantBatches = $batches->filter(function ($b) use ($coachRatio) {
+        $compliantBatches = $runningBatches->filter(function ($b) use ($coachRatio) {
             $pax = $b->total_participants_count;
             if ($pax === 0) return true;
             $requiredCoaches = (int) ceil($pax / $coachRatio);
             return $b->assigned_coaches_count >= $requiredCoaches;
         })->count();
 
-        $safetyComplianceRate = $totalBatches > 0 ? round(($compliantBatches / $totalBatches) * 100, 1) : 100;
+        $runningCount = $runningBatches->count();
+        $safetyComplianceRate = $runningCount > 0 ? round(($compliantBatches / $runningCount) * 100, 1) : 100;
 
         return [
             'total_batches' => $totalBatches,
@@ -497,6 +564,8 @@ class AnalyticsService
             'full_capacity_batches' => $fullCapacityBatches,
             'safety_compliance_rate' => $safetyComplianceRate,
             'compliant_batches_count' => $compliantBatches,
+            'running_batches_count' => $runningCount,
+            'coach_ratio' => $coachRatio,
             'batches_list' => $batches->sortBy('start_date')->values(),
         ];
     }
@@ -507,6 +576,7 @@ class AnalyticsService
     protected function getCoachMetrics(Carbon $start, Carbon $end): array
     {
         $coaches = User::where('role', 'coach')->get();
+        $batchDays = fn ($b) => $b->end_date ? $b->start_date->diffInDays($b->end_date) + 1 : 1;
         $batches = Batch::whereBetween('start_date', [$start->toDateString(), $end->toDateString()])
             ->with(['activeParticipantAssignments.coach'])
             ->get();
@@ -523,14 +593,21 @@ class AnalyticsService
             : collect();
 
         foreach ($coaches as $coach) {
-            // Count distinct batches in range where this coach is assigned
-            $assignedBatchesCount = $batches->filter(function ($b) use ($coach) {
-                return $b->assigned_coaches->pluck('id')->contains($coach->id);
-            })->count();
+            // Distinct batches in range where this coach is assigned (cancelled batches don't count)
+            $coachBatches = $batches->filter(function ($b) use ($coach) {
+                return !in_array($b->status, self::BATCH_GROUPS['cancelled'], true)
+                    && $b->assigned_coaches->pluck('id')->contains($coach->id);
+            });
+            $assignedBatchesCount = $coachBatches->count();
 
             $totalAssignments += $assignedBatchesCount;
 
             $releases = (int) ($releasesByCoach[$coach->id] ?? 0);
+
+            // Archived coaches only show up if they actually worked in this period
+            if ($coach->status === 'archived' && $assignedBatchesCount === 0 && $releases === 0) {
+                continue;
+            }
 
             $coachData[] = [
                 'id' => $coach->id,
@@ -539,7 +616,7 @@ class AnalyticsService
                 'status' => $coach->status,
                 'assignments_count' => $assignedBatchesCount,
                 'releases_count' => $releases,
-                'estimated_dive_days' => $assignedBatchesCount * 2, // 2-day weekend camp format
+                'estimated_dive_days' => (int) $coachBatches->sum($batchDays),
             ];
         }
 
@@ -549,6 +626,7 @@ class AnalyticsService
         return [
             'total_active_coaches' => $coaches->where('status', 'active')->count(),
             'total_assignments_period' => $totalAssignments,
+            'total_dive_days' => (int) collect($coachData)->sum('estimated_dive_days'),
             'coaches' => $coachData,
         ];
     }
@@ -571,12 +649,15 @@ class AnalyticsService
         ];
 
         foreach ($batches as $b) {
-            $rating = strtolower(str_replace(' ', '_', $b->risk_classification ?? $b->riskAssessment?->overall_risk_rating ?? 'safe'));
-            if (isset($classifications[$rating])) {
-                $classifications[$rating]++;
-            } else {
-                $classifications['safe']++;
-            }
+            $rating = strtolower(str_replace([' ', '-'], '_', $b->risk_classification ?? $b->riskAssessment?->overall_risk_rating ?? 'safe'));
+            $rating = match (true) {
+                str_contains($rating, 'critical') => 'critical_risk',
+                str_contains($rating, 'high') => 'high_risk',
+                str_contains($rating, 'moderate') => 'moderate',
+                str_contains($rating, 'very') => 'very_safe',
+                default => 'safe',
+            };
+            $classifications[$rating]++;
         }
 
         $totalEvaluated = array_sum($classifications);

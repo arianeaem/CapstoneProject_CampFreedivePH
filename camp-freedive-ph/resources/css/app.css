@@ -108,16 +108,11 @@
         -moz-appearance: none !important;
         background-color: #FFFFFF;
         border: 1px solid #D1D1D6;
-        border-radius: 0.75rem; /* 12px */
         color: #1D1D1F;
-        font-size: 0.9375rem; /* 15px */
-        font-weight: 500;
-        line-height: 1.45;
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236E6E73' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e") !important;
         background-position: right 0.75rem center !important;
         background-repeat: no-repeat !important;
         background-size: 1.15em 1.15em !important;
-        padding-right: 2.25rem !important;
         cursor: pointer;
         transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
     }
@@ -762,3 +757,57 @@
 @media (prefers-reduced-motion: reduce) {
     .dive-side-panel { animation: none; }
 }
+
+
+/* ========================================================================= */
+/* DROPDOWNS: one shape for every <select> in the system.                    */
+/* Unlayered, so it wins over per-page utility classes (padding, radius,     */
+/* size). Colours stay in @layer base so error states can still tint them.   */
+/* ========================================================================= */
+select:not(.select-compact) {
+    min-height: 44px;
+    padding: 0.5rem 2.5rem 0.5rem 0.875rem;
+    border-radius: 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+/* Small inline dropdowns (calendar month/year, rows per page) */
+select.select-compact {
+    min-height: 0;
+    padding: 0.25rem 1.75rem 0.25rem 0.625rem;
+    border-radius: 0.625rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.4;
+    background-position: right 0.4rem center !important;
+}
+
+/* Dashboard bar chart: light hatched bars (the fullest batch is solid) */
+.dashboard-bar-stripes {
+    background-image: repeating-linear-gradient(135deg, rgba(0, 195, 208, 0.35) 0, rgba(0, 195, 208, 0.35) 1px, transparent 1px, transparent 6px);
+}
+
+/* ========================================================================= */
+/* BANNERS: one design for every notice / alert / flash message.             */
+/* No borders, no icons, soft tint. Unlayered so it wins over per-page       */
+/* utility classes. Use: class="banner banner-{success|error|warning|info|note}" */
+/* ========================================================================= */
+.banner {
+    border: 0 !important;
+    border-radius: 0.75rem;
+    padding: 0.875rem 1rem;
+    box-shadow: none;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+.banner :where(p, span, li, strong, b, div, ul, ol, label, small) { color: inherit; }
+.banner a { color: inherit; font-weight: 700; text-decoration: underline; }
+.banner-bar { border-radius: 0; }
+
+.banner-success { background-color: #ECFDF5; color: #065F46; }
+.banner-error   { background-color: #FEF2F2; color: #991B1B; }
+.banner-warning { background-color: #FFFBEB; color: #92400E; }
+.banner-info    { background-color: #EBF7F8; color: #00636A; }
+.banner-note    { background-color: #F8EAEA; color: #780000; }

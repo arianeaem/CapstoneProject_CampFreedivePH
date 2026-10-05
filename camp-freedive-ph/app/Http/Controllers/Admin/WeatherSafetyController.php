@@ -609,7 +609,7 @@ class WeatherSafetyController extends Controller
                 auth()->user()
             );
 
-            return back()->with('success', "Batch {$batch->batch_code} cancelled. {$sentCount} cancellation notification email(s) dispatched to affected bookings.");
+            return back()->with('success', "Batch {$batch->batch_code} is cancelled. {$sentCount} guest(s) were emailed and their full refunds are waiting in Refunds.");
         } catch (Exception $e) {
             return back()->with('error', "Cancellation failed: " . $e->getMessage());
         }

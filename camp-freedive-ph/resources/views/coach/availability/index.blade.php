@@ -397,7 +397,7 @@
                         <div x-text="'Hours until dive departure: ' + selectedAssignedDay.hours_until_dive + 'h'"></div>
                     </div>
 
-                    <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900 space-y-2">
+                    <div class="banner banner-warning space-y-2">
                         <div class="font-bold">Emergency release requests are available at any time.</div>
                         <p class="leading-relaxed">
                             Submit the request as soon as possible so Camp Administration can arrange replacement staffing.

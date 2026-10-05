@@ -414,7 +414,7 @@
             <!-- Global Flash Messages -->
             <div id="flash-messages-container" class="px-4 sm:px-8 pt-4">
                 @if(session('success'))
-                    <div class="p-4 mb-4 rounded-xl bg-[#ECFDF5] text-[#065F46] flex items-center justify-between text-sm font-medium shadow-2xs">
+                    <div class="banner banner-success mb-4 flex items-center justify-between">
                         <div class="flex items-center gap-2.5">
                             <span>{{ session('success') }}</span>
                         </div>
@@ -423,9 +423,8 @@
                 @endif
 
                 @if(session('error'))
-                    <div class="p-4 mb-4 rounded-xl bg-[#FEF2F2] text-[#991B1B] flex items-center justify-between text-sm font-medium shadow-2xs">
+                    <div class="banner banner-error mb-4 flex items-center justify-between">
                         <div class="flex items-center gap-2.5">
-                            <span class="w-2 h-2 rounded-full bg-[#FF3B3C]"></span>
                             <span>{{ session('error') }}</span>
                         </div>
                         <button type="button" @click="$el.parentElement.remove()" class="text-sm font-bold text-[#991B1B]/60 hover:text-[#991B1B]" aria-label="Dismiss error notification">✕</button>
@@ -433,9 +432,8 @@
                 @endif
 
                 @if(session('info'))
-                    <div class="p-4 mb-4 rounded-xl bg-[#EFF6FF] text-[#1E40AF] flex items-center justify-between text-sm font-medium shadow-2xs">
+                    <div class="banner banner-info mb-4 flex items-center justify-between">
                         <div class="flex items-center gap-2.5">
-                            <span class="w-2 h-2 rounded-full bg-[#0088FF]"></span>
                             <span>{{ session('info') }}</span>
                         </div>
                         <button type="button" @click="$el.parentElement.remove()" class="text-sm font-bold text-[#1E40AF]/60 hover:text-[#1E40AF]" aria-label="Dismiss notice">✕</button>

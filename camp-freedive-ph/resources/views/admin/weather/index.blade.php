@@ -14,7 +14,7 @@
 
     <!-- Critical / High Risk Advisory Banner -->
     @if($criticalCount > 0)
-    <div class="p-4 bg-rose-50 rounded-xl border border-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-rose-900 shadow-2xs">
+    <div class="banner banner-error flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex items-center gap-2.5">
             <span class="w-3 h-3 rounded-full bg-rose-600 animate-pulse"></span>
             <div>

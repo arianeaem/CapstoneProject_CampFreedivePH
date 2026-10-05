@@ -373,7 +373,7 @@
                                 <span class="font-bold text-sm text-[#1D1D1F] block">Boat Dive (Optional)</span>
                                 <span x-show="boatDive" class="w-2.5 h-2.5 rounded-full bg-[#780000]"></span>
                             </div>
-                            <span class="text-xs sm:text-sm text-[#6E6E73] block leading-snug">Boat ride to deeper marine sanctuaries.</span>
+                            <span class="text-xs sm:text-sm text-[#6E6E73] block leading-snug">Enjoy the freedive site hopping experience across Sepoc Island, Sombrero Island and Dari Laut.</span>
                         </div>
                         <div class="text-right shrink-0">
                             <span class="font-extrabold text-[#780000] text-xs sm:text-sm">+₱600</span>
@@ -384,7 +384,7 @@
             </div>
 
             <!-- Booking Cost & Live Fee Summary -->
-            <div class="p-5 sm:p-6 rounded-2xl bg-[#F8F9FA] border border-[#E5E5EA] space-y-4">
+            <div class="p-5 sm:p-6 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between">
                     <h4 class="font-extrabold text-[#1D1D1F] text-base">Booking Cost &amp; Fee Breakdown</h4>
                     <span class="text-xs font-bold text-[#780000] bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full" x-text="participants.length + ' Diver' + (participants.length > 1 ? 's' : '')"></span>
@@ -491,7 +491,7 @@
             </div>
 
             <!-- Form Actions -->
-            <div class="flex items-center justify-end gap-3 pt-6 border-t border-[#E5E5EA]">
+            <div class="flex items-center justify-end gap-3">
                 <a href="{{ route('admin.bookings.index') }}" class="btn-secondary min-h-[44px] px-6 py-2.5 text-sm font-bold inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
                     Cancel
                 </a>

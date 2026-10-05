@@ -32,8 +32,7 @@
             </div>
 
             @if(session('error') || (isset($errors) && ($errors->has('email') || $errors->has('password'))))
-                <div role="alert" aria-live="polite" class="mb-6 p-4 rounded-xl bg-[#FEF2F2] flex items-start gap-3">
-                    <img src="{{ asset('icons/icons8-error-60.png') }}" alt="" class="w-5 h-5 shrink-0 object-contain mt-0.5" aria-hidden="true">
+                <div role="alert" aria-live="polite" class="banner banner-error mb-6 flex items-start gap-3">
                     <div class="text-sm font-semibold text-[#991B1B] leading-relaxed">
                         {{ session('error') ?? ($errors->first('password') ?: $errors->first('email')) }}
                     </div>
@@ -41,8 +40,7 @@
             @endif
 
             @if(session('status') || session('success'))
-                <div role="status" aria-live="polite" class="mb-6 p-4 rounded-xl bg-[#ECFDF5] flex items-start gap-3">
-                    <img src="{{ asset('icons/icons8-checkmark-60.png') }}" alt="" class="w-5 h-5 shrink-0 object-contain mt-0.5" aria-hidden="true">
+                <div role="status" aria-live="polite" class="banner banner-success mb-6 flex items-start gap-3">
                     <div class="text-sm font-semibold text-[#065F46] leading-relaxed">
                         {{ session('status') ?? session('success') }}
                     </div>

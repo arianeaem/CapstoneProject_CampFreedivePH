@@ -69,7 +69,6 @@
                 <img src="{{ asset('images/logo.png') }}" alt="Camp FreedivePH" class="w-12 h-12 rounded-full object-contain shrink-0">
                 <div>
                     <h1 class="text-xl font-black text-[#1D1D1F] tracking-tight">Camp Freedive<span class="text-[#780000]">PH</span></h1>
-                    <p class="text-xs font-bold uppercase tracking-wider text-[#6E6E73]">Executive & Operational Summary</p>
                 </div>
             </div>
             <div class="text-right text-sm">

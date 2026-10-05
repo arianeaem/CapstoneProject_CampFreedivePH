@@ -152,7 +152,7 @@
         </div>
 
         <!-- Error Alert Banner -->
-        <div x-show="errorMessage" x-cloak class="mb-6 p-3.5 sm:p-4 rounded-xl bg-[#FEF2F2] text-[#991B1B] text-sm flex items-center justify-between gap-3 shadow-2xs">
+        <div x-show="errorMessage" x-cloak class="banner banner-error mb-6 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 min-w-0">
                 <span x-text="errorMessage"></span>
             </div>
@@ -160,7 +160,7 @@
         </div>
 
         <!-- Draft Restored Notification Banner -->
-        <div x-show="draftRestored" x-cloak class="mb-6 p-3.5 sm:p-4 rounded-xl bg-[#F0FDF4] text-[#166534] text-sm flex items-center justify-between gap-3 shadow-2xs">
+        <div x-show="draftRestored" x-cloak class="banner banner-success mb-6 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 min-w-0">
                 <span>Your saved booking progress has been automatically restored.</span>
             </div>
@@ -1262,7 +1262,7 @@
                                         <span class="font-bold text-sm text-[#1D1D1F] block">Boat Dive (Optional)</span>
                                         <span x-show="form.boat_dive" class="w-2.5 h-2.5 rounded-full bg-[#780000]"></span>
                                     </div>
-                                    <span class="text-xs sm:text-sm text-[#6E6E73] block leading-snug">Boat ride to deeper marine sanctuaries.</span>
+                                    <span class="text-xs sm:text-sm text-[#6E6E73] block leading-snug">Enjoy the freedive site hopping experience across Sepoc Island, Sombrero Island and Dari Laut.</span>
                                 </div>
                                 <div class="text-right shrink-0">
                                     <span class="font-extrabold text-[#780000] text-xs sm:text-sm">+₱{{ number_format($feesData['boat_dive'] ?? 600) }}</span>
@@ -1411,9 +1411,8 @@
 
             <div class="max-w-7xl mx-auto space-y-6">
                 <!-- Slot Hold Countdown Banner -->
-                <div class="p-3.5 sm:p-4 rounded-xl bg-amber-50 text-amber-900 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-2xs">
+                <div class="banner banner-warning flex items-center justify-between gap-3">
                     <div class="flex items-center gap-2 min-w-0">
-                        <img src="{{ asset('icons/icons8-clock-60.png') }}" alt="" aria-hidden="true" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0 object-contain">
                         <span class="font-medium">Slots held for checkout:</span>
                     </div>
                     <span class="font-mono font-bold text-amber-950 px-2.5 py-0.5 rounded-lg bg-amber-100/80 tracking-wide shrink-0" x-text="timerDisplay"></span>

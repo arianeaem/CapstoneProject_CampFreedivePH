@@ -53,7 +53,7 @@
     
     @if(session('blocked_coach'))
         @php $blocked = session('blocked_coach'); @endphp
-        <div class="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4 sm:p-5 space-y-3" role="alert">
+        <div class="banner banner-warning space-y-3" role="alert">
             <div>
                 <p class="font-extrabold text-[#92400E]">{{ $blocked['name'] }} can't be {{ $blocked['action'] }} yet</p>
                 <p class="text-[#92400E] mt-0.5">They still have the upcoming batches below. Reassign their students to other coaches (or remove them from the coach team) first, then try again.</p>
@@ -561,7 +561,7 @@
             </div>
 
             <!-- Notice & Instructions -->
-            <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-2.5 text-sm text-amber-900">
+            <div class="banner banner-warning flex items-start gap-2.5">
                 <div class="space-y-0.5 leading-relaxed">
                     <strong class="font-bold block">First Login Password Change Required</strong>
                     <span>When logging in with this temporary password, the system will immediately require the user to set a permanent private password.</span>

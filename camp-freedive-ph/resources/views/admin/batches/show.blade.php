@@ -71,12 +71,6 @@
                         <button type="button"
                                 @click="openActionsMenu = false; openRescheduleModal = true"
                                 class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                            <svg class="w-4 h-4 text-[#6E6E73]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                                <line x1="16" x2="16" y1="2" y2="6"/>
-                                <line x1="8" x2="8" y1="2" y2="6"/>
-                                <line x1="3" x2="21" y1="10" y2="10"/>
-                            </svg>
                             <span>Reschedule Batch</span>
                         </button>
 
@@ -136,12 +130,6 @@
                         <button type="button"
                                 @click="openActionsMenu = false; openRescheduleModal = true"
                                 class="w-full min-h-[40px] px-3 py-2 text-sm font-semibold text-[#1D1D1F] hover:bg-[#F2F2F7] rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer text-left">
-                            <svg class="w-4 h-4 text-[#6E6E73]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                                <line x1="16" x2="16" y1="2" y2="6"/>
-                                <line x1="8" x2="8" y1="2" y2="6"/>
-                                <line x1="3" x2="21" y1="10" y2="10"/>
-                            </svg>
                             <span>Reschedule Batch</span>
                         </button>
                     </div>
@@ -315,7 +303,7 @@
                 @endif
 
                 @if($batch->status === 'cancelled_by_camp' && $batch->cancellation_reason)
-                    <div class="p-3 bg-rose-50 rounded-xl text-sm text-rose-900 leading-relaxed">
+                    <div class="banner banner-error">
                         <strong>Camp Cancellation Advisory:</strong> {{ $batch->cancellation_reason }} (Logged at {{ $batch->cancelled_at ? $batch->cancelled_at->format('M d, Y h:i A') : 'N/A' }})
                     </div>
                 @endif
@@ -323,8 +311,7 @@
                 <!-- Occupancy & Capacity -->
                 <div class="space-y-2 pt-1">
                     @if($batch->total_participants_count > 0 && $batch->is_coach_pending)
-                        <div class="p-3 bg-amber-50 rounded-xl text-left text-sm text-amber-900 flex items-center gap-2.5">
-                            <img src="{{ asset('icons/icons8-clock-60.png') }}" class="w-4.5 h-4.5 object-contain shrink-0" alt="" aria-hidden="true">
+                        <div class="banner banner-warning text-left flex items-center gap-2.5">
                             <span class="font-bold">Instructor Pending</span>
                         </div>
                     @else

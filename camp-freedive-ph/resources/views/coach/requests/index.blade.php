@@ -293,7 +293,7 @@
                                   class="w-full text-sm rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:ring-[#780000] p-3"></textarea>
                     </div>
 
-                    <div class="p-3.5 rounded-xl bg-blue-50 text-sm text-blue-900 leading-relaxed">
+                    <div class="banner banner-info">
                         Submitting interest notifies Camp Admin. If selected, students will be automatically matched to your roster.
                     </div>
 

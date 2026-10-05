@@ -69,10 +69,10 @@
             </template>
             <template x-if="yearSelect">
                 <div class="flex items-center gap-1">
-                    <select x-model.number="viewMonth" aria-label="Month" class="text-sm font-bold text-[#1D1D1F] rounded-lg border border-[#E5E5EA] px-1.5 py-1 bg-white">
+                    <select x-model.number="viewMonth" aria-label="Month" class="select-compact text-sm font-bold text-[#1D1D1F] rounded-lg border border-[#E5E5EA] px-1.5 py-1 bg-white">
                         <template x-for="(m, i) in monthNames" :key="m"><option :value="i" x-text="m.slice(0, 3)" :selected="i === viewMonth"></option></template>
                     </select>
-                    <select x-model.number="viewYear" aria-label="Year" class="text-sm font-bold text-[#1D1D1F] rounded-lg border border-[#E5E5EA] px-1.5 py-1 bg-white">
+                    <select x-model.number="viewYear" aria-label="Year" class="select-compact text-sm font-bold text-[#1D1D1F] rounded-lg border border-[#E5E5EA] px-1.5 py-1 bg-white">
                         <template x-for="y in years" :key="y"><option :value="y" x-text="y" :selected="y === viewYear"></option></template>
                     </select>
                 </div>

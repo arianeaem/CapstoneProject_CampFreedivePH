@@ -290,7 +290,7 @@
                     <textarea name="note" rows="3" placeholder="Explain why this status is being changed..." class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white"></textarea>
                 </div>
 
-                <div class="p-3 bg-[#FFFBEB] rounded-xl border border-[#FDE68A] text-xs sm:text-sm text-[#92400E] leading-relaxed">
+                <div class="banner banner-warning">
                     <strong>Note:</strong> Status changes propagate immediately to the Coach Portal, Batch schedule, and Reports. If setting to Cancelled, please process the refund via Payments & Refunds.
                 </div>
 

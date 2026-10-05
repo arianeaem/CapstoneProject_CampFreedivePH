@@ -198,7 +198,7 @@
                 </div>
 
                 @if($booking->pickup_option === 'carpool')
-                <div class="p-4 rounded-xl bg-[#F8EAEA] border border-[#F1D5D5] text-xs sm:text-sm">
+                <div class="banner banner-note">
                     <strong class="font-bold text-[#780000] block mb-1">Carpool Arrival & Grace Period Notice:</strong>
                     <p class="text-[#4A4A4F] leading-relaxed">
                         Please arrive at your pickup location (<strong>{{ $booking->pickup_location }}</strong>) before the designated departure time. A 30-minute grace period applies before the van departs; please arrive promptly to avoid delays for other participants.
@@ -370,9 +370,8 @@
 
                 <!-- Marine Safety Advisory Notice -->
                 @if($policy['is_force_majeure'])
-                <div class="p-4 rounded-xl bg-sky-50 text-sky-950 space-y-1.5 shadow-2xs">
+                <div class="banner banner-error space-y-1.5">
                     <div class="font-bold text-sm text-sky-950 flex items-center gap-1.5">
-                        <svg class="w-4 h-4 text-sky-700 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                         <span>Advisory: Weather Force Majeure Active</span>
                     </div>
                     <p class="text-sm text-sky-900 leading-relaxed">
@@ -483,7 +482,7 @@
                     <textarea id="reschedule-reason" name="reason" rows="2" placeholder="e.g. Work schedule change" class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:outline-none text-sm text-[#1D1D1F] bg-white transition-colors"></textarea>
                 </div>
 
-                <div class="p-3.5 bg-[#FFFBEB] rounded-xl text-sm text-[#92400E]">
+                <div class="banner banner-warning">
                     <strong>Note:</strong> On submission, your request status is set to <strong>Pending Approval</strong>. The camp will review coach availability and notify you via email.
                 </div>
 

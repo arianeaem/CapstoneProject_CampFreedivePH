@@ -3,15 +3,24 @@
 @section('title', 'Coach Dashboard | Camp FreedivePH')
 
 @section('content')
-<div class="space-y-6" x-data="{ 
-    openReleaseModal: false, 
-    openApplyModal: false, 
-    submittingRelease: false, 
+@php
+    $next = $nextSessionData;
+    $riskTone = fn ($c) => match ($c) {
+        'Critical Risk' => 'bg-[#FEF2F2] text-[#B91C1C]',
+        'High Risk' => 'bg-[#FFFBEB] text-[#B45309]',
+        'Moderate Risk', 'Moderate' => 'bg-[#FEF9C3] text-[#854D0E]',
+        default => 'bg-[#00C3D0]/10 text-[#00636A]',
+    };
+@endphp
+<div class="space-y-5" x-data="{
+    openReleaseModal: false,
+    openApplyModal: false,
+    submittingRelease: false,
     submittingApply: false,
     isTogglingDate: false,
     togglingDateStr: null,
-    selectedOpening: null, 
-    selectedOpeningId: null, 
+    selectedOpening: null,
+    selectedOpeningId: null,
     selectedOpeningDate: '',
     selectedOpeningBatch: '',
     selectedOpeningNeeded: 0,
@@ -24,496 +33,328 @@
         this.openApplyModal = true;
     }
 }">
-    
-    <!-- Top Command Header -->
+
+    <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">
-                Welcome back, {{ $coach->name }}!
-            </h1>
-            <p class="text-sm text-[#6E6E73] mt-1">
-                <span>It's {{ now('Asia/Manila')->format('l, F d, Y') }}</span>
-            </p>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Welcome back, {{ $coach->name }}!</h1>
+            <p class="text-sm text-[#6E6E73] mt-1">It's {{ now('Asia/Manila')->format('l, F d, Y') }}. Here's your coaching at a glance.</p>
         </div>
-
         <div class="flex items-center gap-2.5 flex-wrap">
-            <a href="{{ route('coach.availability.index') }}" class="px-4 py-2 rounded-xl text-sm font-bold bg-white text-[#1D1D1F] hover:bg-[#F2F2F7] border border-[#E5E5EA] transition-all flex items-center gap-2">
-                <span>Manage Availability</span>
-            </a>
-            <a href="{{ route('coach.requests.index') }}" class="px-4 py-2 rounded-xl text-sm font-bold bg-[#780000] hover:bg-[#5E0000] text-white transition-all flex items-center gap-2">
-                <span>Open Camp Slots ({{ $activeOpeningsCount }})</span>
-            </a>
+            <a href="{{ route('coach.availability.index') }}" class="btn-secondary min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center">My availability</a>
+            <a href="{{ route('coach.requests.index') }}" class="btn-primary min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center shadow-2xs">Open camp slots ({{ $activeOpeningsCount }})</a>
         </div>
     </div>
 
-    <!-- Coach Summary KPIs (Icons Removed, Clean Minimal Numbers) -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        
-        <!-- Assigned Dives -->
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5E5EA]">
-            <span class="text-sm font-bold text-[#6E6E73] uppercase tracking-wider block">Assigned Dives</span>
-            <div class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] mt-1">{{ $upcomingConfirmedDivesCount }}</div>
-        </div>
-
-        <!-- Available Dates Offered -->
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5E5EA]">
-            <span class="text-sm font-bold text-[#6E6E73] uppercase tracking-wider block">Available Dates</span>
-            <div class="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-1">{{ $availableDaysCount }}</div>
-        </div>
-
-        <!-- Open Camp Slots -->
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5E5EA]">
-            <span class="text-sm font-bold text-[#6E6E73] uppercase tracking-wider block">Open Camp Slots</span>
-            <div class="text-2xl sm:text-3xl font-extrabold text-amber-700 mt-1">{{ $activeOpeningsCount }}</div>
-        </div>
-
-        <!-- Total Divers Mentored -->
-        <div class="bg-white rounded-2xl p-4 sm:p-5 border border-[#E5E5EA]">
-            <span class="text-sm font-bold text-[#6E6E73] uppercase tracking-wider block">Students Coached</span>
-            <div class="text-2xl sm:text-3xl font-extrabold text-[#780000] mt-1">{{ $totalStudentsMentored }}</div>
-        </div>
-
+    <!-- 1. Summary cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        @php
+            $cards = [
+                ['label' => 'Upcoming dives', 'value' => $upcomingConfirmedDivesCount, 'hint' => Str::plural('Batch', $upcomingConfirmedDivesCount) . ' you are coaching'],
+                ['label' => 'Days you are free', 'value' => $availableDaysCount, 'hint' => 'Available dates you offered', 'tone' => 'text-[#00838C]'],
+                ['label' => 'Open camp slots', 'value' => $activeOpeningsCount, 'hint' => $pendingRequestsCount > 0 ? $pendingRequestsCount . ' of your ' . Str::plural('request', $pendingRequestsCount) . ' waiting for approval' : 'Batches asking for extra coaches', 'tone' => $activeOpeningsCount > 0 ? 'text-[#B45309]' : null, 'url' => $activeOpeningsCount > 0 ? route('coach.requests.index') : null],
+                ['label' => 'Students coached', 'value' => $totalStudentsMentored, 'hint' => 'All students assigned to you'],
+            ];
+        @endphp
+        @foreach($cards as $card)
+            <div class="relative overflow-hidden rounded-2xl border border-[#E5E5EA] bg-gradient-to-b from-[#780000]/[0.04] via-white to-white p-5 flex flex-col gap-2 shadow-2xs">
+                <div class="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-[#780000]/15 via-[#9E2A2B]/8 to-transparent rounded-full blur-2xl pointer-events-none" aria-hidden="true"></div>
+                <span class="relative text-[11px] font-bold uppercase tracking-wider text-[#6E6E73]">{{ $card['label'] }}</span>
+                <div class="relative text-2xl sm:text-3xl font-black tracking-tight {{ $card['tone'] ?? 'text-[#780000]' }}">{{ $card['value'] }}</div>
+                <div class="relative text-xs text-[#6E6E73]">
+                    @if(!empty($card['url']))
+                        <a href="{{ $card['url'] }}" class="font-semibold text-[#B45309] hover:underline">{{ $card['hint'] }} &rarr;</a>
+                    @else
+                        {{ $card['hint'] }}
+                    @endif
+                </div>
+            </div>
+        @endforeach
     </div>
 
-    <!-- PRIMARY OPERATIONAL SECTION: Left Column (Batch + Open Slots) & Right Column (Student Roster) -->
-    @if($nextSessionData)
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
-            <!-- LEFT COLUMN (col-span-4): Upcoming Dive Batch Card + Open Camp Volunteer Slots Below It -->
-            <div class="lg:col-span-4 space-y-6">
-                
-                <!-- Upcoming Dive Batch Card -->
-                <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 flex flex-col justify-between space-y-5">
-                    <div class="space-y-3.5">
-                        <!-- Weather Safety Status (shared design: components/dive-safety/status) -->
-                        <x-dive-safety.status :classification="$nextSessionData['weather_class']"
-                                              :engines="$nextSessionData['model_comparison'] ?? null" />
+    <!-- 2. Next dive + upcoming dives -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
 
-                        <!-- Batch Title -->
-                        <div>
-                            <span class="text-sm uppercase font-bold text-[#8E8E93] tracking-wider block">Upcoming Dive Batch</span>
-                            <h2 class="text-2xl font-black text-[#1D1D1F] tracking-tight mt-0.5">
-                                {{ $nextSessionData['batch']->batch_number }}
-                            </h2>
-                        </div>
-
-                        <!-- Dive Dates & Students Line -->
-                        <div class="space-y-1 text-sm text-[#6E6E73] pt-1">
-                            <p>
-                                Dive Dates: <strong class="text-[#1D1D1F]">{{ $nextSessionData['batch']->formatted_date_range }} ({{ $nextSessionData['batch']->start_date->format('D') }} - {{ $nextSessionData['batch']->end_date->format('D') }})</strong>
-                            </p>
-                            <p>
-                                Assigned Students: <strong class="text-[#1D1D1F]">{{ $nextSessionData['students_count'] }} Student(s)</strong>
-                                @if(!empty($nextSessionData['class_breakdown']))
-                                    <span class="text-[#8E8E93] mx-1">·</span>
-                                    <span class="text-[#1D1D1F] font-semibold">
-                                        @php
-                                            $dashBreakdownStrs = [];
-                                            foreach ($nextSessionData['class_breakdown'] as $cType => $cnt) {
-                                                $dashBreakdownStrs[] = "{$cnt} {$cType}";
-                                            }
-                                        @endphp
-                                        {{ implode(', ', $dashBreakdownStrs) }}
-                                    </span>
-                                @endif
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Action Area: Primary & Secondary (No Separator Line) -->
-                    <div class="pt-3 flex flex-col sm:flex-row lg:flex-col xl:flex-row items-stretch gap-2.5">
-                        <!-- Primary: Request Release -->
-                        @if($nextSessionData['can_request_release'])
-                            <button type="button" 
-                                    @click="openReleaseModal = true"
-                                    class="flex-1 px-4 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 text-sm font-bold transition-all flex items-center justify-center gap-1.5">
-                                <span>Request Release</span>
-                            </button>
-                        @endif
-
-                        <!-- Secondary: View Full Schedule -->
-                        <a href="{{ route('coach.schedule.index') }}" class="flex-1 px-4 py-2.5 rounded-xl bg-white hover:bg-[#F2F2F7] text-[#1D1D1F] border border-[#E5E5EA] text-sm font-bold transition-all inline-flex items-center justify-center gap-1.5">
-                            <span>Full Schedule</span>
-                        </a>
-                    </div>
-                </div>
-
-                <!-- OPEN CAMP VOLUNTEER SLOTS (Placed below the batch card on the left side) -->
-                <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 flex flex-col justify-between space-y-4">
-                    <div class="space-y-4">
-                        <!-- Header with Subtitle and View Board Button (No separator line) -->
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
-                            <div>
-                                <h3 class="text-base font-black text-[#1D1D1F]">Open Camp Volunteer Slots</h3>
-                                <p class="text-sm text-[#6E6E73]">Batches seeking extra coach support</p>
-                            </div>
-                            <a href="{{ route('coach.requests.index') }}" class="px-3 py-1.5 rounded-xl bg-white hover:bg-[#F2F2F7] text-[#1D1D1F] border border-[#E5E5EA] text-sm font-bold transition-all shadow-2xs inline-flex items-center gap-1.5 self-start sm:self-auto">
-                                <span>Board · {{ $activeOpeningsCount }}</span>
-                                <svg class="w-3.5 h-3.5 text-[#6E6E73]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
-                            </a>
-                        </div>
-
-                        <!-- Clean Horizontal Openings Cards -->
-                        <div class="space-y-3">
-                            @forelse($openCoachOpenings as $opening)
-                                @php
-                                    $myRequest = $opening->requests->first();
-                                    $hasApplied = $myRequest !== null;
-                                    $reqStatus = $myRequest?->status;
-                                    $b = $opening->batch;
-                                    $datesDisplay = ($b && $b->start_date && $b->end_date && $b->start_date->ne($b->end_date))
-                                        ? $b->formatted_date_range . ' (' . $b->start_date->format('D') . ' - ' . $b->end_date->format('D') . ')'
-                                        : $opening->dive_date->format('M d, Y · l');
-                                @endphp
-                                <div class="p-4 rounded-2xl bg-[#F2F2F7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors shadow-2xs">
-                                    <div class="space-y-1">
-                                        <div class="flex items-center gap-2 flex-wrap">
-                                            <span class="font-black text-sm text-[#1D1D1F]">{{ $opening->batch?->batch_number ?? 'Batch' }}</span>
-                                            <span class="px-2.5 py-0.5 rounded-lg text-sm font-black bg-amber-100 text-amber-900">
-                                                NEEDS SUPPORT
-                                            </span>
-                                        </div>
-                                        <p class="text-sm text-[#1D1D1F] font-semibold">
-                                            Needs {{ $opening->needed_students_count }} student slots
-                                        </p>
-                                        <p class="text-sm text-[#6E6E73]">
-                                            Dive dates: <strong class="text-[#1D1D1F]">{{ $datesDisplay }}</strong>
-                                        </p>
-                                    </div>
-
-                                    <div class="shrink-0 pt-2 sm:pt-0">
-                                        @if($hasApplied)
-                                            @if($reqStatus === 'approved')
-                                                <span class="px-3 py-1.5 rounded-xl text-sm font-black bg-emerald-100 text-emerald-900 inline-block">
-                                                    Accepted
-                                                </span>
-                                            @elseif($reqStatus === 'not_selected')
-                                                <span class="px-3 py-1.5 rounded-xl text-sm font-black bg-gray-100 text-gray-700 inline-block">
-                                                    Filled
-                                                </span>
-                                            @else
-                                                <span class="px-3 py-1.5 rounded-xl text-sm font-black bg-blue-100 text-blue-900 inline-block">
-                                                    Applied (Pending)
-                                                </span>
-                                            @endif
-                                        @else
-                                            <button type="button" 
-                                                    @click="openVolunteerModal({{ json_encode($opening) }}, '{{ addslashes($datesDisplay) }}')"
-                                                    class="btn-primary min-h-[44px] px-4 py-2 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                                                Volunteer
-                                            </button>
-                                        @endif
-                                    </div>
-                                </div>
-                            @empty
-                                <div class="py-6 text-center text-sm text-[#6E6E73] bg-[#F2F2F7] rounded-2xl">
-                                    No open broadcast volunteer slots right now.
-                                </div>
-                            @endforelse
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- RIGHT: Assigned Student Roster in Card Format (col-span-8, Unboxed Container) -->
-            <div class="lg:col-span-8 bg-transparent border-0 p-0 shadow-none space-y-3.5">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
-                    <div>
-                        <h3 class="text-base sm:text-lg font-black text-[#1D1D1F]">Assigned Student Roster</h3>
-                        <p class="text-sm text-[#6E6E73]">Review student swimming abilities prior to boat departure</p>
-                    </div>
-                    <span class="text-sm font-extrabold text-[#1D1D1F] bg-[#F2F2F7] px-3 py-1 rounded-xl self-start sm:self-auto shadow-2xs">
-                        {{ $nextSessionData['students_count'] }} Student(s) Assigned
-                    </span>
-                </div>
-
-                <!-- Student Cards Grid (Brand-Aligned Card Format) -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                    @foreach($nextSessionData['students'] as $student)
-                        @php
-                            $rawCondition = trim($student->health_condition ?? '');
-                            $cleanHealth = strtolower(rtrim($rawCondition, '.'));
-                            $isNoneOrGeneral = empty($cleanHealth) 
-                                || in_array($cleanHealth, ['none', 'none declared', 'no', 'n/a', 'na', 'nil', 'normal', 'fit for diving', 'fit for diving, no declared medical issues', 'cleared medical waiver', 'first time freediving'])
-                                || str_starts_with($cleanHealth, 'fit for diving')
-                                || str_starts_with($cleanHealth, 'none')
-                                || str_starts_with($cleanHealth, 'cleared medical waiver')
-                                || str_starts_with($cleanHealth, 'first time freediving')
-                                || str_starts_with($cleanHealth, 'certified aida')
-                                || str_starts_with($cleanHealth, 'working on frenzel');
-                            $hasMedical = !$isNoneOrGeneral && !empty($rawCondition);
-
-                            $swim = strtolower($student->swimmer_status ?? 'swimmer');
-                            $classType = $student->booking?->formatted_class_type ?? 'Discovery';
-                            $shortClassType = ucfirst($student->booking?->class_type ?? 'Discovery');
-                        @endphp
-                        
-                        <!-- Individual Student Card (Mobile-Optimized Padding & Clean Spacing) -->
-                        <div class="bg-white rounded-2xl border border-[#E5E5EA] p-4 sm:p-5 space-y-4 flex flex-col justify-between">
-                            
-                            <!-- Card Header: Student Name & Compact Package Badge (No border) -->
-                            <div class="flex items-start justify-between gap-2.5">
-                                <div class="min-w-0 flex-1">
-                                    <span class="text-sm uppercase font-bold text-[#8E8E93] tracking-wider block">Student</span>
-                                    <h4 class="font-black text-[#1D1D1F] text-base sm:text-lg tracking-tight mt-0.5 truncate">{{ $student->name }}</h4>
-                                </div>
-                                <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#F8EAEA] text-[#780000] shrink-0">
-                                    {{ $shortClassType }}
-                                </span>
-                            </div>
-
-                            <!-- Information Rows (Semantic Row Grouping prevents vertical height collisions) -->
-                            <div class="space-y-3.5 text-sm">
-                                
-                                <!-- Row 1: Age & Package -->
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4 items-start">
-                                    <div>
-                                        <span class="text-sm font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Age</span>
-                                        <span class="font-extrabold text-sm sm:text-base text-[#1D1D1F] block">{{ $student->age }} yrs</span>
-                                    </div>
-                                    <div>
-                                        <span class="text-sm font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Package</span>
-                                        <span class="font-extrabold text-sm sm:text-sm text-[#1D1D1F] block leading-snug">{{ $classType }}</span>
-                                    </div>
-                                </div>
-
-                                <!-- Row 2: Swimming Ability & Health/Medical -->
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4 items-start">
-                                    <div>
-                                        <span class="text-sm font-bold text-[#8E8E93] uppercase tracking-wider block mb-1">Swimming Ability</span>
-                                        @if($swim === 'confident' || $swim === 'confident_swimmer')
-                                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg font-black text-sm bg-emerald-100 text-emerald-900 shadow-2xs">
-                                                <span>Confident Swimmer</span>
-                                            </span>
-                                        @elseif($swim === 'non_swimmer')
-                                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg font-black text-sm bg-rose-100 text-rose-900 shadow-2xs">
-                                                <span>Non-Swimmer</span>
-                                            </span>
-                                        @else
-                                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg font-black text-sm bg-blue-100 text-blue-900 shadow-2xs">
-                                                <span>Swimmer</span>
-                                            </span>
-                                        @endif
-                                    </div>
-
-                                    <div>
-                                        <span class="text-sm font-bold text-[#8E8E93] uppercase tracking-wider block mb-1">Health / Medical</span>
-                                        @if($hasMedical)
-                                            <span class="font-bold text-sm text-amber-900 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 shadow-2xs">
-                                                <svg class="w-3.5 h-3.5 text-amber-800 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                                <span class="truncate">{{ $student->health_condition }}</span>
-                                            </span>
-                                        @else
-                                            <span class="text-sm sm:text-sm text-[#8E8E93] font-bold block pt-1">None declared</span>
-                                        @endif
-                                    </div>
-                                </div>
-
-                                <!-- Row 3: Lead Booker & Contact -->
-                                <div class="grid grid-cols-2 gap-3 sm:gap-4 items-start">
-                                    <div>
-                                        <span class="text-sm font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Lead Booker</span>
-                                        <span class="font-extrabold text-sm sm:text-sm text-[#1D1D1F] truncate block">{{ $student->booking?->contact_name ?? $student->name }}</span>
-                                    </div>
-                                    <div>
-                                        <span class="text-sm font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Contact</span>
-                                        <a href="tel:{{ $student->booking?->contact_phone ?: '09185559876' }}" class="font-extrabold text-sm sm:text-sm text-[#780000] hover:underline block truncate">
-                                            {{ $student->booking?->contact_phone ?: ($student->booking?->contact_email ?: '0918 555 9876') }}
-                                        </a>
-                                    </div>
-                                </div>
-
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-
-        </div>
-    @else
-        <!-- Empty State: No Immediate Dives -->
-        <div class="space-y-6">
-            <div class="bg-white rounded-2xl border border-[#E5E5EA] p-8 text-center space-y-3">
+        <!-- Your next dive -->
+        <div class="lg:col-span-7 bg-white rounded-2xl border border-[#E5E5EA] p-5 space-y-4">
+            <div class="flex items-start justify-between gap-3">
                 <div>
-                    <h3 class="text-base font-extrabold text-[#1D1D1F]">No Immediate Dive Assignments</h3>
-                    <p class="text-sm text-[#6E6E73] mt-1 max-w-md mx-auto">
-                        You currently have no scheduled batches for this weekend. Keep your availability calendar updated to get matched by camp coordinators.
+                    <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Your next dive</h2>
+                    <p class="text-sm text-[#8E8E93]">
+                        @if($next && $next['is_shared_pool'])
+                            You're on the coach team for this batch
+                        @else
+                            The batch you're coaching next
+                        @endif
                     </p>
                 </div>
-                <div class="pt-2">
-                    <a href="{{ route('coach.availability.index') }}" class="px-4 py-2.5 rounded-xl bg-[#780000] hover:bg-[#5E0000] text-white text-sm font-bold transition-all inline-flex items-center gap-2.5 shadow-2xs">
-                        <img src="{{ asset('icons/icons8-calendar-60.png') }}" class="w-5 h-5 shrink-0 brightness-0 invert" alt="" aria-hidden="true">
-                        <span>Update Availability Calendar</span>
-                    </a>
-                </div>
+                <a href="{{ route('coach.schedule.index') }}" class="text-sm font-bold text-[#780000] hover:underline shrink-0">Full schedule &rarr;</a>
             </div>
 
-            <!-- Open Camp Volunteer Slots below empty state -->
-            @if($openCoachOpenings->isNotEmpty())
-                <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 space-y-4">
-                    <div class="flex items-center justify-between pb-1">
+            @if($next)
+                <div class="rounded-xl bg-gradient-to-b from-[#780000]/[0.04] to-white border border-[#E5E5EA] p-4 space-y-3">
+                    <div class="flex flex-wrap items-end justify-between gap-2">
                         <div>
-                            <h3 class="text-base font-black text-[#1D1D1F]">Open Camp Volunteer Slots</h3>
-                            <p class="text-sm text-[#6E6E73]">Batches seeking extra coach support</p>
+                            <span class="block text-[11px] font-bold uppercase tracking-wider text-[#6E6E73]">{{ $next['batch']->batch_number }}</span>
+                            <span class="block text-xl sm:text-2xl font-black text-[#780000] tracking-tight">
+                                {{ $next['batch']->formatted_date_range }}
+                            </span>
+                            <span class="block text-xs text-[#6E6E73]">
+                                {{ $next['batch']->start_date->format('D') }} - {{ $next['batch']->end_date->format('D') }}
+                                &middot; starts {{ $next['batch']->start_date->copy()->setTime(6, 30)->diffForHumans() }}
+                            </span>
                         </div>
-                        <a href="{{ route('coach.requests.index') }}" class="px-3 py-1.5 rounded-xl bg-white hover:bg-[#F2F2F7] text-[#1D1D1F] border border-[#E5E5EA] text-sm font-bold transition-all shadow-2xs inline-flex items-center gap-1.5">
-                            <span>Board · {{ $activeOpeningsCount }}</span>
-                            <svg class="w-3.5 h-3.5 text-[#6E6E73]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
-                        </a>
+                        <div class="text-right">
+                            <span class="block text-2xl font-black text-[#1D1D1F]">{{ $next['students_count'] }}</span>
+                            <span class="block text-xs text-[#6E6E73]">{{ Str::plural('student', $next['students_count']) }}</span>
+                        </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        @foreach($openCoachOpenings as $opening)
-                            @php 
-                                $myRequest = $opening->requests->first();
-                                $hasApplied = $myRequest !== null;
-                                $reqStatus = $myRequest?->status;
-                                $b = $opening->batch;
-                                $datesDisplay = ($b && $b->start_date && $b->end_date && $b->start_date->ne($b->end_date))
-                                    ? $b->start_date->format('M d') . ' - ' . $b->end_date->format('d, Y') . ' (' . $b->start_date->format('D') . ' - ' . $b->end_date->format('D') . ')'
-                                    : $opening->dive_date->format('M d, Y · l');
-                            @endphp
-                            <div class="p-4 rounded-2xl bg-[#F2F2F7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors shadow-2xs">
-                                <div class="space-y-1">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-black text-sm text-[#1D1D1F]">{{ $opening->batch?->batch_number ?? 'Batch' }}</span>
-                                        <span class="px-2.5 py-0.5 rounded-lg text-sm font-black bg-amber-100 text-amber-900">NEEDS SUPPORT</span>
-                                    </div>
-                                    <p class="text-sm text-[#1D1D1F] font-semibold">Needs {{ $opening->needed_students_count }} student slots</p>
-                                    <p class="text-sm text-[#6E6E73]">Dive dates: <strong class="text-[#1D1D1F]">{{ $datesDisplay }}</strong></p>
-                                </div>
-                                <div class="shrink-0">
-                                    @if($hasApplied)
-                                        @if($reqStatus === 'approved')
-                                            <span class="px-3 py-1.5 rounded-xl text-sm font-black bg-emerald-100 text-emerald-900">Accepted</span>
-                                        @elseif($reqStatus === 'not_selected')
-                                            <span class="px-3 py-1.5 rounded-xl text-sm font-black bg-gray-100 text-gray-700">Filled</span>
-                                        @else
-                                            <span class="px-3 py-1.5 rounded-xl text-sm font-black bg-blue-100 text-blue-900">Applied (Pending)</span>
-                                        @endif
-                                    @else
-                                        <button type="button" 
-                                                @click="openVolunteerModal({{ json_encode($opening) }}, '{{ addslashes($datesDisplay) }}')"
-                                                class="btn-primary min-h-[44px] px-4 py-2 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                                            Volunteer
-                                        </button>
-                                    @endif
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
+                    @if(!empty($next['class_breakdown']))
+                        <div class="flex flex-wrap gap-1.5">
+                            @foreach($next['class_breakdown'] as $cType => $cnt)
+                                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#F8EAEA] text-[#780000]">{{ $cnt }} {{ $cType }}</span>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
+                <!-- Weather safety (shared design: components/dive-safety/status) -->
+                <x-dive-safety.status :classification="$next['weather_class']" :engines="$next['model_comparison'] ?? null" />
+
+                <div class="flex flex-col sm:flex-row gap-2.5">
+                    <a href="{{ route('coach.schedule.index') }}" class="btn-primary flex-1 min-h-[44px] rounded-xl text-sm font-bold inline-flex items-center justify-center shadow-2xs">View full schedule</a>
+                    @if($next['can_request_release'])
+                        <button type="button" @click="openReleaseModal = true" class="btn-secondary flex-1 min-h-[44px] rounded-xl text-sm font-bold text-[#B91C1C]">Ask to be released</button>
+                    @endif
+                </div>
+            @else
+                <div class="rounded-xl bg-[#F8F9FA] p-6 text-center space-y-3">
+                    <p class="font-bold text-[#1D1D1F]">No dives assigned yet</p>
+                    <p class="text-sm text-[#6E6E73] max-w-md mx-auto">You don't have a batch coming up. Keep your available dates updated so the camp can match you with students.</p>
+                    <a href="{{ route('coach.availability.index') }}" class="btn-primary min-h-[44px] px-4 rounded-xl text-sm font-bold inline-flex items-center shadow-2xs">Update my available dates</a>
                 </div>
             @endif
         </div>
-    @endif
 
-    <!-- FULL WIDTH SECTION: Upcoming Availability Snapshot (One Horizontal Line · Whole Card Clickable) -->
-    <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 flex flex-col justify-between space-y-4">
-        <div class="space-y-4">
-            <!-- Header with Title, Subtitle, and Full Month View Button (No separator line) -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+        <!-- My upcoming dives -->
+        <div class="lg:col-span-5 bg-white rounded-2xl border border-[#E5E5EA] overflow-hidden">
+            <div class="p-5 pb-3">
+                <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>My upcoming dives</h2>
+                <p class="text-sm text-[#8E8E93]">Your next {{ max(1, $upcomingAssignments->count()) }} assigned {{ Str::plural('batch', $upcomingAssignments->count()) }}</p>
+            </div>
+            <div class="px-5 pb-4">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="text-[#8E8E93] text-xs border-b border-[#E5E5EA]">
+                            <th class="py-2.5 pr-3 font-semibold">Dates</th>
+                            <th class="py-2.5 pr-3 font-semibold">Students</th>
+                            <th class="py-2.5 font-semibold">Sea safety</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-[#F2F2F7]">
+                        @forelse($upcomingAssignments as $group)
+                            @php
+                                $ub = $group->first()->batch;
+                                $uClass = $ub?->latestDay1Assessment?->overall_classification ?? 'Not checked yet';
+                            @endphp
+                            <tr>
+                                <td class="py-3 pr-3">
+                                    <span class="block font-semibold text-[#1D1D1F] whitespace-nowrap">{{ $ub?->start_date->format('M d') }} – {{ $ub?->end_date?->format('M d') }}</span>
+                                    <span class="block text-xs text-[#8E8E93]">{{ $ub?->batch_number }} &middot; {{ $ub?->start_date->diffForHumans() }}</span>
+                                </td>
+                                <td class="py-3 pr-3 font-semibold text-[#1D1D1F]">{{ $group->pluck('participant_id')->unique()->count() }}</td>
+                                <td class="py-3">
+                                    <span class="inline-flex px-2 py-0.5 rounded-md text-xs font-bold whitespace-nowrap {{ $riskTone($uClass) }}">{{ $uClass }}</span>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="3" class="py-8 text-center text-[#8E8E93]">No assigned dives yet.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Your students -->
+    @if($next)
+        <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div>
-                    <h3 class="text-base font-black text-[#1D1D1F]">Upcoming Availability Snapshot</h3>
-                    <p class="text-sm text-[#6E6E73]">Click any date card to toggle your availability</p>
+                    <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Your students for {{ $next['batch']->batch_number }}</h2>
+                    <p class="text-sm text-[#8E8E93]">Check swimming ability and health notes before the boat leaves</p>
                 </div>
-                <a href="{{ route('coach.availability.index') }}" class="px-3 py-1.5 rounded-xl bg-white hover:bg-[#F2F2F7] text-[#1D1D1F] border border-[#E5E5EA] text-sm font-bold transition-all shadow-2xs inline-flex items-center gap-1.5 self-start sm:self-auto">
-                    <span>Full Month View</span>
-                </a>
+                <span class="text-sm font-extrabold text-[#780000] bg-[#F8EAEA] px-3 py-1 rounded-xl self-start">{{ $next['students_count'] }} {{ Str::plural('student', $next['students_count']) }}</span>
             </div>
 
-            <!-- Single Horizontal Line of 7 Dates (Responsive Scrollable on Mobile, Grid on Tablet/Desktop) -->
-            <div class="overflow-x-auto pb-2 scrollbar-none -mx-2 px-2 sm:mx-0 sm:px-0">
-                <div class="grid grid-cols-7 gap-2 sm:gap-3 min-w-[580px] sm:min-w-0">
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                @foreach($next['students'] as $student)
+                    @php
+                        $rawCondition = trim($student->health_condition ?? '');
+                        $cleanHealth = strtolower(rtrim($rawCondition, '.'));
+                        $isNoneOrGeneral = empty($cleanHealth)
+                            || in_array($cleanHealth, ['none', 'none declared', 'no', 'n/a', 'na', 'nil', 'normal', 'fit for diving', 'fit for diving, no declared medical issues', 'cleared medical waiver', 'first time freediving'])
+                            || str_starts_with($cleanHealth, 'fit for diving')
+                            || str_starts_with($cleanHealth, 'none')
+                            || str_starts_with($cleanHealth, 'cleared medical waiver')
+                            || str_starts_with($cleanHealth, 'first time freediving')
+                            || str_starts_with($cleanHealth, 'certified aida')
+                            || str_starts_with($cleanHealth, 'working on frenzel');
+                        $hasMedical = !$isNoneOrGeneral && !empty($rawCondition);
+
+                        $swim = strtolower($student->swimmer_status ?? 'swimmer');
+                        [$swimLabel, $swimTone] = match (true) {
+                            in_array($swim, ['confident', 'confident_swimmer']) => ['Confident swimmer', 'bg-[#00C3D0]/10 text-[#00636A]'],
+                            $swim === 'non_swimmer' => ['Non-swimmer', 'bg-[#FEF2F2] text-[#B91C1C]'],
+                            default => ['Swimmer', 'bg-[#F2F2F7] text-[#3A3A3C]'],
+                        };
+                        $classType = $student->booking?->formatted_class_type ?? 'Discovery';
+                        $shortClassType = ucfirst($student->booking?->class_type ?? 'Discovery');
+                    @endphp
+                    <div class="rounded-xl border border-[#E5E5EA] {{ $hasMedical ? 'border-l-4 border-l-[#B45309]' : '' }} p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <span class="block font-extrabold text-[#1D1D1F] truncate">{{ $student->name }}</span>
+                                <span class="block text-xs text-[#8E8E93]">{{ $student->age }} yrs &middot; {{ $classType }}</span>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-[#F8EAEA] text-[#780000] shrink-0">{{ $shortClassType }}</span>
+                        </div>
+                        <dl class="divide-y divide-[#F2F2F7] text-sm">
+                            <div class="flex items-center justify-between gap-2 py-1.5">
+                                <dt class="text-[#6E6E73]">Swimming</dt>
+                                <dd><span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $swimTone }}">{{ $swimLabel }}</span></dd>
+                            </div>
+                            <div class="flex items-center justify-between gap-2 py-1.5">
+                                <dt class="text-[#6E6E73] shrink-0">Health</dt>
+                                <dd class="min-w-0 text-right">
+                                    @if($hasMedical)
+                                        <span class="block px-2 py-0.5 rounded-md text-xs font-bold bg-[#FFFBEB] text-[#B45309] truncate" title="{{ $student->health_condition }}">{{ $student->health_condition }}</span>
+                                    @else
+                                        <span class="text-xs text-[#8E8E93] font-semibold">None declared</span>
+                                    @endif
+                                </dd>
+                            </div>
+                            <div class="flex items-center justify-between gap-2 py-1.5">
+                                <dt class="text-[#6E6E73]">Booked by</dt>
+                                <dd class="font-semibold text-[#1D1D1F] truncate">{{ $student->booking?->contact_name ?? $student->name }}</dd>
+                            </div>
+                            <div class="flex items-center justify-between gap-2 py-1.5">
+                                <dt class="text-[#6E6E73]">Contact</dt>
+                                <dd class="truncate">
+                                    <a href="tel:{{ $student->booking?->contact_phone ?: '09185559876' }}" class="font-semibold text-[#780000] hover:underline">
+                                        {{ $student->booking?->contact_phone ?: ($student->booking?->contact_email ?: '0918 555 9876') }}
+                                    </a>
+                                </dd>
+                            </div>
+                        </dl>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
+    <!-- 4. Next 7 days + open camp slots -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+        <!-- Next 7 days -->
+        <div class="lg:col-span-7 bg-white rounded-2xl border border-[#E5E5EA] p-5 space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Your next 7 days</h2>
+                    <p class="text-sm text-[#8E8E93]">Tap a day to mark yourself free or not free</p>
+                </div>
+                <a href="{{ route('coach.availability.index') }}" class="text-sm font-bold text-[#780000] hover:underline shrink-0">Full month &rarr;</a>
+            </div>
+
+            <div class="overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+                <div class="grid grid-cols-7 gap-2 min-w-[520px]">
                     @foreach($quickDays as $day)
                         @if($day['status'] === 'assigned')
                             @php
-                                $assignedDayNum = $day['assigned_day_number'] ?? 1;
-                                $isDay1 = ($assignedDayNum === 1);
-                                $bgClass = $isDay1 ? 'bg-[#780000] text-white' : 'bg-[#00C3D0] text-[#0A3538]';
-                                $subtextColor = $isDay1 ? 'text-white/80' : 'text-[#0A3538]/80';
-                                $labelColor = $isDay1 ? 'text-white/95' : 'text-[#0A3538]';
-                                $assignedLabel = $isDay1 ? 'Day 1 Assigned' : 'Day 2 Assigned';
+                                $isDay1 = ($day['assigned_day_number'] ?? 1) === 1;
                             @endphp
-                            <!-- Assigned: #780000 for Day 1 or #00C3D0 with dark slate text for Day 2 (6.3:1 contrast) -->
-                            <div class="w-full rounded-2xl p-3 sm:p-4 text-center space-y-1.5 {{ $bgClass }} select-none flex flex-col justify-between" title="{{ $assignedLabel }} (Locked)">
-                                <div>
-                                    <span class="text-sm sm:text-sm font-black uppercase tracking-wider block {{ $subtextColor }} whitespace-nowrap">
-                                        {{ $day['date']->format('D') }}
-                                    </span>
-                                    <span class="text-sm sm:text-lg font-black block mt-0.5 whitespace-nowrap">
-                                        {{ $day['date']->format('M j') }}
-                                    </span>
-                                </div>
-                                <span class="text-sm sm:text-sm font-extrabold uppercase tracking-wider block {{ $labelColor }} pt-0.5 whitespace-nowrap">
-                                    {{ $assignedLabel }}
-                                </span>
+                            <div class="rounded-xl p-2.5 text-center select-none {{ $isDay1 ? 'bg-[#780000] text-white' : 'bg-[#00C3D0] text-[#0A3538]' }}" title="Diving (Day {{ $isDay1 ? 1 : 2 }}) - locked">
+                                <span class="block text-[11px] font-bold uppercase {{ $isDay1 ? 'text-white/80' : 'text-[#0A3538]/80' }}">{{ $day['date']->format('D') }}</span>
+                                <span class="block text-base font-black">{{ $day['date']->format('M j') }}</span>
+                                <span class="block text-[11px] font-bold">Dive day {{ $isDay1 ? 1 : 2 }}</span>
                             </div>
-                        @elseif($day['status'] === 'available')
-                            <!-- Available: Green Background with White Text (Whole Card is Button) -->
-                            <form action="{{ route('coach.availability.toggle') }}" method="POST" @submit="isTogglingDate = true; togglingDateStr = '{{ $day['date_str'] }}'" class="w-full relative">
-                                @csrf
-                                <input type="hidden" name="date" value="{{ $day['date_str'] }}">
-                                <button type="submit" 
-                                        :disabled="isTogglingDate"
-                                        class="w-full rounded-2xl p-3 sm:p-4 text-center space-y-1.5 bg-emerald-600 hover:bg-emerald-700 text-white transition-all cursor-pointer flex flex-col justify-between group relative disabled:opacity-60 disabled:cursor-not-allowed" 
-                                        title="Click to remove availability">
-                                    <div>
-                                        <span class="text-sm sm:text-sm font-black uppercase tracking-wider block text-emerald-100 group-hover:text-white whitespace-nowrap">
-                                            {{ $day['date']->format('D') }}
-                                        </span>
-                                        <span class="text-sm sm:text-lg font-black block text-white mt-0.5 whitespace-nowrap">
-                                            {{ $day['date']->format('M j') }}
-                                        </span>
-                                    </div>
-                                    <span class="text-sm sm:text-sm font-extrabold uppercase tracking-wider block text-emerald-100 group-hover:text-white pt-0.5 whitespace-nowrap">
-                                        Available
-                                    </span>
-                                    <!-- Inline Loading Spinner Overlay -->
-                                    <div x-show="isTogglingDate && togglingDateStr === '{{ $day['date_str'] }}'" 
-                                         x-cloak 
-                                         class="absolute inset-0 bg-emerald-800/80 rounded-2xl flex items-center justify-center backdrop-blur-2xs z-10">
-                                        <svg class="animate-spin w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
-                                            <path d="M4 12a8 8 0 018-8" stroke="currentColor"></path>
-                                        </svg>
-                                    </div>
-                                </button>
-                            </form>
                         @else
-                            <!-- Not Set: No Background Color (Whole Card is Button) -->
-                            <form action="{{ route('coach.availability.toggle') }}" method="POST" @submit="isTogglingDate = true; togglingDateStr = '{{ $day['date_str'] }}'" class="w-full relative">
+                            @php $isFree = $day['status'] === 'available'; @endphp
+                            <form action="{{ route('coach.availability.toggle') }}" method="POST" @submit="isTogglingDate = true; togglingDateStr = '{{ $day['date_str'] }}'" class="relative">
                                 @csrf
                                 <input type="hidden" name="date" value="{{ $day['date_str'] }}">
-                                <button type="submit" 
-                                        :disabled="isTogglingDate"
-                                        class="w-full rounded-2xl p-3 sm:p-4 text-center space-y-1.5 bg-white hover:bg-[#F2F2F7] text-[#1D1D1F] border border-[#E5E5EA] hover:border-[#780000] transition-all cursor-pointer flex flex-col justify-between group relative disabled:opacity-60 disabled:cursor-not-allowed" 
-                                        title="Click to mark as available">
-                                    <div>
-                                        <span class="text-sm sm:text-sm font-black uppercase tracking-wider block text-[#8E8E93] group-hover:text-[#780000] whitespace-nowrap">
-                                            {{ $day['date']->format('D') }}
-                                        </span>
-                                        <span class="text-sm sm:text-lg font-black block text-[#1D1D1F] mt-0.5 whitespace-nowrap">
-                                            {{ $day['date']->format('M j') }}
-                                        </span>
-                                    </div>
-                                    <span class="text-sm sm:text-sm font-bold uppercase tracking-wider block text-[#8E8E93] group-hover:text-[#780000] pt-0.5 whitespace-nowrap">
-                                        Not Set
-                                    </span>
-                                    <!-- Inline Loading Spinner Overlay -->
-                                    <div x-show="isTogglingDate && togglingDateStr === '{{ $day['date_str'] }}'" 
-                                         x-cloak 
-                                         class="absolute inset-0 bg-white/85 rounded-2xl flex items-center justify-center backdrop-blur-2xs z-10">
-                                        <svg class="animate-spin w-5 h-5 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-opacity="0.25"></circle>
-                                            <path d="M4 12a8 8 0 018-8" stroke="currentColor"></path>
-                                        </svg>
-                                    </div>
+                                <button type="submit" :disabled="isTogglingDate"
+                                        class="w-full rounded-xl p-2.5 text-center transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed {{ $isFree ? 'bg-[#00C3D0]/15 text-[#00636A] hover:bg-[#00C3D0]/25' : 'bg-[#F2F2F7] text-[#1D1D1F] hover:bg-[#F8EAEA]' }} {{ $day['is_today'] ? 'ring-2 ring-[#780000]/40' : '' }}"
+                                        title="{{ $isFree ? 'Tap to mark as not free' : 'Tap to mark as free' }}">
+                                    <span class="block text-[11px] font-bold uppercase {{ $isFree ? 'text-[#00838C]' : 'text-[#8E8E93]' }}">{{ $day['is_today'] ? 'Today' : $day['date']->format('D') }}</span>
+                                    <span class="block text-base font-black">{{ $day['date']->format('M j') }}</span>
+                                    <span class="block text-[11px] font-bold {{ $isFree ? '' : 'text-[#8E8E93]' }}">{{ $isFree ? 'Free' : 'Not set' }}</span>
                                 </button>
+                                <div x-show="isTogglingDate && togglingDateStr === '{{ $day['date_str'] }}'" x-cloak class="absolute inset-0 bg-white/80 rounded-xl flex items-center justify-center">
+                                    <svg class="animate-spin w-5 h-5 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle><path d="M4 12a8 8 0 018-8"></path></svg>
+                                </div>
                             </form>
                         @endif
                     @endforeach
                 </div>
             </div>
+
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6E6E73]">
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#780000]"></span>Dive day 1</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#00C3D0]"></span>Dive day 2</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#00C3D0]/30"></span>Free</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-[#E5E5EA]"></span>Not set</span>
+            </div>
+        </div>
+
+        <!-- Open camp slots -->
+        <div class="lg:col-span-5 bg-white rounded-2xl border border-[#E5E5EA] p-5 space-y-4">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Batches that need a coach</h2>
+                    <p class="text-sm text-[#8E8E93]">{{ $activeOpeningsCount > 0 ? $activeOpeningsCount . ' open ' . Str::plural('slot', $activeOpeningsCount) . ' you can volunteer for' : 'No open slots right now' }}</p>
+                </div>
+                <a href="{{ route('coach.requests.index') }}" class="text-sm font-bold text-[#780000] hover:underline shrink-0">See all &rarr;</a>
+            </div>
+
+            @if($openCoachOpenings->isEmpty())
+                <div class="rounded-xl bg-[#00C3D0]/10 p-5">
+                    <p class="font-bold text-[#00636A]">You're all caught up</p>
+                    <p class="text-sm text-[#00838C]">We'll show batches here when they need extra coaches.</p>
+                </div>
+            @else
+                <ul class="space-y-2">
+                    @foreach($openCoachOpenings as $opening)
+                        @php
+                            $myRequest = $opening->requests->first();
+                            $reqStatus = $myRequest?->status;
+                            $b = $opening->batch;
+                            $datesDisplay = ($b && $b->start_date && $b->end_date && $b->start_date->ne($b->end_date))
+                                ? $b->formatted_date_range . ' (' . $b->start_date->format('D') . ' - ' . $b->end_date->format('D') . ')'
+                                : $opening->dive_date->format('M d, Y · l');
+                        @endphp
+                        <li class="flex items-center gap-3 rounded-xl border border-[#E5E5EA] border-l-4 border-l-[#780000] p-3">
+                            <span class="flex-1 min-w-0">
+                                <span class="block text-sm font-semibold text-[#1D1D1F]">{{ $b?->batch_number ?? 'Batch' }} &middot; {{ $opening->needed_students_count }} {{ Str::plural('student', $opening->needed_students_count) }} need a coach</span>
+                                <span class="block text-xs text-[#8E8E93] truncate">{{ $datesDisplay }}</span>
+                            </span>
+                            @if($myRequest)
+                                @if($reqStatus === 'approved')
+                                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#00C3D0]/10 text-[#00636A] shrink-0">Accepted</span>
+                                @elseif($reqStatus === 'not_selected')
+                                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#F2F2F7] text-[#6E6E73] shrink-0">Filled</span>
+                                @else
+                                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-[#FFFBEB] text-[#B45309] shrink-0">Waiting for approval</span>
+                                @endif
+                            @else
+                                <button type="button"
+                                        @click="openVolunteerModal({{ json_encode($opening) }}, '{{ addslashes($datesDisplay) }}')"
+                                        class="btn-primary min-h-[40px] px-3.5 text-xs font-bold rounded-xl shrink-0">Volunteer</button>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            @endif
         </div>
     </div>
 

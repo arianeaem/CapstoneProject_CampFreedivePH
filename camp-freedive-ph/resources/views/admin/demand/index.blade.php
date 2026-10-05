@@ -30,8 +30,52 @@
              if (metric === 'bookings') return Math.max(max, 5);
              return Math.max(max, 10);
          },
-         barHeight(value, metric) {
-             return Math.max(Math.round(((value || 0) / this.getMax(metric)) * 100), 6);
+         // Point positions (0-100) for a series; 'scale' picks which metric's maximum to use
+         chartPoints(series, scale) {
+             const list = this.batches;
+             const n = list.length;
+             const max = this.getMax(scale) * 1.15;
+             return list.map((b, i) => ({
+                 x: n === 1 ? 50 : 6 + i * (88 / (n - 1)),
+                 y: 96 - ((b[series] || 0) / max) * 88,
+             }));
+         },
+         // Smooth curve through the points that never overshoots them (monotone cubic, Fritsch-Carlson),
+         // so equal batches stay flat and no false peaks or dips are drawn
+         linePath(pts) {
+             const n = pts.length;
+             if (!n) return '';
+             if (n === 1) return 'M 0 ' + pts[0].y + ' L 100 ' + pts[0].y;
+             const dx = [], m = [];
+             for (let i = 0; i < n - 1; i++) {
+                 dx.push(pts[i + 1].x - pts[i].x);
+                 m.push((pts[i + 1].y - pts[i].y) / dx[i]);
+             }
+             const t = [m[0]];
+             for (let i = 1; i < n - 1; i++) t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
+             t.push(m[n - 2]);
+             for (let i = 0; i < n - 1; i++) {
+                 if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+                 const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+                 if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+             }
+             let d = 'M ' + pts[0].x + ' ' + pts[0].y;
+             for (let i = 0; i < n - 1; i++) {
+                 const h = dx[i] / 3;
+                 d += ' C ' + (pts[i].x + h) + ' ' + (pts[i].y + t[i] * h) + ', '
+                     + (pts[i + 1].x - h) + ' ' + (pts[i + 1].y - t[i + 1] * h) + ', '
+                     + pts[i + 1].x + ' ' + pts[i + 1].y;
+             }
+             return d;
+         },
+         areaPath(pts) {
+             if (!pts.length) return '';
+             const first = pts.length === 1 ? 0 : pts[0].x;
+             const last = pts.length === 1 ? 100 : pts[pts.length - 1].x;
+             return this.linePath(pts) + ' L ' + last + ' 100 L ' + first + ' 100 Z';
+         },
+         chartSummary(metric, title) {
+             return title + ': ' + this.batches.map(b => b.label + ' ' + (metric === 'revenue' ? this.formatCurrency(b.revenue) : this.whole(b[metric]))).join(', ');
          },
          whole(v) { return Math.round(v || 0).toLocaleString(); },
          shortPeso(v) {
@@ -55,7 +99,7 @@
     </div>
 
     @if(!$hasForecast && empty($batchForecasts))
-        <div class="rounded-xl border border-[#FF8D28]/40 bg-[#FFF9F2] p-4 text-[#1D1D1F]">
+        <div class="banner banner-warning">
             <strong>No forecast yet.</strong>
             Expected numbers appear here once the forecast has been generated for scheduled batches.
             <span class="block text-xs text-[#6E6E73] mt-1">For the tech team: run <code class="font-mono">python retrain_pipeline.py</code> in the <code class="font-mono">demand-forecast</code> folder.</span>
@@ -63,15 +107,14 @@
     @endif
 
     @if(!$rules['rules_loaded'])
-        <div class="rounded-xl border border-[#D70015]/30 bg-[#FFF5F5] p-4 text-[#1D1D1F]">
+        <div class="banner banner-error">
             <strong>Demand labels are using default settings.</strong>
             <span class="block text-xs text-[#6E6E73] mt-1">For the tech team: <code class="font-mono">demand-forecast/demand_thresholds.json</code> was not found.</span>
         </div>
     @endif
 
     @if(!empty($batchForecasts) && ($validated === false || $basis === 'limited_history'))
-        <div class="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4 flex gap-3">
-            <svg class="w-5 h-5 shrink-0 text-[#B45309] mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/></svg>
+        <div class="banner banner-warning flex gap-3">
             <p class="text-[#92400E]">
                 <strong>Use these numbers as a rough guide.</strong>
                 The forecast learned from {{ $modelInfo['training_batches'] ?? 'past' }} past batches
@@ -188,7 +231,7 @@
         </div>
     </div>
 
-    <!-- Per-batch charts (same chart design as Reports & Analytics) -->
+    <!-- Per-batch charts: smooth filled line charts -->
     @php
         $charts = [
             ['metric' => 'divers', 'title' => 'Divers per batch', 'desc' => 'Divers already booked next to the divers we expect by the trip date', 'unit' => ['diver', 'divers'], 'booked' => true],
@@ -200,7 +243,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         @foreach($charts as $chart)
             @php $m = $chart['metric']; @endphp
-            <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-5 shadow-2xs space-y-4 flex flex-col justify-between">
+            <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-5 shadow-2xs space-y-4" x-data="{ hover: null }">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                         <h3 class="text-sm sm:text-base font-extrabold text-[#1D1D1F]">{{ $chart['title'] }}</h3>
@@ -209,98 +252,122 @@
                     <div class="flex items-center gap-3 text-xs sm:text-sm shrink-0 self-start sm:self-auto">
                         @if($chart['booked'])
                             <div class="flex items-center gap-1.5">
-                                <span class="w-3 h-3 rounded-sm bg-[#780000]"></span>
+                                <span class="w-4 border-t-2 border-dashed border-[#780000]"></span>
                                 <span class="font-bold text-[#1D1D1F]">Booked so far</span>
                             </div>
                         @endif
                         <div class="flex items-center gap-1.5">
-                            <span class="w-3 h-3 rounded-sm bg-[#00C3D0]"></span>
+                            <span class="w-4 h-0.5 rounded-full bg-[#00C3D0]"></span>
                             <span class="font-bold text-[#1D1D1F]">Expected</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="pt-2">
-                    <div class="flex items-end justify-around gap-2 sm:gap-4 h-52 pt-8 pb-2 px-2 sm:px-4 relative overflow-visible">
-                        <div class="absolute inset-0 flex flex-col justify-between pt-8 pb-2 px-2 pointer-events-none z-0">
-                            <div class="w-full border-b border-dashed border-[#D1D1D6]/70"></div>
-                            <div class="w-full border-b border-dashed border-[#D1D1D6]/70"></div>
-                            <div class="w-full border-b border-dashed border-[#D1D1D6]/70"></div>
-                            <div class="w-full border-b border-dashed border-[#D1D1D6]/70"></div>
-                        </div>
+                <template x-if="batches.length === 0">
+                    <div class="h-52 flex items-center justify-center text-sm text-[#8E8E93] rounded-lg bg-[#F8F9FA]">No batches scheduled in this period yet.</div>
+                </template>
 
-                        <template x-for="b in batches" :key="'{{ $m }}_' + b.key">
-                            <div class="flex-1 flex flex-col items-center h-full justify-end relative z-10 px-1 sm:px-2 max-w-[110px] sm:max-w-[130px] lg:max-w-[150px]">
-                                <div class="flex items-end justify-center gap-1.5 sm:gap-2.5 w-full h-full">
+                <template x-if="batches.length > 0">
+                    <div>
+                        <div class="relative h-52" role="img" :aria-label="chartSummary('{{ $m }}', '{{ $chart['title'] }}')" @mouseleave="hover = null">
+                            <!-- Grid lines -->
+                            <div class="absolute inset-0 flex flex-col justify-between pointer-events-none" aria-hidden="true">
+                                <div class="border-b border-dashed border-[#E5E5EA]"></div>
+                                <div class="border-b border-dashed border-[#E5E5EA]"></div>
+                                <div class="border-b border-dashed border-[#E5E5EA]"></div>
+                                <div class="border-b border-[#E5E5EA]"></div>
+                            </div>
+
+                            <!-- Area + lines -->
+                            <svg class="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                                <defs>
+                                    <linearGradient id="area-{{ $m }}" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="#00C3D0" stop-opacity="0.28"/>
+                                        <stop offset="100%" stop-color="#00C3D0" stop-opacity="0.02"/>
+                                    </linearGradient>
+                                </defs>
+                                <path :d="areaPath(chartPoints('{{ $m }}', '{{ $m }}'))" fill="url(#area-{{ $m }})"/>
+                                <path :d="linePath(chartPoints('{{ $m }}', '{{ $m }}'))" fill="none" stroke="#00C3D0" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+                                @if($chart['booked'])
+                                    <path :d="linePath(chartPoints('booked', '{{ $m }}'))" fill="none" stroke="#780000" stroke-width="2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+                                @endif
+                            </svg>
+
+                            <!-- Hovered column guide -->
+                            <template x-if="hover !== null">
+                                <div class="absolute top-0 bottom-0 border-l border-dashed border-[#00C3D0]/60 pointer-events-none" :style="'left: ' + chartPoints('{{ $m }}', '{{ $m }}')[hover].x + '%'"></div>
+                            </template>
+
+                            <!-- Points -->
+                            <template x-for="(pt, i) in chartPoints('{{ $m }}', '{{ $m }}')" :key="'pt_{{ $m }}_' + i">
+                                <span class="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-[#00C3D0] transition-transform pointer-events-none"
+                                      :class="hover === i ? 'bg-[#00C3D0] scale-125' : 'bg-white'"
+                                      :style="'left: ' + pt.x + '%; top: ' + pt.y + '%'"></span>
+                            </template>
+                            @if($chart['booked'])
+                                <template x-for="(pt, i) in chartPoints('booked', '{{ $m }}')" :key="'bk_{{ $m }}_' + i">
+                                    <span class="absolute w-2.5 h-2.5 -ml-[5px] -mt-[5px] rounded-full bg-[#780000] pointer-events-none"
+                                          x-show="hover === i"
+                                          :style="'left: ' + pt.x + '%; top: ' + pt.y + '%'"></span>
+                                </template>
+                            @endif
+
+                            <!-- Hover zones (one per batch) -->
+                            <template x-for="(b, i) in batches" :key="'zone_{{ $m }}_' + b.key">
+                                <div class="absolute top-0 bottom-0 cursor-pointer"
+                                     :style="'left: ' + (i * 100 / batches.length) + '%; width: ' + (100 / batches.length) + '%'"
+                                     @mouseenter="hover = i" @focus="hover = i" @blur="hover = null" tabindex="0"
+                                     :aria-label="b.date"></div>
+                            </template>
+
+                            <!-- Tooltip -->
+                            <template x-if="hover !== null">
+                                <div class="absolute z-30 pointer-events-none -translate-x-1/2 min-w-[180px] w-max max-w-[250px] p-2.5 sm:p-3 rounded-xl bg-[#1D1D1F] text-white shadow-xl space-y-1.5 text-left"
+                                     :class="chartPoints('{{ $m }}', '{{ $m }}')[hover].y < 50 ? '' : '-translate-y-full'"
+                                     :style="'left: ' + Math.min(85, Math.max(15, chartPoints('{{ $m }}', '{{ $m }}')[hover].x)) + '%; top: calc(' + chartPoints('{{ $m }}', '{{ $m }}')[hover].y + '% ' + (chartPoints('{{ $m }}', '{{ $m }}')[hover].y < 50 ? '+ 14px' : '- 14px') + ')'">
+                                    <div class="flex items-center justify-between gap-2 pb-1 border-b border-white/10">
+                                        <span class="font-bold text-xs text-sky-200" x-text="batches[hover].date"></span>
+                                        <span class="text-[10px] uppercase px-1.5 py-0.5 rounded font-black tracking-wider bg-[#00C3D0] text-[#1D1D1F]">Expected</span>
+                                    </div>
+                                    @if($m === 'revenue')
+                                        <div class="font-black text-xs sm:text-sm" x-text="formatCurrency(batches[hover].revenue)"></div>
+                                    @else
+                                        <div class="font-black text-xs sm:text-sm" x-text="whole(batches[hover].{{ $m }}) + ' {{ $chart['unit'][1] }}'"></div>
+                                    @endif
                                     @if($chart['booked'])
-                                        <!-- Booked so far -->
-                                        <div class="flex-1 flex flex-col items-center h-full justify-end group relative w-full max-w-[38px] sm:max-w-[48px] lg:max-w-[56px]">
-                                            <div class="absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 min-w-[180px] w-max max-w-[250px] p-2.5 sm:p-3 rounded-xl bg-[#1D1D1F] text-white opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-30 pointer-events-none shadow-xl space-y-1.5 text-left">
-                                                <div class="flex items-center justify-between gap-1.5 pb-1 border-b border-white/10 flex-wrap">
-                                                    <span class="font-bold text-xs text-[#F1D5D5]" x-text="b.date"></span>
-                                                    <span class="text-[10px] uppercase px-1.5 py-0.5 rounded font-black tracking-wider bg-[#780000] text-white">Booked</span>
-                                                </div>
-                                                <div class="text-white font-black text-xs sm:text-sm" x-text="plural(b.booked, 'diver', 'divers')"></div>
-                                                <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
-                                                    <span>Slots</span>
-                                                    <span class="font-bold text-white" x-text="b.booked + ' of ' + b.capacity"></span>
-                                                </div>
-                                            </div>
-                                            <span class="text-xs sm:text-sm font-black mb-1 truncate max-w-full text-[#780000]" x-text="b.booked"></span>
-                                            <div class="w-full rounded-t-md transition-all duration-200 group-hover:opacity-90 cursor-pointer bg-[#780000]"
-                                                 :style="'height: ' + barHeight(b.booked, 'divers') + '%;'"></div>
+                                        <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
+                                            <span>Booked so far</span>
+                                            <span class="font-bold text-white" x-text="batches[hover].booked + ' of ' + batches[hover].capacity"></span>
+                                        </div>
+                                        <div class="text-gray-300 text-xs flex items-center justify-between gap-2" x-show="batches[hover].low !== null && batches[hover].high !== null">
+                                            <span>Could be</span>
+                                            <span class="font-bold text-white" x-text="whole(batches[hover].low) + ' to ' + whole(batches[hover].high) + ' divers'"></span>
                                         </div>
                                     @endif
-
-                                    <!-- Expected -->
-                                    <div class="flex-1 flex flex-col items-center h-full justify-end group relative w-full {{ $chart['booked'] ? 'max-w-[38px] sm:max-w-[48px] lg:max-w-[56px]' : 'max-w-[56px] sm:max-w-[70px] lg:max-w-[80px]' }}">
-                                        <div class="absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 min-w-[180px] w-max max-w-[250px] p-2.5 sm:p-3 rounded-xl bg-[#1D1D1F] text-white opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-30 pointer-events-none shadow-xl space-y-1.5 text-left">
-                                            <div class="flex items-center justify-between gap-1.5 pb-1 border-b border-white/10 flex-wrap">
-                                                <span class="font-bold text-xs text-sky-200" x-text="b.date"></span>
-                                                <span class="text-[10px] uppercase px-1.5 py-0.5 rounded font-black tracking-wider bg-[#003049] text-white">Expected</span>
-                                            </div>
-                                            @if($m === 'revenue')
-                                                <div class="text-white font-black text-xs sm:text-sm" x-text="formatCurrency(b.revenue)"></div>
-                                            @else
-                                                <div class="text-white font-black text-xs sm:text-sm" x-text="whole(b.{{ $m }}) + ' {{ $chart['unit'][1] }}'"></div>
-                                            @endif
-                                            @if($m === 'divers')
-                                                <div class="text-gray-300 text-xs flex items-center justify-between gap-2" x-show="b.low !== null && b.high !== null">
-                                                    <span>Could be</span>
-                                                    <span class="font-bold text-white" x-text="whole(b.low) + ' to ' + whole(b.high) + ' divers'"></span>
-                                                </div>
-                                            @endif
-                                            <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
-                                                <span>Demand</span>
-                                                <span class="font-bold text-white" x-text="b.demand + ' demand'"></span>
-                                            </div>
-                                            <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
-                                                <span>Starts in</span>
-                                                <span class="font-bold text-white" x-text="plural(b.days_to_start, 'day', 'days')"></span>
-                                            </div>
-                                        </div>
-                                        <span class="text-xs sm:text-sm font-black mb-1 truncate max-w-full text-[#003049]"
-                                              x-text="{{ $m === 'revenue' ? 'shortPeso(b.revenue)' : 'whole(b.' . $m . ')' }}"></span>
-                                        <div class="w-full rounded-t-md transition-all duration-200 group-hover:opacity-90 cursor-pointer bg-[#00C3D0]"
-                                             :style="'height: ' + barHeight(b.{{ $m }}, '{{ $m }}') + '%;'"></div>
+                                    <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
+                                        <span>Demand</span>
+                                        <span class="font-bold text-white" x-text="batches[hover].demand + ' demand'"></span>
+                                    </div>
+                                    <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
+                                        <span>Starts in</span>
+                                        <span class="font-bold text-white" x-text="plural(batches[hover].days_to_start, 'day', 'days')"></span>
                                     </div>
                                 </div>
-                            </div>
-                        </template>
+                            </template>
+                        </div>
 
-                        <div x-show="batches.length === 0" class="absolute inset-0 flex items-center justify-center text-sm text-[#8E8E93]">
-                            No batches scheduled in this period yet.
+                        <!-- X-axis labels -->
+                        <div class="relative h-6 mt-2">
+                            <template x-for="(b, i) in batches" :key="'label_{{ $m }}_' + b.key">
+                                <span class="absolute -translate-x-1/2 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors"
+                                      :class="hover === i ? 'text-[#780000]' : 'text-[#1D1D1F]'"
+                                      :style="'left: ' + chartPoints('{{ $m }}', '{{ $m }}')[i].x + '%'"
+                                      :title="b.date + ' · ' + b.code"
+                                      x-text="b.label"></span>
+                            </template>
                         </div>
                     </div>
-
-                    <div class="flex items-center justify-around gap-2 sm:gap-4 px-2 sm:px-4 text-center pt-2">
-                        <template x-for="b in batches" :key="'label_{{ $m }}_' + b.key">
-                            <div class="flex-1 max-w-[110px] sm:max-w-[130px] lg:max-w-[150px] min-w-0 truncate" :title="b.date + ' · ' + b.code">
-                                <span class="text-xs sm:text-sm font-bold text-[#1D1D1F] block truncate" x-text="b.label"></span>
-                            </div>
-                        </template>
-                    </div>
-                </div>
+                </template>
             </div>
         @endforeach
     </div>

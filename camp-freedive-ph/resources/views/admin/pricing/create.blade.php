@@ -50,7 +50,7 @@
     </div>
 
     @if ($errors->any())
-    <div class="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm space-y-1">
+    <div class="banner banner-error space-y-1">
         <div class="font-bold">Please correct the following errors:</div>
         <ul class="list-disc list-inside space-y-0.5">
             @foreach ($errors->all() as $error)
@@ -283,7 +283,7 @@
             </div>
 
             <!-- Form Actions -->
-            <div class="flex items-center justify-end gap-3 pt-6 border-t border-[#E5E5EA]">
+            <div class="flex items-center justify-end gap-3">
                 <a href="{{ route('admin.pricing.index') }}" class="btn-secondary min-h-[44px] px-6 py-2.5 text-sm font-bold inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
                     Cancel
                 </a>

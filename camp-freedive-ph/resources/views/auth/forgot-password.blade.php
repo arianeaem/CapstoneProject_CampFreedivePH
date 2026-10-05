@@ -33,9 +33,8 @@
             </div>
 
             @if(session('status'))
-                <div role="status" aria-live="polite" class="mb-6 p-4 rounded-xl bg-[#ECFDF5] text-sm font-semibold text-[#065F46] space-y-2">
+                <div role="status" aria-live="polite" class="banner banner-success mb-6 font-semibold space-y-2">
                     <div class="flex items-start gap-3">
-                        <img src="{{ asset('icons/icons8-checkmark-60.png') }}" alt="" class="w-5 h-5 shrink-0 object-contain mt-0.5" aria-hidden="true">
                         <div class="leading-relaxed">{{ session('status') }}</div>
                     </div>
                     @if(session('dev_reset_link'))
@@ -50,8 +49,7 @@
             @endif
 
             @if(session('error'))
-                <div role="alert" aria-live="polite" class="mb-6 p-4 rounded-xl bg-[#FEF2F2] text-sm font-semibold text-[#991B1B] flex items-start gap-3">
-                    <img src="{{ asset('icons/icons8-error-60.png') }}" alt="" class="w-5 h-5 shrink-0 object-contain mt-0.5" aria-hidden="true">
+                <div role="alert" aria-live="polite" class="banner banner-error mb-6 font-semibold flex items-start gap-3">
                     <div class="leading-relaxed">{{ session('error') }}</div>
                 </div>
             @endif

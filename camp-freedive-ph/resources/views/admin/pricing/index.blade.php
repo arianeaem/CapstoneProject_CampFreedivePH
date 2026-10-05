@@ -304,7 +304,7 @@
                     Are you sure you want to remove rule <strong class="text-[#1D1D1F]" x-text="ruleName"></strong>?
                 </p>
                 <template x-if="triggeredCount > 0">
-                    <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm mt-2">
+                    <div class="banner banner-warning mt-2">
                         <strong>Notice:</strong> This rule has affected <span x-text="triggeredCount"></span> booking(s). It will be soft-deleted to preserve all past customer receipts and audit histories.
                     </div>
                 </template>

@@ -14,6 +14,7 @@ use App\Mail\PasswordResetMail;
 use App\Mail\RescheduleApprovedMail;
 use App\Mail\RescheduleRejectedMail;
 use App\Mail\RescheduleRequestedMail;
+use App\Mail\WeatherRiskNoticeMail;
 use App\Models\Batch;
 use App\Models\Booking;
 use App\Models\CancellationRequest;
@@ -64,6 +65,8 @@ class SendTestEmails extends Command
             'Cancellation rejected' => fn () => new CancellationRejectedMail($booking, $cancellation, 'Test: outside the cancellation window.'),
             'Batch rescheduled' => fn () => new BatchRescheduledMail($booking, $batch, 'Test: moved for operational reasons.'),
             'Weather cancellation' => fn () => new BatchWeatherCancellationMail($booking, $batch, 'Test: Critical Risk marine conditions.'),
+            'Weather risk: Critical (guest options)' => fn () => new WeatherRiskNoticeMail($booking, $batch, 'critical', 12),
+            'Weather risk: High (heads-up)' => fn () => new WeatherRiskNoticeMail($booking, $batch, 'high', 12),
             'Coach schedule notice' => fn () => new CoachScheduleNotificationMail($batch, 'Test schedule update', 'This is a test coach notification.', $booking->booking_number),
             'Admin operational alert' => fn () => new AdminOperationalNotificationMail('TEST: Operational alert', 'This is a test admin notification.', ['Batch' => $batch->batch_code ?? 'N/A'], 'info'),
             'Password reset' => fn () => new PasswordResetMail(url('/reset-password/test-token'), $user),
