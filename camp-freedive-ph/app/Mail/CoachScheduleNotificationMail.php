@@ -16,7 +16,7 @@ class CoachScheduleNotificationMail extends Mailable
     public function __construct(
         public Batch $batch,
         public string $eventTitle,
-        public string $message,
+        public string $messageBody,
         public ?string $bookingNumber = null,
     ) {}
 

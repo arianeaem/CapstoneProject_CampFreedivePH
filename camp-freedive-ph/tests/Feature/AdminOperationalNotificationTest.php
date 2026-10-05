@@ -38,7 +38,7 @@ class AdminOperationalNotificationTest extends TestCase
         Mail::assertSent(AdminOperationalNotificationMail::class, function ($mail) use ($admin) {
             return $mail->hasTo($admin->email)
                 && str_contains($mail->eventTitle, 'URGENT')
-                && str_contains($mail->message, 'force-majeure');
+                && str_contains($mail->messageBody, 'force-majeure');
         });
     }
 

@@ -14,7 +14,7 @@ class AdminOperationalNotificationMail extends Mailable
 
     public function __construct(
         public string $eventTitle,
-        public string $message,
+        public string $messageBody,
         public array $details = [],
         public string $severity = 'info',
     ) {}

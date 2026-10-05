@@ -11,7 +11,7 @@
         <div style="padding:28px 24px;">
             <h1 style="margin:0 0 12px;font-size:22px;">{{ $eventTitle }}</h1>
             <p>Hello Coach,</p>
-            <p>{{ $message }}</p>
+            <p>{{ $messageBody }}</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0;">
                 <tr><td style="padding:8px 0;color:#6E6E73;">Batch</td><td style="padding:8px 0;font-weight:700;">{{ $batch->batch_code }}</td></tr>
                 <tr><td style="padding:8px 0;color:#6E6E73;">Schedule</td><td style="padding:8px 0;font-weight:700;">{{ $batch->start_date?->format('M d, Y') }} - {{ $batch->end_date?->format('M d, Y') }}</td></tr>
