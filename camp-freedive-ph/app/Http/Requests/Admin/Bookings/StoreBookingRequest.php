@@ -91,6 +91,7 @@ class StoreBookingRequest extends FormRequest
         return [
             'contact_phone.regex' => 'Please enter a valid Philippine mobile number (e.g. 09171234567 or +639171234567).',
             'contact_email.email' => 'Please provide a valid email address.',
+            'participants.*.age.required_without' => 'Please select a birthdate for every participant.',
             'participants.*.age.min' => 'Participant age must be at least 8 years old.',
             'participants.*.age.max' => 'Participant age cannot exceed 85 years old.',
             'participants.*.name.regex' => 'Participant names must contain letters only.',

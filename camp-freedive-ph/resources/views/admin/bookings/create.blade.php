@@ -26,8 +26,30 @@
     </div>
 
     <!-- Create booking form -->
-    <form action="{{ route('admin.bookings.store') }}" method="POST">
+    <form action="{{ route('admin.bookings.store') }}" method="POST" @submit="checkBeforeSubmit($event)">
         @csrf
+
+        {{-- Server-side validation errors (without this a rejected form just reloads empty) --}}
+        @if($errors->any())
+            <div class="banner banner-error mb-4" role="alert">
+                <p class="font-bold mb-1">The booking was not saved. Please fix the following:</p>
+                <ul class="list-disc pl-5 space-y-0.5">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        {{-- Date pickers use hidden inputs, which the browser does not check for "required" --}}
+        <div x-show="formErrors.length" x-cloak class="banner banner-error mb-4" role="alert">
+            <p class="font-bold mb-1">Please complete these fields:</p>
+            <ul class="list-disc pl-5 space-y-0.5">
+                <template x-for="msg in formErrors" :key="msg">
+                    <li x-text="msg"></li>
+                </template>
+            </ul>
+        </div>
 
         <div class="bg-white rounded-xl border border-[#E5E5EA] p-6 sm:p-8 shadow-2xs space-y-8">
             
@@ -531,8 +553,26 @@ function adminBookingCreate(config) {
             { first_name: '', middle_name: '', no_middle_name: false, last_name: '', suffix: '', name: '', birthdate: '', gender: '', age: '', swimmer_status: 'non_swimmer', health_condition: '' }
         ],
 
+        formErrors: [],
+
         initForm() {
             this.syncLeadContactFromParticipant();
+        },
+
+        checkBeforeSubmit(event) {
+            this.formErrors = [];
+            if (!this.startDate) {
+                this.formErrors.push('Select a start date.');
+            }
+            this.participants.forEach((p, i) => {
+                if (!p.birthdate) {
+                    this.formErrors.push('Select a birthdate for participant #' + (i + 1) + '.');
+                }
+            });
+            if (this.formErrors.length) {
+                event.preventDefault();
+                this.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         },
 
         assembleParticipantName(p) {

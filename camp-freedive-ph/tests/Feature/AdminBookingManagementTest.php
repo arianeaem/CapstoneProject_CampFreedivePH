@@ -43,6 +43,34 @@ class AdminBookingManagementTest extends TestCase
         $response->assertStatus(403);
     }
 
+    public function test_rejected_manual_booking_shows_the_reason_on_the_form(): void
+    {
+        $admin = User::where('email', 'admin@campfreedive.ph')->first();
+        $this->actingAs($admin);
+
+        // No birthdate: the date picker's hidden input is not checked by the browser
+        $response = $this->from('/admin/bookings/create')->post('/admin/bookings', [
+            'class_type' => 'discovery',
+            'start_date' => Carbon::now()->addDays(14)->format('Y-m-d'),
+            'end_date' => Carbon::now()->addDays(15)->format('Y-m-d'),
+            'pickup_option' => 'own',
+            'first_name' => 'Walkin',
+            'last_name' => 'Guest',
+            'contact_email' => 'walkin@example.com',
+            'contact_phone' => '09170009999',
+            'payment_method' => 'cash',
+            'payment_stage' => 'full',
+            'participants' => [['first_name' => 'Walkin', 'last_name' => 'Guest', 'gender' => 'male', 'birthdate' => '']],
+        ]);
+
+        $response->assertRedirect('/admin/bookings/create');
+        $this->assertDatabaseMissing('bookings', ['contact_email' => 'walkin@example.com']);
+
+        $this->followRedirects($response)
+            ->assertSee('The booking was not saved')
+            ->assertSee('Please select a birthdate for every participant.');
+    }
+
     public function test_manual_booking_entry_creates_confirmed_booking_with_offline_payment(): void
     {
         $admin = User::where('email', 'admin@campfreedive.ph')->first();
