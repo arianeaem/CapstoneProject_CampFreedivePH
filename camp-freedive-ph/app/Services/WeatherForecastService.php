@@ -1695,19 +1695,21 @@ class WeatherForecastService
             $meanDaytimeWindWave = array_sum($daytimeWindWaves) / $dayCount;
             $meanDaytimeWindDir = array_sum($daytimeWindDirs) / $dayCount;
 
-            // Pressure change over 3 hours (daytime only)
-            $maxPressureDrop3h = 0.0;
+            // A fast pressure drop (>= 2.5 hPa in 3h) only counts if strong gusts (>= 38 km/h)
+            // or heavy rain (>= 15 mm/hr) happen in the SAME 3-hour window. The normal midday
+            // pressure dip (~2.5-3 hPa) plus a breezy hour at another time is not a squall.
+            $hasCompoundPressureBreach = false;
             for ($i = 0; $i < count($daytimePressures) - 3; $i++) {
-                $drop = $daytimePressures[$i] - $daytimePressures[$i + 3];
-                if ($drop > $maxPressureDrop3h) {
-                    $maxPressureDrop3h = $drop;
+                if ($daytimePressures[$i] - $daytimePressures[$i + 3] < 2.5) {
+                    continue;
+                }
+                $windowGust = max(array_slice($daytimeGusts, $i, 4));
+                $windowRain = max(array_slice($daytimeRains, $i, 4));
+                if ($windowGust >= 38.0 || $windowRain >= 15.0) {
+                    $hasCompoundPressureBreach = true;
+                    break;
                 }
             }
-
-            // A fast pressure drop (>= 2.5 hPa in 3h) only counts if there are also
-            // strong gusts (>= 38 km/h) or heavy rain (>= 15 mm/hr).
-            // This way normal daily pressure changes on calm days don't trigger an alarm.
-            $hasCompoundPressureBreach = ($maxPressureDrop3h >= 2.5 && ($maxDaytimeGust >= 38.0 || $daytimeMaxRainRate >= 15.0));
 
             // Hard limits (Coast Guard small boat limits)
             $isDaytimePhysicalBreach = (
