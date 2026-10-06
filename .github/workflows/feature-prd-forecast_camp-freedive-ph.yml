@@ -47,6 +47,11 @@ jobs:
           npm ci
           npm run build
 
+      # Only camp-freedive-ph/ is deployed, so bundle the ML demand thresholds inside it
+      - name: Bundle demand thresholds
+        run: |
+          mkdir -p camp-freedive-ph/resources/ml
+          cp demand-forecast/demand_thresholds.json camp-freedive-ph/resources/ml/demand_thresholds.json
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4

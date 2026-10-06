@@ -25,3 +25,6 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Copied in by the deploy workflow from ../demand-forecast/
+/resources/ml/demand_thresholds.json

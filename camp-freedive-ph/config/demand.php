@@ -17,7 +17,14 @@
 | problem is visible in the Demand Forecast module.
 */
 
-$path = env('DEMAND_RULES_PATH', base_path('../demand-forecast/demand_thresholds.json'));
+// Local: the sibling demand-forecast/ folder. Deployed: only camp-freedive-ph/ is uploaded,
+// so the deploy workflow copies the file into resources/ml/.
+$candidates = [
+    base_path('../demand-forecast/demand_thresholds.json'),
+    base_path('resources/ml/demand_thresholds.json'),
+];
+$path = env('DEMAND_RULES_PATH')
+    ?: (array_values(array_filter($candidates, 'is_readable'))[0] ?? $candidates[0]);
 $rules = null;
 
 if (is_string($path) && is_readable($path)) {
