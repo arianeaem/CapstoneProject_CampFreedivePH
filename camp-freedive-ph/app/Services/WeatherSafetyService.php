@@ -217,7 +217,7 @@ class WeatherSafetyService
                 'bg_color' => '#F0FDF4',
                 'text_color' => '#166534',
                 'icon' => 'check-circle',
-                'description' => 'Good water visibility and gentle ripple. Great conditions for all class types, certifications, and fun dives.',
+                'description' => 'Good water visibility and gentle ripple. Great conditions for all class types.',
             ],
             'moderate' => [
                 'title' => 'Moderate Conditions',
