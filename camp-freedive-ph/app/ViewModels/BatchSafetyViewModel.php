@@ -38,8 +38,8 @@ class BatchSafetyViewModel
         $this->isConcluded = ($batch->end_date && $batch->end_date->isPast())
             || in_array($batch->status, ['completed', 'cancelled_by_camp'], true);
 
-        $mlRec = $data['batchMLAssessment']['overall_recommendation'] ?? ($data['overallClassification'] ?? 'Safe');
-        $this->verdict = ($this->isPrimaryActive || $this->isConcluded) ? $mlRec : ($data['overallClassification'] ?? 'Safe');
+        $mlRec = $data['batchMLAssessment']['overall_recommendation'] ?? ($data['overallClassification'] ?? 'Not Available');
+        $this->verdict = ($this->isPrimaryActive || $this->isConcluded) ? $mlRec : ($data['overallClassification'] ?? 'Not Available');
     }
 
     // --- styling
@@ -90,7 +90,7 @@ class BatchSafetyViewModel
 
     public function verdictScore(): int
     {
-        return self::score($this->verdict, 4);
+        return self::score($this->verdict, 0);
     }
 
     public function verdictMeaning(): string
@@ -172,7 +172,7 @@ class BatchSafetyViewModel
         $continuous = $this->data["day{$number}Continuous24h"] ?? null;
 
         $hourly = !empty($ml['hourly_assessments']) ? $ml['hourly_assessments'] : ($continuous['hourly'] ?? []);
-        $fallback = $assessment->overall_classification ?? 'Safe';
+        $fallback = $assessment->overall_classification ?? 'Not Available';
         $rec = ($this->isPrimaryActive || $this->isConcluded) ? ($ml['overall_recommendation'] ?? $fallback) : $fallback;
         $leadH = (int) round($assessment->lead_time_hours ?? 0);
 

@@ -60,7 +60,7 @@ class BatchSafetyReportService
         }
 
         // Overall is the worse of Day 1 and Day 2
-        $overallClassification = 'Safe';
+        $overallClassification = 'Not Available';
         if ($day1Assessment && $day2Assessment) {
             $rank1 = WeatherForecastService::RISK_RANK[$day1Assessment->overall_classification] ?? 1;
             $rank2 = WeatherForecastService::RISK_RANK[$day2Assessment->overall_classification] ?? 1;

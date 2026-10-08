@@ -40,7 +40,7 @@ export const DiveSafety = {
     dot(classification, seasonal = false) { return TONE_STYLES[this.tone(classification, seasonal)].dot; },
 
     score(classification) {
-        return { 'Very Safe': 5, 'Safe': 4, 'Moderate': 3, 'High Risk': 2, 'Critical Risk': 1 }[classification] ?? 4;
+        return { 'Very Safe': 5, 'Safe': 4, 'Moderate': 3, 'High Risk': 2, 'Critical Risk': 1 }[classification] ?? 0;
     },
 
     bar(i, classification) {

@@ -26,7 +26,7 @@
         'neutral' => ['surface' => 'bg-[#F5F5F7] border-[#E5E5EA]', 'text' => 'text-[#3A3A3C]'],
     ];
     $segments = ['bg-[#EF4444]', 'bg-[#F97316]', 'bg-[#F59E0B]', 'bg-[#84CC16]', 'bg-[#10B981]'];
-    $score = ['Very Safe' => 5, 'Safe' => 4, 'Moderate' => 3, 'High Risk' => 2, 'Critical Risk' => 1][$classification] ?? 4;
+    $score = ['Very Safe' => 5, 'Safe' => 4, 'Moderate' => 3, 'High Risk' => 2, 'Critical Risk' => 1][$classification] ?? 0;
     $style = $styles[$tone($classification)];
     $description ??= \App\Services\WeatherForecastService::MEANING_MAP[$classification] ?? 'Standard marine safety protocols in effect.';
 
