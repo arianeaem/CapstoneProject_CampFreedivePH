@@ -22,7 +22,8 @@
          getMax(metric) {
              let max = 0;
              for (const b of this.batches) {
-                 const vals = metric === 'divers' ? [b.divers, b.booked] : [b[metric]];
+                 const actual = { divers: 'booked', bookings: 'booked_bookings', revenue: 'booked_revenue', coaches: 'booked_coaches' }[metric];
+                 const vals = [b[metric], actual ? b[actual] : 0];
                  for (const v of vals) if ((v || 0) > max) max = v;
              }
              if (metric === 'revenue') return Math.max(max, 10000);
@@ -234,10 +235,10 @@
     <!-- Per-batch charts: smooth filled line charts -->
     @php
         $charts = [
-            ['metric' => 'divers', 'title' => 'Participants per batch', 'desc' => 'Participants already booked next to the participants we expect by the trip date', 'unit' => ['participant', 'participants'], 'booked' => true],
-            ['metric' => 'bookings', 'title' => 'Bookings per batch', 'desc' => 'How many bookings we expect for each batch', 'unit' => ['booking', 'bookings'], 'booked' => false],
-            ['metric' => 'revenue', 'title' => 'Revenue per batch', 'desc' => 'How much revenue we expect from each batch', 'unit' => null, 'booked' => false],
-            ['metric' => 'coaches', 'title' => 'Coaches needed per batch', 'desc' => 'How many coaches each batch needs to keep 1 coach for every ' . $diversPerCoach . ' participants', 'unit' => ['coach', 'coaches'], 'booked' => false],
+            ['metric' => 'divers', 'title' => 'Participants per batch', 'desc' => 'Participants already booked next to the participants we expect by the trip date', 'unit' => ['participant', 'participants'], 'actual' => 'booked', 'actualLabel' => 'Booked so far'],
+            ['metric' => 'bookings', 'title' => 'Bookings per batch', 'desc' => 'Bookings already made next to the bookings we expect for each batch', 'unit' => ['booking', 'bookings'], 'actual' => 'booked_bookings', 'actualLabel' => 'Booked so far'],
+            ['metric' => 'revenue', 'title' => 'Revenue per batch', 'desc' => 'Value of bookings already made next to the revenue we expect from each batch', 'unit' => null, 'actual' => 'booked_revenue', 'actualLabel' => 'Booked so far'],
+            ['metric' => 'coaches', 'title' => 'Coaches needed per batch', 'desc' => 'Coaches already assigned next to the coaches each batch needs (1 coach for every ' . $diversPerCoach . ' participants)', 'unit' => ['coach', 'coaches'], 'actual' => 'booked_coaches', 'actualLabel' => 'Assigned so far'],
         ];
     @endphp
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -250,12 +251,10 @@
                         <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">{{ $chart['desc'] }}</p>
                     </div>
                     <div class="flex items-center gap-3 text-xs sm:text-sm shrink-0 self-start sm:self-auto">
-                        @if($chart['booked'])
-                            <div class="flex items-center gap-1.5">
-                                <span class="w-4 border-t-2 border-dashed border-[#780000]"></span>
-                                <span class="font-bold text-[#1D1D1F]">Booked so far</span>
-                            </div>
-                        @endif
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-4 border-t-2 border-dashed border-[#780000]"></span>
+                            <span class="font-bold text-[#1D1D1F]">{{ $chart['actualLabel'] }}</span>
+                        </div>
                         <div class="flex items-center gap-1.5">
                             <span class="w-4 h-0.5 rounded-full bg-[#00C3D0]"></span>
                             <span class="font-bold text-[#1D1D1F]">Expected</span>
@@ -288,8 +287,8 @@
                                 </defs>
                                 <path :d="areaPath(chartPoints('{{ $m }}', '{{ $m }}'))" fill="url(#area-{{ $m }})"/>
                                 <path :d="linePath(chartPoints('{{ $m }}', '{{ $m }}'))" fill="none" stroke="#00C3D0" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
-                                @if($chart['booked'])
-                                    <path :d="linePath(chartPoints('booked', '{{ $m }}'))" fill="none" stroke="#780000" stroke-width="2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
+                                @if($chart['actual'])
+                                    <path :d="linePath(chartPoints('{{ $chart['actual'] }}', '{{ $m }}'))" fill="none" stroke="#780000" stroke-width="2" stroke-dasharray="6 5" vector-effect="non-scaling-stroke" stroke-linecap="round"/>
                                 @endif
                             </svg>
 
@@ -304,8 +303,8 @@
                                       :class="hover === i ? 'bg-[#00C3D0] scale-125' : 'bg-white'"
                                       :style="'left: ' + pt.x + '%; top: ' + pt.y + '%'"></span>
                             </template>
-                            @if($chart['booked'])
-                                <template x-for="(pt, i) in chartPoints('booked', '{{ $m }}')" :key="'bk_{{ $m }}_' + i">
+                            @if($chart['actual'])
+                                <template x-for="(pt, i) in chartPoints('{{ $chart['actual'] }}', '{{ $m }}')" :key="'bk_{{ $m }}_' + i">
                                     <span class="absolute w-2.5 h-2.5 -ml-[5px] -mt-[5px] rounded-full bg-[#780000] pointer-events-none"
                                           x-show="hover === i"
                                           :style="'left: ' + pt.x + '%; top: ' + pt.y + '%'"></span>
@@ -334,11 +333,17 @@
                                     @else
                                         <div class="font-black text-xs sm:text-sm" x-text="whole(batches[hover].{{ $m }}) + ' {{ $chart['unit'][1] }}'"></div>
                                     @endif
-                                    @if($chart['booked'])
-                                        <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
-                                            <span>Booked so far</span>
+                                    <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
+                                        <span>{{ $chart['actualLabel'] }}</span>
+                                        @if($m === 'divers')
                                             <span class="font-bold text-white" x-text="batches[hover].booked + ' of ' + batches[hover].capacity"></span>
-                                        </div>
+                                        @elseif($m === 'revenue')
+                                            <span class="font-bold text-white" x-text="formatCurrency(batches[hover].booked_revenue)"></span>
+                                        @else
+                                            <span class="font-bold text-white" x-text="whole(batches[hover].{{ $chart['actual'] }}) + ' {{ $chart['unit'][1] }}'"></span>
+                                        @endif
+                                    </div>
+                                    @if($m === 'divers')
                                         <div class="text-gray-300 text-xs flex items-center justify-between gap-2" x-show="batches[hover].low !== null && batches[hover].high !== null">
                                             <span>Could be</span>
                                             <span class="font-bold text-white" x-text="whole(batches[hover].low) + ' to ' + whole(batches[hover].high) + ' participants'"></span>

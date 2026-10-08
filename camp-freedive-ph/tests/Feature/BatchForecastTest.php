@@ -217,4 +217,36 @@ class BatchForecastTest extends TestCase
         // One forecast view only. The weekly outlook stays in Reports & Analytics.
         $response->assertDontSee('90-day outlook');
     }
+
+    public function test_demand_charts_show_actual_bookings_revenue_and_coaches_so_far(): void
+    {
+        $date = now()->addDays(10);
+        $batch = Batch::create([
+            'name' => 'B-ACTUAL', 'batch_code' => 'B-ACTUAL', 'start_date' => $date, 'end_date' => $date->copy()->addDay(),
+            'status' => 'open', 'lifecycle_status' => 'open',
+        ]);
+        foreach ([['confirmed', 8500], ['confirmed', 4250], ['cancelled_by_guest', 9999]] as $i => [$status, $amount]) {
+            \App\Models\Booking::create([
+                'booking_number' => 'CFP-ACT-' . $i, 'pin' => '1234', 'batch_id' => $batch->id, 'class_type' => 'discovery',
+                'start_date' => $date, 'end_date' => $date->copy()->addDay(), 'pickup_option' => 'own',
+                'subtotal' => $amount, 'total_amount' => $amount, 'downpayment_amount' => 0, 'balance_amount' => 0,
+                'contact_name' => 'Contact', 'contact_email' => 'c@example.com', 'contact_phone' => '09170000000', 'status' => $status,
+            ]);
+        }
+
+        $row = $this->batchRow('B-ACTUAL', $date->toDateString(), 20);
+        $row['batch_id'] = $batch->id;
+        $this->sync([$row])->assertOk();
+
+        $owner = User::where('role', 'owner')->first() ?? User::factory()->create([
+            'role' => 'owner', 'status' => 'active', 'must_change_password' => false,
+        ]);
+
+        $this->actingAs($owner)->get(route('admin.demand.index'))
+            ->assertOk()
+            ->assertSee('Assigned so far')
+            ->assertSee('booked_bookings\u0022:2', false)
+            ->assertSee('booked_revenue\u0022:12750', false)
+            ->assertSee('booked_coaches\u0022:0', false);
+    }
 }

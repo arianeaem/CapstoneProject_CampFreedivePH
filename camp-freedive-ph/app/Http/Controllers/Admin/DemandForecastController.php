@@ -50,6 +50,22 @@ class DemandForecastController extends Controller
      */
     protected function horizonViews(array $batchForecasts): array
     {
+        // What is actually booked so far, per batch, to compare with the forecast
+        $batchModels = \App\Models\Batch::with('bookings')
+            ->whereIn('id', array_filter(array_column($batchForecasts, 'batch_id')))
+            ->get()->keyBy('id');
+        \App\Models\Batch::preloadAssignedCoaches($batchModels);
+        $inactive = ['pending_downpayment', 'cancelled_by_camp', 'cancelled_by_guest', 'cancelled'];
+        $actuals = $batchModels->map(function ($batch) use ($inactive) {
+            $active = $batch->bookings->reject(fn ($b) => in_array($b->status, $inactive, true));
+
+            return [
+                'bookings' => $active->count(),
+                'revenue' => (float) $active->sum('total_amount'),
+                'coaches' => $batch->assigned_coaches->count(),
+            ];
+        });
+
         $views = [];
         foreach (self::HORIZONS as $days) {
             $batches = array_values(array_filter($batchForecasts, fn ($b) => (int) $b['days_to_start'] <= $days));
@@ -70,6 +86,9 @@ class DemandForecastController extends Controller
                     'bookings' => (float) $b['predicted_bookings'],
                     'revenue' => (float) $b['predicted_revenue_php'],
                     'coaches' => (int) ceil($b['predicted_participants'] / self::DIVERS_PER_COACH),
+                    'booked_bookings' => $actuals[$b['batch_id'] ?? 0]['bookings'] ?? 0,
+                    'booked_revenue' => $actuals[$b['batch_id'] ?? 0]['revenue'] ?? 0,
+                    'booked_coaches' => $actuals[$b['batch_id'] ?? 0]['coaches'] ?? 0,
                     'demand' => $b['demand_level'],
                     'season' => $b['season_period'],
                 ], $batches),
