@@ -196,7 +196,32 @@ class PricingRuleController extends Controller
             });
         }
 
-        $adjustments = $query->latest('id')->paginate(20)->withQueryString();
+        if ($request->filled('class_type')) {
+            $query->whereHas('booking', fn ($q) => $q->where('class_type', $request->input('class_type')));
+        }
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->whereHas('booking', fn ($q) => $q->where(fn ($q) => $q
+                ->where('booking_number', 'like', "%{$search}%")
+                ->orWhere('contact_name', 'like', "%{$search}%")));
+        }
+
+        // Sort: newest booked (default), dive date, or biggest price change
+        $sort = $request->input('sort', 'booked_desc');
+        $bookingDate = fn (string $dir) => $query->orderBy(
+            \App\Models\Booking::select('start_date')->whereColumn('bookings.id', 'booking_price_adjustments.booking_id'),
+            $dir
+        );
+        match ($sort) {
+            'booked_asc' => $query->oldest('id'),
+            'dive_asc' => $bookingDate('asc'),
+            'dive_desc' => $bookingDate('desc'),
+            'impact_desc' => $query->orderByRaw('abs(adjustment_amount) desc'),
+            default => $query->latest('id'),
+        };
+
+        $adjustments = $query->paginate(20)->withQueryString();
 
         $totalCount = $rule->adjustments()->count();
         $totalImpact = $rule->adjustments()->sum('adjustment_amount');

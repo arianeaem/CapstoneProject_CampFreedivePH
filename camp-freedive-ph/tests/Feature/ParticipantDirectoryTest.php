@@ -191,4 +191,27 @@ class ParticipantDirectoryTest extends TestCase
             ->assertSessionHas('book_again', fn ($data) => $data['participants'][0]['birthdate'] === '1992-02-02'
                 && $data['participants'][0]['last_name'] === 'Santos');
     }
+
+    public function test_directory_toolbar_filters_and_triggered_history_toolbar(): void
+    {
+        $this->book([['Ana Cruz', '1995-05-05']]);
+        $this->book([['Ben Reyes', '2012-01-01']], '+21 days', ['class_type' => 'fundive']);
+        $admin = User::where('role', 'admin')->first();
+
+        $this->actingAs($admin)->get(route('admin.participants.index', ['class_type' => 'fundive']))
+            ->assertOk()->assertSee('Filter & Sort', false)->assertSee('Ben Reyes')->assertDontSee('Ana Cruz');
+        $this->actingAs($admin)->get(route('admin.participants.index', ['age_group' => 'minor', 'sort' => 'name']))
+            ->assertOk()->assertSee('Ben Reyes')->assertDontSee('Ana Cruz');
+
+        $rule = \App\Models\PricingRule::first() ?? \App\Models\PricingRule::create([
+            'name' => 'Toolbar Test', 'rule_type' => 'seasonality', 'condition_value' => 'peak', 'applies_to' => 'all',
+            'adjustment_type' => 'increase', 'adjustment_method' => 'percentage', 'adjustment_value' => 10, 'priority' => 1, 'status' => 'active',
+        ]);
+        foreach (['booked_desc', 'dive_asc', 'impact_desc'] as $sort) {
+            $this->actingAs($admin)->get(route('admin.pricing.triggered', [$rule, 'sort' => $sort, 'class_type' => 'discovery', 'search' => 'CFP']))
+                ->assertOk()->assertSee('Filter & Sort', false);
+        }
+        $owner = User::where('role', 'owner')->first();
+        $this->actingAs($owner)->get(route('owner.pricing.triggered', $rule))->assertOk()->assertDontSee('/admin/pricing/', false);
+    }
 }
