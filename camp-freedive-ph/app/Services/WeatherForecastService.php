@@ -1000,7 +1000,13 @@ class WeatherForecastService
                 return null;
             }
 
-            $apiClass = $apiDay['overall_classification'] ?? 'Safe';
+            // Rate the day by its dive times too (AM 10-12, PM 4-5), like a batch assessment:
+            // a risky hour while people are in the water must not be averaged away by the whole day.
+            $apiClass = $this->worstClass(array_filter([
+                $apiDay['overall_classification'] ?? null,
+                $apiDay['am_classification'] ?? null,
+                $apiDay['pm_classification'] ?? null,
+            ]), 'Not Available');
 
             // Worst daytime hour (06:00 - 18:00) based on the rule score
             $worstApiHour = null;

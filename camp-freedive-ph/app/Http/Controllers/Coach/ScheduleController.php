@@ -57,7 +57,11 @@ class ScheduleController extends Controller
             }
 
             // Weather
-            $d1 = $batch->latestDay1Assessment;
+            // The worse of Day 1 and Day 2 (dive windows), same as the batch's overall rating
+            $rank = fn ($a) => \App\Services\WeatherForecastService::RISK_RANK[$a?->overall_classification] ?? -1;
+            $d1 = $rank($batch->latestDay2Assessment) > $rank($batch->latestDay1Assessment)
+                ? $batch->latestDay2Assessment
+                : $batch->latestDay1Assessment;
             $weatherClass = $d1 ? $d1->overall_classification : 'Safe';
             $weatherBadge = $d1 ? $d1->classification_badge : [
                 'label' => 'Safe',

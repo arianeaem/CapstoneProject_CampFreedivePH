@@ -81,9 +81,6 @@
                 $batch = $item['batch'];
                 $students = $item['students'];
                 $releaseReq = $item['release_request'];
-                $healthCount = $students->filter($hasHealthNote)->count();
-                $nonSwimmers = $students->filter(fn ($s) => strtolower($s->swimmer_status ?? '') === 'non_swimmer')->count();
-                $minors = $students->filter(fn ($s) => $s->age !== null && $s->age < 18)->count();
                 $when = $whenLabel($batch->start_date);
             @endphp
 
@@ -92,37 +89,14 @@
                 <div class="p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4 cursor-pointer hover:bg-[#FAFAFA] transition-colors"
                      @click="toggleBatch({{ $batch->id }})">
 
-                    <!-- Date block -->
-                    <div class="flex items-center gap-4 min-w-0 flex-1">
-                        <div class="w-16 shrink-0 rounded-xl border border-[#E5E5EA] text-center overflow-hidden">
-                            <div class="text-[11px] font-black uppercase tracking-wider py-0.5 {{ $item['is_current_dive'] ? 'bg-[#780000] text-white' : 'bg-[#F8EAEA] text-[#780000]' }}">{{ $batch->start_date->format('M') }}</div>
-                            <div class="text-2xl font-black text-[#1D1D1F] leading-tight">{{ $batch->start_date->format('d') }}</div>
-                            <div class="text-[11px] font-semibold text-[#6E6E73] pb-1">{{ $batch->start_date->format('D') }}–{{ $batch->end_date->format('D') }}</div>
+                    <!-- Batch, dates, when, weather -->
+                    <div class="min-w-0 flex-1 space-y-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-base sm:text-lg font-extrabold text-[#1D1D1F]">{{ $batch->batch_number }}</h2>
+                            <span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $item['is_current_dive'] ? 'bg-[#780000] text-white' : 'bg-[#F2F2F7] text-[#3A3A3C]' }}">{{ $when }}</span>
+                            <span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $item['weather_badge']['class'] ?? 'bg-gray-100 text-gray-700' }}">Weather: {{ $item['weather_badge']['label'] ?? $item['weather_class'] }}</span>
                         </div>
-
-                        <div class="min-w-0 space-y-1.5">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <h2 class="text-base sm:text-lg font-extrabold text-[#1D1D1F]">{{ $batch->batch_number }}</h2>
-                                <span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $item['is_current_dive'] ? 'bg-[#780000] text-white' : 'bg-[#F2F2F7] text-[#3A3A3C]' }}">{{ $when }}</span>
-                                <span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $item['weather_badge']['class'] ?? 'bg-gray-100 text-gray-700' }}">Weather: {{ $item['weather_badge']['label'] ?? $item['weather_class'] }}</span>
-                            </div>
-                            <p class="text-[#6E6E73]">{{ $batch->formatted_date_range }}</p>
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-[#F2F2F7] text-[#1D1D1F]">{{ $item['students_count'] }} {{ Str::plural('participant', $item['students_count']) }}</span>
-                                @foreach($item['class_counts'] as $class => $count)
-                                    <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-white border border-[#E5E5EA] text-[#3A3A3C]">{{ $count }} {{ $class }}</span>
-                                @endforeach
-                                @if($healthCount)
-                                    <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-900">{{ $healthCount }} health {{ Str::plural('note', $healthCount) }}</span>
-                                @endif
-                                @if($nonSwimmers)
-                                    <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-rose-50 text-rose-700">{{ $nonSwimmers }} non-{{ Str::plural('swimmer', $nonSwimmers) }}</span>
-                                @endif
-                                @if($minors)
-                                    <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-amber-50 text-amber-800">{{ $minors }} under 18</span>
-                                @endif
-                            </div>
-                        </div>
+                        <p class="text-[#6E6E73]">{{ $batch->formatted_date_range }} ({{ $batch->start_date->format('D') }}–{{ $batch->end_date->format('D') }})</p>
                     </div>
 
                     <!-- Actions -->

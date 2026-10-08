@@ -240,8 +240,6 @@ class ParticipantDirectoryTest extends TestCase
             ->assertOk()
             ->assertSee('My Schedule')
             ->assertSee('Kid Diver')
-            ->assertSee('1 under 18')
-            ->assertSee('1 health note')
             ->assertSee('In 5 days')
             ->assertSee('Past Diver');
     }
