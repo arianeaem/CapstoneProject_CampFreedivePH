@@ -217,7 +217,10 @@ class BookingController extends Controller
             ],
         ]);
 
+        $bookAgain = session()->pull('book_again');
+
         return view('booking.create', compact(
+            'bookAgain',
             'selectedClass',
             'pickupPoints',
             'confirmedBookingData',

@@ -14,7 +14,8 @@
          pickupPoints: {{ json_encode($pickupPoints) }},
          pricingConfig: {{ json_encode($pricingConfig ?? null) }},
          csrfToken: '{{ csrf_token() }}',
-         checkWeatherUrl: '{{ route('api.weather.check') }}'
+         checkWeatherUrl: '{{ route('api.weather.check') }}',
+         participantSearchUrl: '{{ portal_route('participants.search') }}'
      })"
      x-init="initForm()">
     
@@ -141,6 +142,20 @@
                                         class="text-xs text-[#FF3B3C] font-bold hover:underline">
                                     Remove
                                 </button>
+                            </div>
+
+                            <!-- Find a past participant: fills in their saved details -->
+                            <div class="relative mb-3" @click.outside="p.lookupResults = []">
+                                <input type="search" x-model="p.lookup" @input.debounce.300ms="searchPast(p)" placeholder="Find past participant by name (optional)"
+                                       class="w-full px-3 py-2 rounded-xl border border-dashed border-[#D1D1D6] text-sm text-[#1D1D1F] bg-[#FAFAFA]">
+                                <div x-show="p.lookupResults && p.lookupResults.length" x-cloak class="absolute z-20 mt-1 w-full bg-white rounded-xl border border-[#E5E5EA] shadow-lg max-h-64 overflow-y-auto">
+                                    <template x-for="r in p.lookupResults" :key="r.id">
+                                        <button type="button" @click="usePast(p, r)" class="w-full text-left px-3 py-2 hover:bg-[#F8EAEA]">
+                                            <span class="font-bold text-[#1D1D1F]" x-text="r.full_name"></span>
+                                            <span class="block text-xs text-[#6E6E73]" x-text="(r.age !== null ? r.age + ' yrs · ' : '') + r.bookings_count + ' booking(s)' + (r.last_dive ? ' · last ' + r.last_dive : '')"></span>
+                                        </button>
+                                    </template>
+                                </div>
                             </div>
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -625,6 +640,32 @@ function adminBookingCreate(config) {
 
         initForm() {
             this.syncLeadContactFromParticipant();
+        },
+
+        // Find a past participant and fill the row with their saved details
+        async searchPast(p) {
+            const q = (p.lookup || '').trim();
+            if (q.length < 2) { p.lookupResults = []; return; }
+            try {
+                const res = await fetch(config.participantSearchUrl + '?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } });
+                p.lookupResults = res.ok ? await res.json() : [];
+            } catch (e) { p.lookupResults = []; }
+        },
+
+        usePast(p, r) {
+            const parts = r.full_name.trim().split(/\s+/);
+            p.last_name = parts.length > 1 ? parts.pop() : '';
+            p.first_name = parts.join(' ');
+            p.middle_name = '';
+            p.no_middle_name = true;
+            p.suffix = '';
+            p.birthdate = r.birthdate || '';
+            p.gender = r.gender || p.gender;
+            p.swimmer_status = r.swimmer_status || p.swimmer_status;
+            p.health_condition = r.health_condition || '';
+            p.lookup = '';
+            p.lookupResults = [];
+            this.assembleParticipantName(p);
         },
 
         checkBeforeSubmit(event) {

@@ -48,6 +48,7 @@
         str_starts_with($routeName, 'coach.schedule') => 'My Schedule & History',
         str_starts_with($routeName, 'coach.requests') => 'Open Slot Requests',
         str_starts_with($routeName, 'profile.') => 'My Profile',
+        str_starts_with($routeName, 'admin.participants') || str_starts_with($routeName, 'owner.participants') => 'Participants',
         default => 'Dashboard',
     };
 @endphp
@@ -102,6 +103,15 @@
                        :class="sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'">
                         <img src="{{ asset('icons/icons8-booking-60.png') }}" class="w-5 h-5 shrink-0" alt="Bookings">
                         <span x-show="!sidebarCollapsed" class="truncate">Bookings</span>
+                    </a>
+
+                    <!-- Participants -->
+                    <a href="{{ auth()->user()->isOwner() ? route('owner.participants.index') : route('admin.participants.index') }}"
+                       title="Participants"
+                       class="flex items-center rounded-xl font-semibold transition-all {{ request()->routeIs(['admin.participants.*', 'owner.participants.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold shadow-2xs' : 'text-[#3A3A3C] hover:bg-[#F2F2F7] hover:text-[#780000]' }}"
+                       :class="sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'">
+                        <svg class="w-5 h-5 shrink-0 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 5.5 5"/></svg>
+                        <span x-show="!sidebarCollapsed" class="truncate">Participants</span>
                     </a>
 
                     <!-- Batches -->
@@ -255,6 +265,10 @@
                     <a href="{{ auth()->user()->isOwner() ? route('owner.bookings.index') : route('admin.bookings.index') }}" class="flex items-center gap-3 px-3.5 py-2 rounded-xl font-semibold {{ request()->routeIs(['admin.bookings.*', 'owner.bookings.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold' : 'text-[#3A3A3C] hover:bg-[#F2F2F7]' }}">
                         <img src="{{ asset('icons/icons8-booking-60.png') }}" class="w-5 h-5 shrink-0" alt="Bookings">
                         <span>Bookings</span>
+                    </a>
+                    <a href="{{ auth()->user()->isOwner() ? route('owner.participants.index') : route('admin.participants.index') }}" class="flex items-center gap-3 px-3.5 py-2 rounded-xl font-semibold {{ request()->routeIs(['admin.participants.*', 'owner.participants.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold' : 'text-[#3A3A3C] hover:bg-[#F2F2F7]' }}">
+                        <svg class="w-5 h-5 shrink-0 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 5.5 5"/></svg>
+                        <span>Participants</span>
                     </a>
                     <a href="{{ auth()->user()->isOwner() ? route('owner.batches.index') : route('admin.batches.index') }}" class="flex items-center gap-3 px-3.5 py-2 rounded-xl font-semibold {{ request()->routeIs(['admin.batches.*', 'owner.batches.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold' : 'text-[#3A3A3C] hover:bg-[#F2F2F7]' }}">
                         <img src="{{ asset('icons/icons8-medium-icons-32.png') }}" class="w-5 h-5 shrink-0" alt="Batches">

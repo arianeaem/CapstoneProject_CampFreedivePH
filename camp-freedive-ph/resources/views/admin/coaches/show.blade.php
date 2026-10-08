@@ -110,6 +110,7 @@
                             <div class="flex items-start justify-between gap-2">
                                 <div class="min-w-0 flex-1">
                                     <h4 class="font-extrabold text-base text-[#1D1D1F] leading-tight truncate">{{ $p->name }}</h4>
+                                    <x-participant-history-badge :bp="$p" class="mt-1" />
                                     <p class="text-sm text-[#6E6E73] font-medium mt-1">
                                         Age {{ $p->age }} <span class="text-[#AEAEB2] mx-1">•</span> {{ $swimmerLabel }}
                                     </p>

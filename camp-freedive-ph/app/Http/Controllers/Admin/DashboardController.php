@@ -112,6 +112,18 @@ class DashboardController extends Controller
               ->whereDate('start_date', '<=', $today->copy()->endOfMonth());
         })->count();
 
+        // Of this month's participants, how many had an earlier booking (Participant Directory)
+        $inactive = ['pending_downpayment', 'cancelled_by_camp', 'cancelled_by_guest', 'cancelled'];
+        $monthPeople = BookingParticipant::whereNotNull('participant_id')
+            ->whereHas('booking', fn ($q) => $q->whereNotIn('status', $inactive)
+                ->whereDate('start_date', '>=', $today->copy()->startOfMonth())
+                ->whereDate('start_date', '<=', $today->copy()->endOfMonth()))
+            ->distinct()->pluck('participant_id');
+        $repeatParticipantsMonth = BookingParticipant::whereIn('participant_id', $monthPeople)
+            ->whereHas('booking', fn ($q) => $q->whereNotIn('status', $inactive)
+                ->whereDate('start_date', '<', $today->copy()->startOfMonth()))
+            ->distinct()->count('participant_id');
+
         $avgOccupancy = $allUpcomingBatches->count() > 0
             ? (int) round($allUpcomingBatches->avg(fn($b) => $b->occupancy_percentage ?? 0))
             : 0;
@@ -123,6 +135,7 @@ class DashboardController extends Controller
 
         $operationalStats = [
             'active_divers_month' => $activeDiversMonth,
+            'repeat_participants_month' => $repeatParticipantsMonth,
             'avg_occupancy' => $avgOccupancy,
             'active_coaches_count' => $activeCoachesCount,
             'unmatched_students_count' => $unmatchedStudentsCount,

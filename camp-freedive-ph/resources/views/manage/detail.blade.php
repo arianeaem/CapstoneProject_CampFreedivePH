@@ -145,7 +145,10 @@
 
             <!-- Participant List -->
             <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-8">
-                <h3 class="text-base font-bold text-[#1D1D1F] mb-4">Participants in this Booking ({{ $booking->participants->count() }})</h3>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <h3 class="text-base font-bold text-[#1D1D1F]">Participants in this Booking ({{ $booking->participants->count() }})</h3>
+                    <a href="{{ route('manage.book_again', $booking->booking_number) }}" data-native class="btn-secondary px-3.5 py-1.5 text-sm font-bold rounded-xl">Book again with the same people</a>
+                </div>
                 <div class="divide-y divide-[#E5E5EA]">
                     @foreach($booking->participants as $p)
                     <div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm">

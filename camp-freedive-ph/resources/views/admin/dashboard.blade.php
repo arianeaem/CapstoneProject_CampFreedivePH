@@ -59,7 +59,7 @@
             } else {
                 $cards[] = ['label' => 'Coaches available', 'value' => $operationalStats['active_coaches_count'], 'hint' => 'Active coach accounts'];
             }
-            $cards[] = ['label' => 'Participants this month', 'value' => $operationalStats['active_divers_month'], 'hint' => 'Booked on trips this month'];
+            $cards[] = ['label' => 'Participants this month', 'value' => $operationalStats['active_divers_month'], 'hint' => 'Booked on trips this month' . (($operationalStats['repeat_participants_month'] ?? 0) > 0 ? ' · ' . $operationalStats['repeat_participants_month'] . ' booked before' : '')];
             $cards[] = ['label' => 'Average batch fill', 'value' => $operationalStats['avg_occupancy'] . '%', 'hint' => 'Across ' . $operationalStats['total_active_batches'] . ' upcoming ' . Str::plural('batch', $operationalStats['total_active_batches'])];
             $cards[] = ['label' => 'Participants without a coach', 'value' => $unmatched, 'hint' => $unmatched > 0 ? 'Need a coach assigned' : 'Everyone has a coach', 'tone' => $unmatched > 0 ? 'text-[#B45309]' : 'text-[#00838C]', 'url' => $unmatched > 0 ? route('admin.coaches.matching') : null];
         @endphp

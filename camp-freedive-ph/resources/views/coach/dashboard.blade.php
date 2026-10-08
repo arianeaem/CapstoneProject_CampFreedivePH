@@ -221,6 +221,7 @@
                             <div class="min-w-0">
                                 <span class="block font-extrabold text-[#1D1D1F] truncate">{{ $student->name }}</span>
                                 <span class="block text-xs text-[#8E8E93]">{{ $student->age }} yrs &middot; {{ $classType }}</span>
+                                <x-participant-history-badge :bp="$student" class="mt-1" />
                             </div>
                             <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-[#F8EAEA] text-[#780000] shrink-0">{{ $shortClassType }}</span>
                         </div>

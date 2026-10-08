@@ -31,6 +31,20 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 class Booking extends Model
 {
+    /** A booking's status or dates change a participant's history (last dive, latest details). */
+    protected static function booted(): void
+    {
+        static::updated(function (Booking $booking) {
+            if (!$booking->wasChanged(['status', 'start_date', 'contact_email', 'contact_phone'])) {
+                return;
+            }
+            $service = app(\App\Services\ParticipantDirectoryService::class);
+            $booking->participants()->with('participant')->get()
+                ->pluck('participant')->filter()->unique('id')
+                ->each(fn ($p) => $service->refresh($p));
+        });
+    }
+
     use HasFactory;
 
     protected $fillable = [

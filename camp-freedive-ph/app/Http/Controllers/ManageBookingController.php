@@ -86,6 +86,54 @@ class ManageBookingController extends Controller
      * @param string $booking_number e.g. CFP-2026-1234
      * @return View|RedirectResponse
      */
+    /**
+     * "Book again": start a new booking with the same people, from the participant's own
+     * booking (booking number + PIN session only, so nobody can pull other people's details).
+     */
+    public function bookAgain(string $booking_number): RedirectResponse
+    {
+        $booking = Booking::where('booking_number', strtoupper(trim($booking_number)))->with('participants')->first();
+        if (!$booking || session('auth_booking_id') !== $booking->id) {
+            return redirect()->route('manage.index')->with('info', 'Please enter your booking number and PIN first.');
+        }
+
+        $split = function (string $name): array {
+            $parts = preg_split('/\s+/u', trim($name));
+            $last = count($parts) > 1 ? array_pop($parts) : '';
+
+            return [implode(' ', $parts), $last];
+        };
+
+        $participants = $booking->participants->map(function ($p) use ($split) {
+            [$first, $last] = $split($p->name);
+
+            return [
+                'first_name' => $first, 'middle_name' => '', 'no_middle_name' => true, 'last_name' => $last, 'suffix' => '',
+                'name' => $p->name, 'birthdate' => $p->birthdate?->format('Y-m-d') ?? '', 'gender' => $p->gender ?? '',
+                'age' => '', 'health_condition' => $p->health_condition ?? '', 'swimmer_status' => $p->swimmer_status ?? 'non_swimmer',
+            ];
+        })->values();
+
+        $leadIndex = $booking->participants->search(fn ($p) => mb_strtolower(trim($p->name)) === mb_strtolower(trim($booking->contact_name)));
+        [$contactFirst, $contactLast] = $split($booking->contact_name);
+
+        session(['book_again' => [
+            'from' => $booking->booking_number,
+            'class_type' => $booking->class_type,
+            'participants' => $participants,
+            'selected_lead_participant' => $leadIndex === false ? 'custom' : $leadIndex,
+            'contact_first_name' => $contactFirst,
+            'contact_last_name' => $contactLast,
+            'contact_no_middle_name' => true,
+            'contact_birthdate' => $booking->contact_birthdate?->format('Y-m-d') ?? '',
+            'contact_email' => $booking->contact_email,
+            'contact_phone' => $booking->contact_phone,
+            'contact_facebook' => $booking->contact_facebook ?? '',
+        ]]);
+
+        return redirect()->route('booking.create', ['class' => $booking->class_type]);
+    }
+
     public function show(Request $request, string $booking_number): View|RedirectResponse
     {
         $booking = Booking::where('booking_number', strtoupper(trim($booking_number)))

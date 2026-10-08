@@ -200,6 +200,7 @@
                                     <div class="min-w-0 flex-1">
                                         <span class="text-sm uppercase font-bold text-[#6E6E73] tracking-wider block">Participant</span>
                                         <h4 class="font-black text-[#1D1D1F] text-base sm:text-lg tracking-tight mt-0.5 truncate">{{ $student->name }}</h4>
+                                        <x-participant-history-badge :bp="$student" class="mt-1" />
                                     </div>
                                     <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#F8EAEA] text-[#780000] shrink-0">
                                         {{ $shortClassType }}

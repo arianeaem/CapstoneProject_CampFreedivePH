@@ -65,3 +65,13 @@ Schedule::command('ml:rebenchmark')
 
 
 
+
+/**
+ * Participant data retention, on the 1st of each month: health notes cleared 12 months
+ * after the last dive, records anonymised 3 years after it (see the Participants page).
+ */
+Schedule::command('participants:retention')
+    ->monthlyOn(1, '03:00')
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/participant_retention.log'));

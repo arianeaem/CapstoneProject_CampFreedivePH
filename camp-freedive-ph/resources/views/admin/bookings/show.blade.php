@@ -65,6 +65,7 @@
                                 </span>
                                 <strong class="font-bold text-base text-[#1D1D1F]">{{ $p->name }}</strong>
                                 <span class="text-sm text-[#6E6E73] font-medium">({{ $p->age }} yrs old)</span>
+                                <x-participant-history-badge :bp="$p" />
                             </div>
                             <div class="flex items-center gap-2 shrink-0">
                                 <span class="text-xs sm:text-sm px-2.5 py-0.5 rounded-md font-semibold bg-[#F2F2F7] text-[#1D1D1F]">

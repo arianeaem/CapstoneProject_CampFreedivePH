@@ -10,6 +10,7 @@
          initialClass: '{{ $selectedClass }}',
          initialStep: {{ $initialStep ?? 1 }},
          confirmedBookingData: {{ json_encode($confirmedBookingData ?? null) }},
+         bookAgain: {{ json_encode($bookAgain ?? null) }},
          pickupPoints: {{ json_encode($pickupPoints) }},
          pricingConfig: {
              basePrices: {
@@ -149,6 +150,12 @@
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 3">Enter participant details, emergency contact, carpool hub, and optional add-ons.</p>
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 4">Review your reservation breakdown and complete downpayment.</p>
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 5">Save your booking reference PIN and view your camp itinerary.</p>
+        </div>
+
+        <!-- Book again notice -->
+        <div x-show="bookAgainNotice && currentStep === 3" x-cloak class="banner mb-6 flex items-center justify-between gap-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[#92400E]">
+            <span x-text="bookAgainNotice"></span>
+            <button type="button" @click="bookAgainNotice = ''" aria-label="Dismiss notice" class="w-9 h-9 flex items-center justify-center rounded-lg font-bold shrink-0">✕</button>
         </div>
 
         <!-- Error Alert Banner -->
@@ -1417,6 +1424,10 @@
                                         <a href="{{ route('legal.privacy') }}" target="_blank" rel="noopener noreferrer" @click.stop class="text-[#780000] underline">Privacy Policy</a>. <span class="text-[#D70015]">*</span>
                                     </span>
                                 </label>
+                                <p class="text-xs text-[#6E6E73] leading-relaxed">
+                                    We keep each participant's details as a history of their dives with us, so future bookings are faster and coaches know who they're diving with.
+                                    Health notes are cleared 12 months after a participant's last dive, and other details 3 years after it.
+                                </p>
                                 <span x-show="touchedStep3 && !form.confirmation_ack" class="text-xs text-[#D70015] font-semibold block">
                                     Please confirm that all information provided is accurate.
                                 </span>
@@ -1881,6 +1892,7 @@ function bookingForm(config) {
             return this.weatherTips[this.weatherTipIndex] || this.weatherTips[0];
         },
         errorMessage: '',
+        bookAgainNotice: '',
         submittingPayment: false,
         timerSeconds: 15 * 60,
         timerDisplay: '15:00',
@@ -2072,6 +2084,17 @@ function bookingForm(config) {
             }
 
             this.loadDraft();
+
+            // "Book again" from Manage Booking: same people and contact, details to re-check
+            if (config.bookAgain) {
+                const b = config.bookAgain;
+                this.form.class_type = b.class_type || this.form.class_type;
+                this.form.participants = b.participants;
+                ['selected_lead_participant', 'contact_first_name', 'contact_last_name', 'contact_no_middle_name', 'contact_birthdate',
+                 'contact_email', 'contact_phone', 'contact_facebook'].forEach(k => { if (b[k] !== undefined) this.form[k] = b[k]; });
+                this.form.participants.forEach(p => this.calculateAge(p));
+                this.bookAgainNotice = `Details copied from booking ${b.from}. Please check each person's name, health notes and swimming level, as they may have changed.`;
+            }
 
             // Auto-save form inputs whenever they change
             this.$watch('form', () => {

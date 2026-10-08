@@ -213,6 +213,7 @@
                                                 <div class="flex items-center gap-1.5 flex-wrap">
                                                     <strong class="text-sm font-bold text-[#1D1D1F]">{{ $p->name }}</strong>
                                                     <span class="text-xs text-[#6E6E73] font-normal">({{ $p->age }} yrs old)</span>
+                                                    <x-participant-history-badge :bp="$p" />
                                                 </div>
                                                 <span class="px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 {{ strtolower($p->swimmer_status) === 'non_swimmer' ? 'bg-rose-50 text-rose-700' : 'bg-white text-[#1D1D1F] shadow-2xs' }}">
                                                     {{ ucfirst(str_replace('_', ' ', $p->swimmer_status ?? 'Swimmer')) }}

@@ -51,6 +51,7 @@ Route::post('/manage-booking/search', [ManageBookingController::class, 'search']
 Route::get('/manage-booking/{booking_number}', [ManageBookingController::class, 'show'])->name('manage.show');
 Route::post('/manage-booking/{booking_number}/reschedule', [ManageBookingController::class, 'reschedule'])->name('manage.reschedule')->middleware('throttle:manage_requests');
 Route::post('/manage-booking/{booking_number}/cancel', [ManageBookingController::class, 'cancel'])->name('manage.cancel')->middleware('throttle:manage_requests');
+Route::get('/manage-booking/{booking_number}/book-again', [ManageBookingController::class, 'bookAgain'])->name('manage.book_again');
 
 // Weather preview for the date picked on the booking page
 Route::get('/api/weather/preview', [\App\Http\Controllers\Api\WeatherPreviewController::class, 'preview'])->name('api.weather.preview')->middleware('throttle:booking_quote_weather');
@@ -108,6 +109,17 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/bookings', [AdminBookingController::class, 'index'])->name('bookings.index');
     Route::get('/bookings/create', [AdminBookingController::class, 'create'])->name('bookings.create');
     Route::post('/bookings', [AdminBookingController::class, 'store'])->name('bookings.store');
+
+    // Participant Directory (each person's history across bookings)
+    Route::get('/participants', [\App\Http\Controllers\Admin\ParticipantController::class, 'index'])->name('participants.index');
+    Route::get('/participants/search', [\App\Http\Controllers\Admin\ParticipantController::class, 'search'])->name('participants.search');
+    Route::get('/participants/export', [\App\Http\Controllers\Admin\ParticipantController::class, 'export'])->name('participants.export');
+    Route::post('/participants/reviews/{review}/not-same', [\App\Http\Controllers\Admin\ParticipantController::class, 'notSame'])->name('participants.reviews.not_same');
+    Route::get('/participants/{participant}', [\App\Http\Controllers\Admin\ParticipantController::class, 'show'])->name('participants.show');
+    Route::put('/participants/{participant}', [\App\Http\Controllers\Admin\ParticipantController::class, 'update'])->name('participants.update');
+    Route::post('/participants/{participant}/merge', [\App\Http\Controllers\Admin\ParticipantController::class, 'merge'])->name('participants.merge');
+    Route::post('/participants/{participant}/unmerge', [\App\Http\Controllers\Admin\ParticipantController::class, 'unmerge'])->name('participants.unmerge');
+    Route::post('/participants/{participant}/anonymise', [\App\Http\Controllers\Admin\ParticipantController::class, 'anonymise'])->name('participants.anonymise');
     
     // Pending customer requests
     Route::get('/bookings/requests', [BookingRequestController::class, 'index'])->name('bookings.requests');
@@ -277,6 +289,9 @@ Route::middleware(['auth', 'active', 'must_change_password', 'role:coach'])
         Route::post('/availability/toggle', [AvailabilityController::class, 'toggle'])->name('availability.toggle');
         Route::post('/availability/bulk', [AvailabilityController::class, 'bulkUpdate'])->name('availability.bulk');
         Route::post('/availability/release', [AvailabilityController::class, 'requestRelease'])->name('availability.release');
+
+        // A participant's history (only people in this coach's batches)
+        Route::get('/participants/{participant}', [\App\Http\Controllers\Coach\ParticipantHistoryController::class, 'show'])->name('participants.show');
 
         // Page 3: my schedule
         Route::get('/my-schedule', [ScheduleController::class, 'index'])->name('schedule.index');

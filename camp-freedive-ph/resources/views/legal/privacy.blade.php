@@ -312,6 +312,18 @@
                         <p>
                             The specific retention period may vary depending on the type of information and the purpose for which it was collected.
                         </p>
+                        <p>
+                            For participant records, Camp Freedive PH applies the following periods, counted from a participant's last dive and reset by any new booking:
+                        </p>
+                        <ul class="list-disc pl-5 space-y-1">
+                            <li>Health notes and swimming level: cleared 12 months after the last dive.</li>
+                            <li>Name, birthdate, contact details and booking history: anonymised 3 years after the last dive.</li>
+                            <li>Parent or guardian consent for a participant under 18: kept with the booking for the same 3 years.</li>
+                            <li>Payment and booking amounts: kept without personal details for as long as tax and accounting rules require.</li>
+                        </ul>
+                        <p>
+                            A participant may ask for their record to be anonymised sooner by contacting Camp Freedive PH.
+                        </p>
                     </div>
 
                     <div>
