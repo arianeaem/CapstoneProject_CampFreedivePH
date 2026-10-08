@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Holds slots while a customer is checking out, so we don't go over
- * 45 people per weekend batch (boat limit and 1 coach for every 4 divers).
+ * Holds slots while a participant is checking out, so we don't go over
+ * 45 people per weekend batch (boat limit and 1 coach for every 4 participants).
  */
 class SlotReservationService
 {
@@ -171,7 +171,7 @@ class SlotReservationService
     }
 
     /**
-     * Release a hold (after payment or if the customer cancels).
+     * Release a hold (after payment or if the participant cancels).
      *
      * @param string $startDate YYYY-MM-DD
      * @param string $holdKey

@@ -41,7 +41,7 @@
             </a>
 
             <a href="{{ route('admin.coaches.matching') }}" class="btn-primary px-4 py-2 text-sm font-bold flex items-center justify-center gap-1.5 flex-1 sm:flex-initial shadow-2xs">
-                <span>Assign Students</span>
+                <span>Assign Participants</span>
             </a>
         </div>
     </div>
@@ -49,18 +49,18 @@
     <!-- Coach Profile Content -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <!-- Assigned Students & Schedule -->
+        <!-- Assigned Participants & Schedule -->
         <div class="lg:col-span-2 space-y-6">
             
-            <!-- Assigned Students Section -->
+            <!-- Assigned Participants Section -->
             <div class="space-y-4">
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1">
                     <div>
-                        <h3 class="text-base font-bold text-[#1D1D1F]">Assigned Students</h3>
+                        <h3 class="text-base font-bold text-[#1D1D1F]">Assigned Participants</h3>
                     </div>
 
                     <span class="text-xs sm:text-sm text-[#6E6E73] font-medium sm:text-right">
-                        {{ $activeAssignments->count() }} Active Student(s) across {{ $upcomingAssignments->pluck('dive_date')->unique()->count() }} Upcoming Dive Date(s)
+                        {{ $activeAssignments->count() }} Active Participant(s) across {{ $upcomingAssignments->pluck('dive_date')->unique()->count() }} Upcoming Dive Date(s)
                     </span>
                 </div>
 
@@ -106,7 +106,7 @@
                     @endphp
                     <div class="bg-white rounded-2xl border border-[#E5E5EA] p-4 sm:p-5 flex flex-col justify-between space-y-4 shadow-2xs">
                         <div class="space-y-3">
-                            <!-- Student Header: Name, Age • Swimmer on Left, Class Badge on Right -->
+                            <!-- Participant Header: Name, Age • Swimmer on Left, Class Badge on Right -->
                             <div class="flex items-start justify-between gap-2">
                                 <div class="min-w-0 flex-1">
                                     <h4 class="font-extrabold text-base text-[#1D1D1F] leading-tight truncate">{{ $p->name }}</h4>
@@ -165,7 +165,7 @@
                         </div>
 
                         <!-- Action Footer: Reassign Away -->
-                        <div class="pt-3 border-t border-[#E5E5EA] flex items-center justify-end">
+                        <div class="pt-3 flex items-center justify-end">
                             <button type="button" 
                                     @click="selectedParticipantId = {{ $p->id }}; selectedParticipantName = '{{ addslashes($p->name) }}'; openReassignModal = true"
                                     class="px-4 py-1.5 text-xs sm:text-sm font-bold rounded-xl border border-[#D1D1D6] bg-white hover:border-[#780000] hover:text-[#780000] text-[#1D1D1F] shadow-2xs transition-colors cursor-pointer">
@@ -176,7 +176,7 @@
                     @empty
                     <div class="col-span-full py-8 text-center bg-[#F2F2F7] rounded-xl">
                         <p class="text-sm text-[#6E6E73]">
-                            No students currently assigned to this coach. Use the <a href="{{ route('admin.coaches.matching') }}" class="text-[#780000] font-bold underline">Matching Queue</a> to assign students.
+                            No participants currently assigned to this coach. Use the <a href="{{ route('admin.coaches.matching') }}" class="text-[#780000] font-bold underline">Matching Queue</a> to assign participants.
                         </p>
                     </div>
                     @endforelse
@@ -191,7 +191,7 @@
                     </div>
 
                     <span class="text-xs sm:text-sm text-[#6E6E73] font-medium sm:text-right">
-                        {{ $pastBatches->count() }} Completed Batch(es) · {{ $pastAssignments->count() }} Past Student(s)
+                        {{ $pastBatches->count() }} Completed Batch(es) · {{ $pastAssignments->count() }} Past Participant(s)
                     </span>
                 </div>
 
@@ -232,9 +232,9 @@
                                 </span>
                             </div>
 
-                            <!-- Student List & Booking Link -->
+                            <!-- Participant List & Booking Link -->
                             <div class="space-y-1.5 pt-1">
-                                <span class="text-xs font-bold uppercase tracking-wider text-[#8E8E93] block">COACHED STUDENTS</span>
+                                <span class="text-xs font-bold uppercase tracking-wider text-[#8E8E93] block">COACHED PARTICIPANTS</span>
                                 <div class="divide-y divide-[#E5E5EA] px-3">
                                     @foreach($assignmentsInBatch as $assignment)
                                         @php
@@ -306,10 +306,10 @@
 
     </div>
 
-    <!-- Reassign Student Modal -->
+    <!-- Reassign Participant Modal -->
     <div x-show="openReassignModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
         <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openReassignModal = false">
-            <h3 class="text-lg font-bold text-[#1D1D1F]">Reassign Student Away</h3>
+            <h3 class="text-lg font-bold text-[#1D1D1F]">Reassign Participant Away</h3>
             <p class="text-sm text-[#6E6E73]">
                 Reassign <strong class="text-[#1D1D1F]" x-text="selectedParticipantName"></strong> away from Coach {{ $coach->name }} to another coach.
             </p>

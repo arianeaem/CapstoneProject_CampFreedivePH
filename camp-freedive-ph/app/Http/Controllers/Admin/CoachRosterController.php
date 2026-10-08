@@ -66,7 +66,7 @@ class CoachRosterController extends Controller
         $activeCount = User::where('role', 'coach')->where('status', 'active')->count();
         $inactiveCount = User::where('role', 'coach')->where('status', 'inactive')->count();
 
-        // Number of students with no coach (for the banner)
+        // Number of participants with no coach (for the banner)
         $unassignedStudentsCount = BookingParticipant::whereHas('booking', function ($q) {
             $q->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'completed', 'no_show', 'pending_downpayment']);
         })->whereDoesntHave('activeAssignment')->count();
@@ -106,7 +106,7 @@ class CoachRosterController extends Controller
             'assignedParticipants' => fn($q) => $q->with(['participant.booking', 'batch'])->orderBy('dive_date', 'desc'),
         ]);
 
-        // 1. Assigned students (active / upcoming)
+        // 1. Assigned participants (active / upcoming)
         $activeAssignments = $coach->assignedParticipants()
             ->where('status', 'assigned')
             ->where('dive_date', '>=', Carbon::today())
@@ -148,7 +148,7 @@ class CoachRosterController extends Controller
     }
 
     /**
-     * Move a student from this coach to another one.
+     * Move a participant from this coach to another one.
      */
     public function reassignStudent(ReassignStudentRequest $request, User $coach): RedirectResponse
     {
@@ -165,7 +165,7 @@ class CoachRosterController extends Controller
                 $validated['reason']
             );
 
-            return back()->with('success', "Student {$participant->name} successfully reassigned to Coach {$newCoach->name}.");
+            return back()->with('success', "Participant {$participant->name} successfully reassigned to Coach {$newCoach->name}.");
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());
         }

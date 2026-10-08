@@ -202,7 +202,7 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">2.1 Purposes of Processing</h3>
                         <p class="mb-2">
-                            We process personal information only for legitimate and reasonably necessary purposes related to the operation of our services. These purposes include receiving, verifying, and confirming reservations; processing payments and related transactions; preparing participant and passenger information required for applicable maritime operations; preparing appropriately sized equipment; coordinating transportation and camp arrangements; communicating booking confirmations, receipts, schedules, and operational advisories; responding to customer inquiries; and coordinating appropriate emergency response where necessary.
+                            We process personal information only for legitimate and reasonably necessary purposes related to the operation of our services. These purposes include receiving, verifying, and confirming reservations; processing payments and related transactions; preparing participant and passenger information required for applicable maritime operations; preparing appropriately sized equipment; coordinating transportation and camp arrangements; communicating booking confirmations, receipts, schedules, and operational advisories; responding to participant inquiries; and coordinating appropriate emergency response where necessary.
                         </p>
                         <p>
                             We may also process personal information where necessary to comply with applicable laws, regulations, government requirements, lawful orders, or legitimate requests from competent authorities.

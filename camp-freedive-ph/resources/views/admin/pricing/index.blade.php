@@ -304,7 +304,7 @@
                 </p>
                 <template x-if="triggeredCount > 0">
                     <div class="banner banner-warning mt-2">
-                        <strong>Notice:</strong> This rule has affected <span x-text="triggeredCount"></span> booking(s). It will be soft-deleted to preserve all past customer receipts and audit histories.
+                        <strong>Notice:</strong> This rule has affected <span x-text="triggeredCount"></span> booking(s). It will be soft-deleted to preserve all past receipts and audit histories.
                     </div>
                 </template>
             </div>

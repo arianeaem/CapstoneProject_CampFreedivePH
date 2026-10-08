@@ -102,7 +102,7 @@
                 <thead class="bg-[#F2F2F7] border-b border-[#E5E5EA] text-sm uppercase font-bold text-[#6E6E73]">
                     <tr>
                         <th class="p-4 pl-6 text-left">Booking Number</th>
-                        <th class="p-4 text-left">Customer Name</th>
+                        <th class="p-4 text-left">Contact Name</th>
                         <th class="p-4 text-left">Dive Date</th>
                         <th class="p-4 text-left">Class</th>
                         <th class="p-4 text-left">Base Adjusted Rate</th>
@@ -121,9 +121,9 @@
                             {{ $booking ? $booking->booking_number : '-' }}
                         </td>
 
-                        <!-- Customer Name -->
+                        <!-- Contact Name -->
                         <td class="p-4 text-left">
-                            <div class="font-bold text-[#1D1D1F]">{{ $booking ? $booking->contact_name : 'Unknown Guest' }}</div>
+                            <div class="font-bold text-[#1D1D1F]">{{ $booking ? $booking->contact_name : 'Unknown Contact' }}</div>
                             <div class="text-sm text-[#6E6E73]">{{ $booking ? $booking->contact_phone : '' }}</div>
                         </td>
 
@@ -163,7 +163,7 @@
                         <td colspan="7" class="py-10 text-center text-[#6E6E73]">
                             <div class="space-y-1">
                                 <div class="font-bold text-[#1D1D1F]">No Bookings Have Triggered This Rule Yet</div>
-                                <p class="text-sm">Once customer bookings meet this rule's conditions during checkout, they will be logged here automatically.</p>
+                                <p class="text-sm">Once bookings meet this rule's conditions during checkout, they will be logged here automatically.</p>
                             </div>
                         </td>
                     </tr>

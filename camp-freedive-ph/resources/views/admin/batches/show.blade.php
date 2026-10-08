@@ -155,7 +155,7 @@
                                 $connectedBookingsCount = $batch->bookings->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'])->count();
                             @endphp
                             <h3 class="text-base font-extrabold text-[#1D1D1F]">
-                                {{ $connectedBookingsCount }} Connected Customer {{ Str::plural('Booking', $connectedBookingsCount) }}
+                                {{ $connectedBookingsCount }} Connected {{ Str::plural('Booking', $connectedBookingsCount) }}
                             </h3>
                         </div>
                     </div>
@@ -185,10 +185,10 @@
                                 </div>
                             </div>
 
-                            <!-- Students & Pod Assignment List -->
+                            <!-- Participants & Pod Assignment List -->
                             <div class="space-y-2">
                                 <span class="text-xs font-bold uppercase tracking-wider text-[#6E6E73] flex items-center gap-1.5">
-                                    <span>Students & Coaches ({{ $booking->participants->count() }})</span>
+                                    <span>Participants & Coaches ({{ $booking->participants->count() }})</span>
                                 </span>
 
                                 <div class="space-y-2.5">
@@ -208,7 +208,7 @@
                                              $hasMedical = !$isNoneOrGeneral && !empty($rawCondition);
                                         @endphp
                                         <div class="bg-[#F8F9FA] rounded-xl p-3 sm:p-3.5 space-y-2">
-                                            <!-- Line 1: Student Name, Age, Swimmer Badge -->
+                                            <!-- Line 1: Participant Name, Age, Swimmer Badge -->
                                             <div class="flex items-center justify-between gap-2 flex-wrap">
                                                 <div class="flex items-center gap-1.5 flex-wrap">
                                                     <strong class="text-sm font-bold text-[#1D1D1F]">{{ $p->name }}</strong>
@@ -276,7 +276,7 @@
                     </div>
                     @empty
                     <div class="col-span-full bg-white rounded-2xl border border-[#E5E5EA] p-8 text-center text-sm text-[#6E6E73]">
-                        No customer bookings connected to this batch yet.
+                        No bookings connected to this batch yet.
                     </div>
                     @endforelse
                 </div>
@@ -312,7 +312,7 @@
                 <div class="space-y-2 pt-1">
                     @if($batch->total_participants_count > 0 && $batch->is_coach_pending)
                         <div class="banner banner-warning text-left flex items-center gap-2.5">
-                            <span class="font-bold">Instructor Pending</span>
+                            <span class="font-bold">Coach Pending</span>
                         </div>
                     @else
                         <div class="flex items-baseline justify-between">
@@ -399,7 +399,7 @@
                         </div>
                     @else
                         <p class="text-sm text-[#6E6E73] text-center py-2">
-                            All students are using own transportation.
+                            All participants are using own transportation.
                         </p>
                     @endif
                 </div>
@@ -505,7 +505,7 @@
         <div role="alertdialog" aria-modal="true" aria-labelledby="modal-cancel-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCancelModal = false">
             <h3 id="modal-cancel-batch-title" class="text-lg font-bold text-[#780000]">Cancel Batch (by Camp)</h3>
             <p class="text-sm text-[#6E6E73]">
-                Cancelling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will automatically update all connected bookings, set them to <strong>Cancelled by Camp</strong>, trigger <strong>100% force majeure refund eligibility</strong>, and send custom cancellation emails to all customers.
+                Cancelling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will automatically update all connected bookings, set them to <strong>Cancelled by Camp</strong>, trigger <strong>100% force majeure refund eligibility</strong>, and send custom cancellation emails to all participants.
             </p>
 
             <form action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-3 text-sm">
@@ -534,7 +534,7 @@
         <div role="dialog" aria-modal="true" aria-labelledby="modal-reschedule-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openRescheduleModal = false">
             <h3 id="modal-reschedule-batch-title" class="text-lg font-bold text-[#1D1D1F]">Reschedule Batch (by Camp)</h3>
             <p class="text-sm text-[#6E6E73]">
-                Rescheduling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will set connected bookings to <strong>Rescheduled</strong> and send a custom email notifying customers to pick their preferred new date through the <strong>Manage Booking</strong> portal.
+                Rescheduling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will set connected bookings to <strong>Rescheduled</strong> and send a custom email notifying participants to pick their preferred new date through the <strong>Manage Booking</strong> portal.
             </p>
 
             <form action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-3 text-sm">

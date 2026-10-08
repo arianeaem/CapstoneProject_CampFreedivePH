@@ -210,7 +210,7 @@ class CoachMatchingController extends Controller
      */
     public function assign(AssignCoachesRequest $request): RedirectResponse
     {
-        // Old way: assign single students if participant_ids is sent
+        // Old way: assign single participants if participant_ids is sent
         if ($request->has('participant_ids')) {
             $validated = $request->validated();
 
@@ -398,7 +398,7 @@ class CoachMatchingController extends Controller
                     'review_notes' => $request->input('notes', 'Approved by Camp Administration.'),
                 ]);
 
-                // Remove the coach's students for that batch
+                // Remove the coach's participants for that batch
                 \App\Models\ParticipantAssignment::where('coach_id', $reqModel->coach_id)
                     ->where('batch_id', $reqModel->batch_id)
                     ->delete();
@@ -418,7 +418,7 @@ class CoachMatchingController extends Controller
                     ->update(['status' => 'unavailable']);
             });
 
-            return back()->with('success', "Approved release request for Coach " . ($reqModel->coach?->name ?? 'Coach') . ". Students have been moved back to the matching queue.");
+            return back()->with('success', "Approved release request for Coach " . ($reqModel->coach?->name ?? 'Coach') . ". Participants have been moved back to the matching queue.");
         } catch (Exception $e) {
             return back()->with('error', 'Failed to approve release request: ' . $e->getMessage());
         }

@@ -6,7 +6,7 @@ use App\Models\Booking;
 use Carbon\Carbon;
 
 /**
- * Rules for guest reschedules and cancellations.
+ * Rules for participant reschedules and cancellations.
  *
  * Based on how many days are left before the dive, and if there is a storm warning
  * (PAGASA typhoon signal, Coast Guard gale warning):
@@ -29,7 +29,7 @@ class BookingPolicyEngine
     }
 
     /**
-     * Check what the guest can do with a booking right now.
+     * Check what the participant can do with a booking right now.
      *
      * @param Booking $booking
      * @return array{
@@ -58,7 +58,7 @@ class BookingPolicyEngine
 
         // Is there a storm warning for the dive date?
         $isForceMajeure = $this->weatherService->isStormSignalActive($booking->start_date)
-            // A Critical Risk rating on the batch counts too (same as the guest email)
+            // A Critical Risk rating on the batch counts too (same as the participant email)
             || ($booking->batch?->risk_classification === 'critical_risk' && $daysUntilDive >= 0);
 
         // Pick the policy based on days left and weather

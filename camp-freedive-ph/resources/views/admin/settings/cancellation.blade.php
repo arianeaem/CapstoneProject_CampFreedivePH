@@ -15,7 +15,7 @@
     <div>
         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Cancellation Policies</h1>
         <p class="text-[#6E6E73] text-sm mt-1">
-            Configure lead-time day thresholds that govern customer refund eligibility and self-service rescheduling.
+            Configure lead-time day thresholds that govern participant refund eligibility and self-service rescheduling.
         </p>
     </div>
 

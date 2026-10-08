@@ -18,8 +18,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * PayMongo checkout and webhooks.
  *
- * - sends the guest to the PayMongo checkout page (GCash, Maya, cards, GrabPay)
- * - when the guest comes back on the success page we check the payment right away
+ * - sends the participant to the PayMongo checkout page (GCash, Maya, cards, GrabPay)
+ * - when the participant comes back on the success page we check the payment right away
  * - the webhook also confirms the payment (signature is checked, and the same event
  *   is ignored if it comes again within 24 hours)
  * - when paid: booking goes from pending_downpayment to confirmed and the email is sent
@@ -88,7 +88,7 @@ class PayMongoController extends Controller
                     'PAYMONGO_CHECKOUT_INITIATED',
                     "Initiated PayMongo checkout for Booking #{$booking->booking_number} (Amount: ₱" . number_format($amount, 2) . ")",
                     null,
-                    "Customer: {$booking->contact_name}"
+                    "Contact: {$booking->contact_name}"
                 );
             });
 
@@ -110,7 +110,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Guest comes back after paying.
+     * Participant comes back after paying.
      *
      * GET /booking/{booking}/paymongo/success
      */
@@ -183,7 +183,7 @@ class PayMongoController extends Controller
                     'PAYMONGO_PAYMENT_SUCCESS',
                     "Payment verified and confirmed for Booking #{$booking->booking_number} via PayMongo",
                     null,
-                    "Customer: {$booking->contact_name}"
+                    "Contact: {$booking->contact_name}"
                 );
             });
 
@@ -196,7 +196,7 @@ class PayMongoController extends Controller
                 Log::warning("Email send failed for booking #{$booking->booking_number}: " . $e->getMessage());
             }
 
-            // Log the guest in to the Manage Booking page
+            // Log the participant in to the Manage Booking page
             session([
                 'auth_booking_id' => $booking->id,
                 'auth_booking_pin' => $booking->pin,
@@ -223,7 +223,7 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Guest cancelled the checkout.
+     * Participant cancelled the checkout.
      *
      * GET /booking/{booking}/paymongo/cancel
      */

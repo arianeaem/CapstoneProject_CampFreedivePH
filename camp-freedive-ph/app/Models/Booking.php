@@ -10,10 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
- * A booking (one guest or a group).
+ * A booking (one participant or a group).
  *
  * - a downpayment per person is needed to keep the slots
- * - the guest uses the booking number and 4-digit PIN to view, reschedule or cancel
+ * - the participant uses the booking number and 4-digit PIN to view, reschedule or cancel
  * - price = class fee + optional carpool + optional boat dive + LGU/environmental fees
  *
  * @property int $id
@@ -219,7 +219,7 @@ class Booking extends Model
                 'color' => '#FF3B3C',
             ],
             'cancelled_by_guest' => [
-                'label' => 'Cancelled by Guest',
+                'label' => 'Cancelled by Participant',
                 'bg' => 'bg-rose-100 text-rose-800',
                 'class' => 'bg-rose-100 text-rose-800',
                 'color' => '#BE123C',

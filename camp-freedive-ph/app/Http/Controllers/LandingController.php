@@ -75,7 +75,7 @@ class LandingController extends Controller
                 'price_label' => number_format($discPrice) . ' php',
                 'inclusions' => is_array($discInc) ? $discInc : [],
                 'exclusions' => is_array($discExc) ? $discExc : [],
-                'note' => 'Perfect for first-time divers. Solo joiners and non-swimmers welcome.',
+                'note' => 'Perfect for first-time participants. Solo joiners and non-swimmers welcome.',
                 'prerequisite' => null,
             ],
             'fundive' => [
@@ -87,7 +87,7 @@ class LandingController extends Controller
                 'price_label' => 'For certified freedivers: ' . number_format($funCertPrice) . ' php (safety coach not included) | For non certified freedivers: ' . number_format($funNonCertPrice) . ' php',
                 'inclusions' => is_array($funInc) ? $funInc : [],
                 'exclusions' => is_array($funExc) ? $funExc : [],
-                'note' => 'For divers ready to explore open water. Solo joiners welcome.',
+                'note' => 'For participants ready to explore open water. Solo joiners welcome.',
                 'prerequisite' => 'PREREQUISITE: DISCOVERY CLASS',
             ],
             'refinement' => [
@@ -98,7 +98,7 @@ class LandingController extends Controller
                 'price_label' => number_format($refPrice) . ' php',
                 'inclusions' => is_array($refInc) ? $refInc : [],
                 'exclusions' => is_array($refExc) ? $refExc : [],
-                'note' => 'For divers looking to improve their skills. Solo joiners welcome.',
+                'note' => 'For participants looking to improve their skills. Solo joiners welcome.',
                 'prerequisite' => 'Prerequisite: Discovery Class completion.',
             ],
         ];

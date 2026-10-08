@@ -121,7 +121,7 @@
                                @keydown.enter.prevent="rule_type = 'seasonality'; condition_value = 'peak'"
                                @keydown.space.prevent="rule_type = 'seasonality'; condition_value = 'peak'"
                                @click="rule_type = 'seasonality'; condition_value = 'peak'"
-                               class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                               class="p-3.5 rounded-xl border border-transparent border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                :class="rule_type === 'seasonality' ? 'ring-2 ring-[#780000]' : ''">
                             <input type="radio" name="rule_type" value="seasonality" x-model="rule_type" class="hidden">
                             <div class="space-y-1">
@@ -139,7 +139,7 @@
                                @keydown.enter.prevent="rule_type = 'demand'; condition_value = 'high'"
                                @keydown.space.prevent="rule_type = 'demand'; condition_value = 'high'"
                                @click="rule_type = 'demand'; condition_value = 'high'"
-                               class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                               class="p-3.5 rounded-xl border border-transparent border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                :class="rule_type === 'demand' ? 'ring-2 ring-[#780000]' : ''">
                             <input type="radio" name="rule_type" value="demand" x-model="rule_type" class="hidden">
                             <div class="space-y-1">
@@ -157,7 +157,7 @@
                                @keydown.enter.prevent="rule_type = 'lead_time'; condition_value = '3'; condition_operator = '<='"
                                @keydown.space.prevent="rule_type = 'lead_time'; condition_value = '3'; condition_operator = '<='"
                                @click="rule_type = 'lead_time'; condition_value = '3'; condition_operator = '<='"
-                               class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                               class="p-3.5 rounded-xl border border-transparent border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                :class="rule_type === 'lead_time' ? 'ring-2 ring-[#780000]' : ''">
                             <input type="radio" name="rule_type" value="lead_time" x-model="rule_type" class="hidden">
                             <div class="space-y-1">

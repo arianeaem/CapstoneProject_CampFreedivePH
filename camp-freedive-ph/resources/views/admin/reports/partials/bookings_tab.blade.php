@@ -11,7 +11,7 @@
         ['label' => 'Paid & going', 'hint' => 'Downpayment paid, trip still ahead', 'count' => $groups['going'] ?? 0, 'color' => '#780000'],
         ['label' => 'Finished trip', 'hint' => 'Already dived with us', 'count' => $groups['completed'] ?? 0, 'color' => '#00C3D0'],
         ['label' => 'Waiting for downpayment', 'hint' => 'Started booking, not paid yet', 'count' => $groups['waiting'] ?? 0, 'color' => '#F59E0B'],
-        ['label' => 'Cancelled', 'hint' => 'By the guest or by the camp', 'count' => $groups['cancelled'] ?? 0, 'color' => '#D45D5D'],
+        ['label' => 'Cancelled', 'hint' => 'By the participant or by the camp', 'count' => $groups['cancelled'] ?? 0, 'color' => '#D45D5D'],
         ['label' => 'No-show', 'hint' => "Didn't arrive on the day", 'count' => $groups['no_show'] ?? 0, 'color' => '#6E6E73'],
     ];
     $statusLabel = fn ($status) => match (\App\Services\Analytics\AnalyticsService::bookingGroup($status)) {
@@ -38,7 +38,7 @@
             'badgeTone' => $delta >= 0 ? 'bg-[#00C3D0]/10 text-[#00636A]' : 'bg-[#FEF2F2] text-[#B91C1C]',
         ],
         [
-            'label' => 'Divers',
+            'label' => 'Participants',
             'value' => number_format($b['total_participants'] ?? 0),
             'hint' => ($b['confirmed_participants'] ?? 0) . ' on paid or finished trips · about ' . ($total > 0 ? round(($b['total_participants'] ?? 0) / $total, 1) : 0) . ' per booking',
             'tone' => 'text-[#1D1D1F]',
@@ -92,8 +92,8 @@
                         <p class="text-sm text-[#8E8E93]">Out of {{ $total }} {{ Str::plural('booking', $total) }}</p>
                     </div>
                     @foreach([
-                        ['label' => 'Alone (1 diver)', 'count' => $b['group_sizes']['solo'] ?? 0, 'color' => 'bg-[#780000]'],
-                        ['label' => 'Pairs (2 divers)', 'count' => $b['group_sizes']['duo'] ?? 0, 'color' => 'bg-[#00C3D0]'],
+                        ['label' => 'Alone (1 participant)', 'count' => $b['group_sizes']['solo'] ?? 0, 'color' => 'bg-[#780000]'],
+                        ['label' => 'Pairs (2 participants)', 'count' => $b['group_sizes']['duo'] ?? 0, 'color' => 'bg-[#00C3D0]'],
                         ['label' => 'Small groups (3–4)', 'count' => $b['group_sizes']['small_group'] ?? 0, 'color' => 'bg-[#D45D5D]'],
                         ['label' => 'Big groups (5 or more)', 'count' => $b['group_sizes']['large_group'] ?? 0, 'color' => 'bg-[#3A3A3C]'],
                     ] as $g)
@@ -110,8 +110,8 @@
 
                 <div class="space-y-3">
                     <div>
-                        <h3 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Can Discovery divers swim?</h3>
-                        <p class="text-sm text-[#8E8E93]">Out of {{ $b['swimmer_ability']['total'] ?? 0 }} Discovery {{ Str::plural('diver', $b['swimmer_ability']['total'] ?? 0) }}</p>
+                        <h3 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Can Discovery participants swim?</h3>
+                        <p class="text-sm text-[#8E8E93]">Out of {{ $b['swimmer_ability']['total'] ?? 0 }} Discovery {{ Str::plural('participant', $b['swimmer_ability']['total'] ?? 0) }}</p>
                     </div>
                     @foreach([
                         ['label' => "Can't swim", 'note' => 'Needs extra coach attention', 'count' => $b['swimmer_ability']['cannot_swim'] ?? 0, 'color' => 'bg-[#780000]'],
@@ -131,11 +131,11 @@
             </div>
         </div>
 
-        <!-- How early guests book -->
+        <!-- How early participants book -->
         <div class="lg:col-span-5 bg-white rounded-2xl border border-[#E5E5EA] p-5 flex flex-col justify-between">
             <div>
                 <div class="pb-1">
-                    <h3 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>How early guests book</h3>
+                    <h3 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>How early participants book</h3>
                     <p class="text-sm text-[#8E8E93]">Days between booking and the dive</p>
                 </div>
 
@@ -213,17 +213,17 @@
             </div>
             <p class="mt-3 pt-2.5 border-t border-[#F2F2F7] text-xs text-[#6E6E73]">
                 @if($avgLeadDays >= 14)
-                    Most guests plan early, so promos 2+ weeks before a batch work well.
+                    Most participants plan early, so promos 2+ weeks before a batch work well.
                 @elseif($avgLeadDays >= 7)
-                    Most guests book about a week before the dive.
+                    Most participants book about a week before the dive.
                 @else
-                    Most guests book last minute, so keep a few slots open close to the date.
+                    Most participants book last minute, so keep a few slots open close to the date.
                 @endif
             </p>
         </div>
     </div>
 
-    <!-- Bookings and guest list (can be collapsed) -->
+    <!-- Bookings and participant list (can be collapsed) -->
     <div x-data="{ showBookingsList: false }" class="bg-white rounded-2xl border border-[#E5E5EA] overflow-hidden">
         
         <!-- Toggle Header -->
@@ -237,7 +237,7 @@
                         {{ count($b['bookings_list'] ?? []) }}
                     </span>
                 </div>
-                <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">Who booked, which package, how many divers and which batch</p>
+                <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">Who booked, which package, how many participants and which batch</p>
             </div>
             
             <div class="flex items-center gap-2 shrink-0">
@@ -257,9 +257,9 @@
                     <thead class="border-b border-[#E5E5EA] text-xs font-semibold text-[#8E8E93]">
                         <tr>
                             <th class="p-4 pl-6">Booking / booked on</th>
-                            <th class="p-4">Guest</th>
+                            <th class="p-4">Booking Contact</th>
                             <th class="p-4">Package</th>
-                            <th class="p-4 text-center">Divers</th>
+                            <th class="p-4 text-center">Participants</th>
                             <th class="p-4">Batch</th>
                             <th class="p-4 pr-6 text-center">Status</th>
                         </tr>

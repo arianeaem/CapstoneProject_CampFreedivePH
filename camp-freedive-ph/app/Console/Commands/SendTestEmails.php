@@ -45,7 +45,7 @@ class SendTestEmails extends Command
         }
 
         $booking = Booking::with(['participants', 'payments', 'batch'])->latest()->first()
-            ?? new Booking(['booking_number' => 'BK-TEST', 'contact_name' => 'Test Diver', 'contact_email' => $to, 'class_type' => 'discovery', 'status' => 'confirmed', 'total_amount' => 4250, 'start_date' => now()->addWeek(), 'end_date' => now()->addWeek()->addDay()]);
+            ?? new Booking(['booking_number' => 'BK-TEST', 'contact_name' => 'Test Participant', 'contact_email' => $to, 'class_type' => 'discovery', 'status' => 'confirmed', 'total_amount' => 4250, 'start_date' => now()->addWeek(), 'end_date' => now()->addWeek()->addDay()]);
         $batch = $booking->batch ?? Batch::latest('start_date')->first()
             ?? new Batch(['batch_code' => 'TEST-BATCH', 'name' => 'Test Batch', 'start_date' => now()->addWeek(), 'end_date' => now()->addWeek()->addDay(), 'status' => 'open']);
         $cancellation = CancellationRequest::latest()->first()
@@ -64,7 +64,7 @@ class SendTestEmails extends Command
             'Cancellation rejected' => fn () => new CancellationRejectedMail($booking, $cancellation, 'Test: outside the cancellation window.'),
             'Batch rescheduled' => fn () => new BatchRescheduledMail($booking, $batch, 'Test: moved for operational reasons.'),
             'Weather cancellation' => fn () => new BatchWeatherCancellationMail($booking, $batch, 'Test: Critical Risk marine conditions.'),
-            'Weather risk: Critical (guest options)' => fn () => new WeatherRiskNoticeMail($booking, $batch, 'critical', 12),
+            'Weather risk: Critical (participant options)' => fn () => new WeatherRiskNoticeMail($booking, $batch, 'critical', 12),
             'Weather risk: High (heads-up)' => fn () => new WeatherRiskNoticeMail($booking, $batch, 'high', 12),
             'Coach schedule notice' => fn () => new CoachScheduleNotificationMail($batch, 'Test schedule update', 'This is a test coach notification.', $booking->booking_number),
             'Admin operational alert' => fn () => new AdminOperationalNotificationMail('TEST: Operational alert', 'This is a test admin notification.', ['Batch' => $batch->batch_code ?? 'N/A'], 'info'),

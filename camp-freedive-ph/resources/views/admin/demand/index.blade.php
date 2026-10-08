@@ -93,7 +93,7 @@
     <div>
         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Demand Forecast</h1>
         <p class="text-[#6E6E73] mt-1 max-w-3xl">
-            How many divers, bookings and how much revenue we expect for the upcoming batches, to help plan batches and coaches.
+            How many participants, bookings and how much revenue we expect for the upcoming batches, to help plan batches and coaches.
             These are <strong class="text-[#1D1D1F]">estimates</strong>, shown separately from actual bookings.
         </p>
     </div>
@@ -195,12 +195,12 @@
 
                         <div class="relative z-10 pt-2 border-t border-[#F2F2F7] space-y-1.5 text-xs sm:text-sm text-[#6E6E73]">
                             <div class="flex items-center justify-between">
-                                <span>Expected divers</span>
-                                <strong class="text-[#1D1D1F] font-extrabold whitespace-nowrap" x-text="whole(m.predicted_participants) + ' divers'"></strong>
+                                <span>Expected participants</span>
+                                <strong class="text-[#1D1D1F] font-extrabold whitespace-nowrap" x-text="whole(m.predicted_participants) + ' participants'"></strong>
                             </div>
                             <div class="flex items-center justify-between">
-                                <span>Avg divers per batch</span>
-                                <span class="font-bold text-[#1D1D1F] whitespace-nowrap"><span x-text="whole(m.avg_participants_per_batch)"></span><span class="font-normal text-[#8E8E93]"> divers</span></span>
+                                <span>Avg participants per batch</span>
+                                <span class="font-bold text-[#1D1D1F] whitespace-nowrap"><span x-text="whole(m.avg_participants_per_batch)"></span><span class="font-normal text-[#8E8E93]"> participants</span></span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span>Expected bookings</span>
@@ -225,7 +225,7 @@
 
             <p class="text-xs text-[#6E6E73] mt-3 leading-relaxed">
                 <strong class="text-[#1D1D1F]">Demand</strong> shows how busy a batch is:
-                Low = {{ $fmt($rules['low_max']) }} divers or fewer, Medium = {{ $fmt($rules['low_max']) }}–{{ $fmt($rules['medium_max']) }} divers, High = more than {{ $fmt($rules['medium_max']) }} divers.
+                Low = {{ $fmt($rules['low_max']) }} participants or fewer, Medium = {{ $fmt($rules['low_max']) }}–{{ $fmt($rules['medium_max']) }} participants, High = more than {{ $fmt($rules['medium_max']) }} participants.
                 <strong class="text-[#1D1D1F]">Season</strong>: Peak = our busiest time of year, Shoulder = in-between, Off-Peak = our quietest time.
             </p>
         </div>
@@ -234,10 +234,10 @@
     <!-- Per-batch charts: smooth filled line charts -->
     @php
         $charts = [
-            ['metric' => 'divers', 'title' => 'Divers per batch', 'desc' => 'Divers already booked next to the divers we expect by the trip date', 'unit' => ['diver', 'divers'], 'booked' => true],
+            ['metric' => 'divers', 'title' => 'Participants per batch', 'desc' => 'Participants already booked next to the participants we expect by the trip date', 'unit' => ['participant', 'participants'], 'booked' => true],
             ['metric' => 'bookings', 'title' => 'Bookings per batch', 'desc' => 'How many bookings we expect for each batch', 'unit' => ['booking', 'bookings'], 'booked' => false],
             ['metric' => 'revenue', 'title' => 'Revenue per batch', 'desc' => 'How much revenue we expect from each batch', 'unit' => null, 'booked' => false],
-            ['metric' => 'coaches', 'title' => 'Coaches needed per batch', 'desc' => 'How many coaches each batch needs to keep 1 coach for every ' . $diversPerCoach . ' divers', 'unit' => ['coach', 'coaches'], 'booked' => false],
+            ['metric' => 'coaches', 'title' => 'Coaches needed per batch', 'desc' => 'How many coaches each batch needs to keep 1 coach for every ' . $diversPerCoach . ' participants', 'unit' => ['coach', 'coaches'], 'booked' => false],
         ];
     @endphp
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -341,7 +341,7 @@
                                         </div>
                                         <div class="text-gray-300 text-xs flex items-center justify-between gap-2" x-show="batches[hover].low !== null && batches[hover].high !== null">
                                             <span>Could be</span>
-                                            <span class="font-bold text-white" x-text="whole(batches[hover].low) + ' to ' + whole(batches[hover].high) + ' divers'"></span>
+                                            <span class="font-bold text-white" x-text="whole(batches[hover].low) + ' to ' + whole(batches[hover].high) + ' participants'"></span>
                                         </div>
                                     @endif
                                     <div class="text-gray-300 text-xs flex items-center justify-between gap-2">
@@ -397,7 +397,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach(['participant_count' => 'Divers per batch', 'booking_count' => 'Bookings per batch'] as $key => $label)
+                                @foreach(['participant_count' => 'Participants per batch', 'booking_count' => 'Bookings per batch'] as $key => $label)
                                     @if(isset($cmp[$key]))
                                         @php
                                             $vals = [$cmp[$key]['model']['MAE'], $cmp[$key]['naive']['MAE'], $cmp[$key]['seasonal_naive']['MAE']];
@@ -418,7 +418,7 @@
                 <p class="text-xs text-[#6E6E73]">
                     Model {{ $modelInfo['model_version'] ?? '—' }} &middot; updated {{ $updatedAt ?? '—' }}
                     &middot; learned from {{ $modelInfo['training_batches'] ?? '—' }} past batches.
-                    The "could be" range covers 8 out of 10 likely outcomes. A forecast is never lower than the divers already booked.
+                    The "could be" range covers 8 out of 10 likely outcomes. A forecast is never lower than the participants already booked.
                 </p>
             </div>
         </div>

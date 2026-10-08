@@ -161,7 +161,7 @@
                                 <label for="filter-staffing" class="block font-bold text-[#6E6E73] text-sm mb-1">Staffing Status</label>
                                 <select id="filter-staffing" name="staffing" class="w-full min-h-[44px] px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
                                     <option value="">All Staffing States</option>
-                                    <option value="pending" {{ request('staffing') === 'pending' ? 'selected' : '' }}>Instructor Pending</option>
+                                    <option value="pending" {{ request('staffing') === 'pending' ? 'selected' : '' }}>Coach Pending</option>
                                     <option value="staffed" {{ request('staffing') === 'staffed' ? 'selected' : '' }}>Fully Staffed</option>
                                 </select>
                             </div>
@@ -221,7 +221,7 @@
                             </span>
                             @if($batch->total_participants_count > 0 && $batch->is_coach_pending)
                                 <span class="px-2.5 py-0.5 rounded-full text-xs font-bold text-amber-900 bg-amber-50">
-                                    Instructor Pending
+                                    Coach Pending
                                 </span>
                             @elseif($batch->assigned_coaches_count > 0)
                                 <span class="px-2.5 py-0.5 rounded-full text-xs font-bold text-emerald-800 bg-emerald-50">

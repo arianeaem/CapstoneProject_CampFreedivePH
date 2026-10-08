@@ -195,7 +195,7 @@
                                                 @endif
                                             </span>
                                             <span class="block text-xs text-[#6E6E73]">
-                                                {{ $coachItem['recent_student_count'] }} {{ Str::plural('student', $coachItem['recent_student_count']) }} in last 30 days
+                                                {{ $coachItem['recent_student_count'] }} {{ Str::plural('participant', $coachItem['recent_student_count']) }} in last 30 days
                                                 &middot;
                                                 @if($coachItem['days_since_last_assignment'] === null)
                                                     never assigned
@@ -215,7 +215,7 @@
                     </div>
                 @else
                     <div class="py-5 px-4 rounded-xl text-center text-sm text-[#8E8E93] bg-[#F2F2F7] border border-dashed border-[#E5E5EA]">
-                        No participants registered in this batch yet. Coach matching will open once students join.
+                        No participants registered in this batch yet. Coach matching will open once participants join.
                     </div>
                 @endif
 
@@ -244,7 +244,7 @@
                 @csrf
                 <input type="hidden" name="batch_id" :value="shareBatchId">
 
-                <div class="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E5EA]">
+                <div class="flex items-center justify-end gap-2 pt-3">
                     <button type="button" @click="shareModalOpen = false" class="btn-secondary px-4 py-2 text-sm font-semibold rounded-xl cursor-pointer">
                         Cancel
                     </button>
@@ -272,7 +272,7 @@
                 <input type="hidden" name="batch_id" :value="unassignBatchId">
                 <input type="hidden" name="coach_id" :value="unassignCoachId">
 
-                <div class="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E5EA]">
+                <div class="flex items-center justify-end gap-2 pt-3">
                     <button type="button" @click="unassignModalOpen = false" class="btn-secondary px-4 py-2 text-sm font-semibold rounded-xl cursor-pointer">
                         Cancel
                     </button>

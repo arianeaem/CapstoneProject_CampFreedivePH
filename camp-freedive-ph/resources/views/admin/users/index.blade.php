@@ -56,14 +56,14 @@
         <div class="banner banner-warning space-y-3" role="alert">
             <div>
                 <p class="font-extrabold text-[#92400E]">{{ $blocked['name'] }} can't be {{ $blocked['action'] }} yet</p>
-                <p class="text-[#92400E] mt-0.5">They still have the upcoming batches below. Reassign their students to other coaches (or remove them from the coach team) first, then try again.</p>
+                <p class="text-[#92400E] mt-0.5">They still have the upcoming batches below. Reassign their participants to other coaches (or remove them from the coach team) first, then try again.</p>
             </div>
             <ul class="divide-y divide-[#FDE68A] rounded-lg border border-[#FDE68A] bg-white">
                 @foreach($blocked['batches'] as $b)
                     <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                         <span><strong class="text-[#1D1D1F]">{{ $b['batch_number'] }}</strong> <span class="text-[#6E6E73]">&middot; {{ $b['date'] }}</span></span>
                         <span class="text-xs font-bold px-2 py-0.5 rounded-md bg-[#FFFBEB] text-[#92400E]">
-                            {{ $b['team_only'] ? 'On the coach team' : $b['students'] . ' ' . Str::plural('student', $b['students']) . ' to reassign' }}
+                            {{ $b['team_only'] ? 'On the coach team' : $b['students'] . ' ' . Str::plural('participant', $b['students']) . ' to reassign' }}
                         </span>
                     </li>
                 @endforeach
@@ -438,7 +438,7 @@
                 <div>
                     <label class="block font-bold text-[#1D1D1F] mb-1.5">Assigned Staff Role <span class="text-[#780000]">*</span></label>
                     <select name="role" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
-                        <option value="coach" selected>Freediving Coach (Instructor Portal Access)</option>
+                        <option value="coach" selected>Freediving Coach (Coach Portal Access)</option>
                         @if($currentUser->isOwner())
                             <option value="admin">Camp Admin (Operations & Booking Coordinator)</option>
                         @endif
@@ -613,12 +613,12 @@
                     <li>They can no longer sign in.</li>
                     <li>Their records (bookings, dives coached, history) are <strong>kept</strong>.</li>
                     <li>They will get an email saying their account was removed.</li>
-                    <li>Coaches with upcoming batches must have their students reassigned first.</li>
+                    <li>Coaches with upcoming batches must have their participants reassigned first.</li>
                     <li>You can restore the account later from the <strong>Removed</strong> filter.</li>
                 </ul>
             </div>
 
-            <form :action="deleteUser.url" method="POST" class="pt-2 flex items-center justify-end border-t border-[#F2F2F7] gap-2">
+            <form :action="deleteUser.url" method="POST" class="flex items-center justify-end gap-2">
                 @csrf
                 @method('DELETE')
                 <button type="button" @click="openDeleteModal = false" class="btn-secondary px-3.5 py-2 text-sm font-semibold cursor-pointer">Cancel</button>

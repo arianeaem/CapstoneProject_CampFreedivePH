@@ -19,9 +19,9 @@ use App\Http\Requests\ManageBooking\FindBookingRequest;
 use App\Http\Requests\ManageBooking\CancelBookingRequest;
 
 /**
- * Manage Booking page for guests.
+ * Manage Booking page for participants.
  *
- * - guests log in with their booking number (CFP-YYYY-XXXX) and 4-digit PIN, no account needed
+ * - participants log in with their booking number (CFP-YYYY-XXXX) and 4-digit PIN, no account needed
  * - they can request a reschedule (until 72 hours before) or a cancellation
  * - weather cancellations (storm warning / Critical Risk) get a full refund
  * - normal cancellations get a refund based on how early they cancel
@@ -51,7 +51,7 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Check the booking number and PIN and log the guest in.
+     * Check the booking number and PIN and log the participant in.
      *
      * @param Request $request booking_number and pin
      * @return RedirectResponse
@@ -80,7 +80,7 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Booking details page for the guest.
+     * Booking details page for the participant.
      *
      * @param Request $request
      * @param string $booking_number e.g. CFP-2026-1234
@@ -116,7 +116,7 @@ class ManageBookingController extends Controller
             'auth_booking_pin' => $booking->pin,
         ]);
 
-        // What the guest is allowed to do right now (reschedule/cancel)
+        // What the participant is allowed to do right now (reschedule/cancel)
         $policy = $this->policyEngine->evaluate($booking);
 
         // Weather for the booking date
@@ -126,7 +126,7 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Guest asks to move the dive date.
+     * Participant asks to move the dive date.
      *
      * 1. Downpayment must be paid first.
      * 2. Must be at least 72 hours before the dive.
@@ -153,7 +153,7 @@ class ManageBookingController extends Controller
             return back()->with('error', 'Rescheduling is not allowed: ' . $policy['reschedule_message']);
         }
 
-        // Check the weather on the new date so the guest doesn't move into a storm
+        // Check the weather on the new date so the participant doesn't move into a storm
         $forecast = $this->weatherService->getForecast($validated['requested_start_date'], $validated['requested_end_date']);
         if (!$forecast['is_bookable']) {
             return back()->with('error', 'The requested new date has a Critical Storm Warning. Please pick an alternative safe date.');
@@ -165,7 +165,7 @@ class ManageBookingController extends Controller
             'current_end_date' => $booking->end_date,
             'requested_start_date' => $validated['requested_start_date'],
             'requested_end_date' => $validated['requested_end_date'],
-            'reason' => $validated['reason'] ?? 'Customer requested reschedule',
+            'reason' => $validated['reason'] ?? 'Participant requested reschedule',
             'status' => 'pending',
         ]);
 
@@ -186,7 +186,7 @@ class ManageBookingController extends Controller
     }
 
     /**
-     * Guest asks to cancel the booking.
+     * Participant asks to cancel the booking.
      *
      * Refund is computed by BookingPolicyEngine:
      * - weather cancellation: full refund
@@ -220,7 +220,7 @@ class ManageBookingController extends Controller
         $cancellationRequest = CancellationRequest::create([
             'booking_id' => $booking->id,
             'calculated_refund_amount' => $policy['calculated_refund'],
-            'reason' => $validated['reason'] ?? 'Customer requested cancellation',
+            'reason' => $validated['reason'] ?? 'Participant requested cancellation',
             'force_majeure_flag' => $policy['is_force_majeure'],
             'status' => 'pending',
         ]);

@@ -13,7 +13,7 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Email to the guest when their batch is cancelled because of bad weather
+ * Email to the participant when their batch is cancelled because of bad weather
  * or other sea hazards. Sent through the queue.
  */
 class BatchWeatherCancellationMail extends Mailable implements ShouldQueue
@@ -64,7 +64,7 @@ class BatchWeatherCancellationMail extends Mailable implements ShouldQueue
     }
 
     /**
-     * Total the guest has paid (all completed payments get a 100% refund).
+     * Total the participant has paid (all completed payments get a 100% refund).
      */
     public function refundAmount(): float
     {

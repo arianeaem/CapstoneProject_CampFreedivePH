@@ -240,7 +240,7 @@ class BatchSafetyViewModel
 
     // --- cancel panel
 
-    /** @return array{bookings: int, divers: int, refunds: int} */
+    /** @return array{bookings: int, participants: int, refunds: int} */
     public function cancelImpact(): array
     {
         $bookings = $this->data['batch']->bookings

@@ -22,7 +22,7 @@ class UserAccountService
 {
     /**
      * Upcoming batches a coach is still responsible for. Each item:
-     * ['batch' => Batch, 'students' => int (assigned students), 'team_only' => bool (on the coach team, no students yet)]
+     * ['batch' => Batch, 'students' => int (assigned participants), 'team_only' => bool (on the coach team, no participants yet)]
      */
     public function upcomingCoachCommitments(User $coach): Collection
     {
@@ -32,7 +32,7 @@ class UserAccountService
 
         $today = Carbon::today('Asia/Manila');
 
-        // 1. Students assigned to this coach in upcoming batches
+        // 1. Participants assigned to this coach in upcoming batches
         $byBatch = ParticipantAssignment::with('batch')
             ->where('coach_id', $coach->id)
             ->where('status', 'assigned')
@@ -46,7 +46,7 @@ class UserAccountService
                 'team_only' => false,
             ]);
 
-        // 2. Upcoming batches where the coach is on the coach team (assigned availability) without students yet
+        // 2. Upcoming batches where the coach is on the coach team (assigned availability) without participants yet
         $teamBatches = Batch::whereDate('start_date', '>=', $today)
             ->whereNotIn('status', ['completed', 'cancelled_by_camp'])
             ->whereNotIn('id', $byBatch->keys())

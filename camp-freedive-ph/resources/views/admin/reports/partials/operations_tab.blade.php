@@ -25,13 +25,13 @@
         [
             'label' => 'How full batches are',
             'value' => ($op['avg_occupancy'] ?? 0) . '%',
-            'hint' => ($op['total_booked_pax'] ?? 0) . ' of ' . ($op['total_capacity_slots'] ?? 0) . ' diver slots booked'
+            'hint' => ($op['total_booked_pax'] ?? 0) . ' of ' . ($op['total_capacity_slots'] ?? 0) . ' participant slots booked'
                 . (($op['full_capacity_batches'] ?? 0) > 0 ? ' · ' . $op['full_capacity_batches'] . ' almost full' : ''),
         ],
         [
             'label' => 'Enough coaches',
             'value' => ($op['safety_compliance_rate'] ?? 100) . '%',
-            'hint' => ($op['compliant_batches_count'] ?? 0) . ' of ' . $running . ' batches have 1 coach for every ' . $ratio . ' divers',
+            'hint' => ($op['compliant_batches_count'] ?? 0) . ' of ' . $running . ' batches have 1 coach for every ' . $ratio . ' participants',
             'tone' => $needCoaches > 0 ? 'text-[#B45309]' : 'text-[#00838C]',
             'badge' => $needCoaches > 0 ? $needCoaches . ' need coaches' : 'All covered',
             'badgeTone' => $needCoaches > 0 ? 'bg-[#FFFBEB] text-[#B45309]' : 'bg-[#00C3D0]/10 text-[#00636A]',
@@ -111,7 +111,7 @@
                     <thead>
                         <tr class="text-[#8E8E93] text-xs border-b border-[#E5E5EA]">
                             <th class="py-2.5 pr-4 font-semibold">Batch</th>
-                            <th class="py-2.5 pr-4 font-semibold min-w-[150px]">Divers booked</th>
+                            <th class="py-2.5 pr-4 font-semibold min-w-[150px]">Participants booked</th>
                             <th class="py-2.5 pr-4 font-semibold">Coaches</th>
                             <th class="py-2.5 pr-4 font-semibold">Enough coaches?</th>
                             <th class="py-2.5 font-semibold">Status</th>
@@ -155,7 +155,7 @@
                                     @if($isCancelled)
                                         <span class="text-[#8E8E93]">—</span>
                                     @elseif($pax === 0)
-                                        <span class="text-[#8E8E93]">No divers yet</span>
+                                        <span class="text-[#8E8E93]">No participants yet</span>
                                     @elseif($batchCoaches->count() >= $required)
                                         <span class="font-semibold text-[#00838C]">Yes &middot; {{ $batchCoaches->count() }} of {{ $required }}</span>
                                     @else

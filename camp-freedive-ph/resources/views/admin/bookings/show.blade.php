@@ -123,7 +123,7 @@
                         <span class="text-[#1D1D1F] font-medium">{{ $booking->boat_dive ? 'Yes (+₱600/pax Sanctuary Boat Dive)' : 'No' }}</span>
                     </div>
                     <div>
-                        <span class="text-xs font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Reservation PIN (Guest Access)</span>
+                        <span class="text-xs font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Reservation PIN (Manage Booking Access)</span>
                         <strong class="text-[#780000] font-mono text-base">{{ $booking->pin }}</strong>
                     </div>
                 </div>
@@ -281,7 +281,7 @@
                         <option value="rescheduled" {{ $booking->status === 'rescheduled' ? 'selected' : '' }}>Rescheduled</option>
                         <option value="no_show" {{ $booking->status === 'no_show' ? 'selected' : '' }}>No-Show (Forfeits Downpayment)</option>
                         <option value="cancelled_by_camp" {{ $booking->status === 'cancelled_by_camp' ? 'selected' : '' }}>Cancelled by Camp (Weather/Admin)</option>
-                        <option value="cancelled_by_guest" {{ $booking->status === 'cancelled_by_guest' ? 'selected' : '' }}>Cancelled by Guest</option>
+                        <option value="cancelled_by_guest" {{ $booking->status === 'cancelled_by_guest' ? 'selected' : '' }}>Cancelled by Participant</option>
                     </select>
                 </div>
 
@@ -294,7 +294,7 @@
                     <strong>Note:</strong> Status changes propagate immediately to the Coach Portal, Batch schedule, and Reports. If setting to Cancelled, please process the refund via Payments & Refunds.
                 </div>
 
-                <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E5E5EA]">
+                <div class="flex items-center justify-end gap-2.5 pt-3">
                     <button type="button" @click="openStatusModal = false" class="btn-secondary px-4 py-2 text-sm font-semibold">Cancel</button>
                     <button type="submit" class="btn-primary px-5 py-2 text-sm font-bold">
                         Update Status

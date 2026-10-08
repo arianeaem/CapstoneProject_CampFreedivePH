@@ -23,7 +23,7 @@ use App\Http\Requests\Admin\Batches\MoveBookingRequest;
  * Admin pages for batches.
  *
  * - create, confirm, run and complete weekend batches
- * - group confirmed bookings into batches (1 coach for every 4 students)
+ * - group confirmed bookings into batches (1 coach for every 4 participants)
  * - shows the demand forecast to help decide on extra slots or staff
  */
 class BatchManagementController extends Controller
@@ -313,7 +313,7 @@ class BatchManagementController extends Controller
         // Coaches assigned to this batch
         $assignedCoaches = $batch->assigned_coaches;
 
-        // Students with no coach yet
+        // Participants with no coach yet
         $unassignedStudentsCount = $batch->bookings->flatMap->participants
             ->filter(fn($p) => !$p->activeAssignment)
             ->count();
@@ -421,7 +421,7 @@ class BatchManagementController extends Controller
             $actionLabel = match ($validated['status']) {
                 'cancelled_by_camp' => 'Cancelled by Camp (Full refund eligibility triggered for all connected bookings)',
                 'completed' => 'Marked as Completed',
-                'rescheduled' => 'Rescheduled (Customer email notifications dispatched)',
+                'rescheduled' => 'Rescheduled (Participant email notifications dispatched)',
                 default => 'Updated to ' . ucfirst($validated['status']),
             };
 

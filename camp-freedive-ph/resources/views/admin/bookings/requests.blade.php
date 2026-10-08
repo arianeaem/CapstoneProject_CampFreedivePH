@@ -1,11 +1,11 @@
 @extends('layouts.admin')
 
-@section('title', 'Pending Guest Requests | Camp FreedivePH')
+@section('title', 'Pending Participant Requests | Camp FreedivePH')
 
 @section('breadcrumb')
     <a href="{{ portal_route('bookings.index') }}" class="text-[#6E6E73] hover:text-[#780000] font-medium transition-colors">Bookings</a>
     <svg class="w-3.5 h-3.5 text-[#8E8E93] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
-    <span class="font-bold text-[#1D1D1F]">Pending Guest Requests</span>
+    <span class="font-bold text-[#1D1D1F]">Pending Participant Requests</span>
 @endsection
 
 @section('content')
@@ -27,7 +27,7 @@
     <!-- Top Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Pending Guest Requests</h1>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Pending Participant Requests</h1>
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
@@ -74,7 +74,7 @@
                         </div>
                     </div>
 
-                    <!-- Students Connected to Booking -->
+                    <!-- Participants Connected to Booking -->
                     <div class="mt-3">
                         <span class="font-extrabold text-sm text-[#1D1D1F] leading-snug block">
                             {{ $studentsDisplay }}
@@ -99,7 +99,7 @@
 
                     @if($req->reason)
                         <div class="mt-3 space-y-0.5">
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">GUEST REASON</span>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">PARTICIPANT REASON</span>
                             <p class="text-xs text-[#6E6E73] italic">"{{ $req->reason }}"</p>
                         </div>
                     @endif
@@ -125,7 +125,7 @@
             </div>
             @empty
             <div class="col-span-full bg-white rounded-xl border border-[#E5E5EA] p-6 text-center text-sm text-[#8E8E93]">
-                No pending guest reschedule requests.
+                No pending participant reschedule requests.
             </div>
             @endforelse
         </div>
@@ -172,7 +172,7 @@
                         </div>
                     </div>
 
-                    <!-- Students Connected to Booking -->
+                    <!-- Participants Connected to Booking -->
                     <div class="mt-3">
                         <span class="font-extrabold text-sm text-[#1D1D1F] leading-snug block">
                             {{ $studentsDisplay }}
@@ -224,7 +224,7 @@
 
                     @if($req->reason)
                         <div class="mt-3 space-y-0.5">
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">GUEST REASON</span>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">PARTICIPANT REASON</span>
                             <p class="text-xs text-[#6E6E73] italic">"{{ $req->reason }}"</p>
                         </div>
                     @endif
@@ -281,7 +281,7 @@
             </div>
             @empty
             <div class="col-span-full bg-white rounded-xl border border-[#E5E5EA] p-6 text-center text-sm text-[#8E8E93]">
-                No pending guest cancellation requests.
+                No pending participant cancellation requests.
             </div>
             @endforelse
         </div>

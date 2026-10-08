@@ -103,12 +103,12 @@ class ExportService
 
         $s->section('Money at a glance')->header(['What', 'Amount']);
         $s->row(['Money collected', (float) $fin['gross_revenue']])
-            ->row(['Refunded to guests', (float) $fin['refunds_processed']])
+            ->row(['Refunded to participants', (float) $fin['refunds_processed']])
             ->row([['Money kept (collected minus refunds)', X::TOTAL_TEXT], [(float) $fin['net_revenue'], X::TOTAL_PESO]])
             ->row(['Paid as deposit', (float) $fin['downpayment_revenue']])
             ->row(['Paid in full', (float) $fin['balance_revenue']])
             ->row(['Still to collect (unpaid balances)', (float) $fin['outstanding_receivables']])
-            ->row(['Average per diver', (float) $fin['arpd']])
+            ->row(['Average per participant', (float) $fin['arpd']])
             ->row(['Average per booking', (float) $fin['arpb']])
             ->blank();
 
@@ -145,7 +145,7 @@ class ExportService
             ->blank();
 
         $s->section('Revenue by Class', 'Money collected per package')
-            ->header(['Package', 'Paid bookings', 'Divers', 'Money collected', 'Share of money']);
+            ->header(['Package', 'Paid bookings', 'Participants', 'Money collected', 'Share of money']);
         foreach ($fin['packages'] as $pkg) {
             $s->row([$pkg['name'], (int) $pkg['bookings_count'], (int) $pkg['pax_count'], (float) $pkg['revenue'], [(float) $pkg['share_percentage'], X::PERCENT]]);
         }
@@ -155,8 +155,8 @@ class ExportService
             ->blank();
 
         $dp = $fin['dynamic_pricing'];
-        $s->section('Individual Revenue Chart for Other Services', 'Add-ons are estimates: number of divers × the add-on price')
-            ->header(['Extra', 'Bookings', 'Divers', 'Money'])
+        $s->section('Individual Revenue Chart for Other Services', 'Add-ons are estimates: number of participants × the add-on price')
+            ->header(['Extra', 'Bookings', 'Participants', 'Money'])
             ->row(['Carpool from Manila', (int) $fin['carpool']['bookings_count'], (int) $fin['carpool']['pax_count'], (float) $fin['carpool']['estimated_revenue']])
             ->row(['Boat dive', (int) $fin['boat_dive']['bookings_count'], (int) $fin['boat_dive']['pax_count'], (float) $fin['boat_dive']['estimated_revenue']])
             ->row(['Busy-day pricing (extra)', '', '', (float) $dp['positive_yield']])
@@ -179,7 +179,7 @@ class ExportService
             ->widths([20, 16, 26, 14, 16, 16, 16, 14, 16])
             ->section('Overall Historical Transaction List for Payments and Refunds', 'Every payment and refund in this period')
             ->table(
-                ['Date', 'Booking', 'Guest', 'Package', 'Payment', 'Amount', 'Refunded', 'Method', 'Status'],
+                ['Date', 'Booking', 'Booking contact', 'Package', 'Payment', 'Amount', 'Refunded', 'Method', 'Status'],
                 $payments->map(fn ($p) => [
                     $p->created_at->copy()->setTimezone('Asia/Manila')->format('M d, Y g:i A'),
                     $p->booking?->booking_number ?? '#' . $p->booking_id,
@@ -206,7 +206,7 @@ class ExportService
 
         $s->section('Bookings at a glance')->header(['What', 'Count', 'Share'])
             ->row(['Bookings made', $total])
-            ->row(['Divers in those bookings', (int) $b['total_participants']])
+            ->row(['Participants in those bookings', (int) $b['total_participants']])
             ->row(['Paid the downpayment', (int) $b['paid_bookings'], $share($b['paid_bookings'], $total)])
             ->row(['Cancelled', (int) $b['cancelled_bookings'], $share($b['cancelled_bookings'], $total)])
             ->row(['Reschedule requests', (int) $b['reschedule_count']])
@@ -227,15 +227,15 @@ class ExportService
 
         $gs = $b['group_sizes'];
         $s->section('Who books together')->header(['Group', 'Bookings', 'Share'])
-            ->row(['Alone (1 diver)', (int) $gs['solo'], $share($gs['solo'], $total)])
-            ->row(['Pairs (2 divers)', (int) $gs['duo'], $share($gs['duo'], $total)])
+            ->row(['Alone (1 participant)', (int) $gs['solo'], $share($gs['solo'], $total)])
+            ->row(['Pairs (2 participants)', (int) $gs['duo'], $share($gs['duo'], $total)])
             ->row(['Small groups (3–4)', (int) $gs['small_group'], $share($gs['small_group'], $total)])
             ->row(['Big groups (5 or more)', (int) $gs['large_group'], $share($gs['large_group'], $total)])
             ->row([['Total', X::TOTAL_TEXT], [(int) array_sum($gs), X::TOTAL_NUMBER]])
             ->blank();
 
         $sw = $b['swimmer_ability'];
-        $s->section('Can Discovery divers swim?')->header(['Swimming', 'Divers', 'Share'])
+        $s->section('Can Discovery participants swim?')->header(['Swimming', 'Participants', 'Share'])
             ->row(["Can't swim", (int) $sw['cannot_swim'], $share($sw['cannot_swim'], $sw['total'])])
             ->row(['Can swim', (int) $sw['can_swim'], $share($sw['can_swim'], $sw['total'])])
             ->row(['Strong swimmer', (int) $sw['strong'], $share($sw['strong'], $sw['total'])])
@@ -244,7 +244,7 @@ class ExportService
 
         $lt = $b['lead_times'];
         $leadTotal = array_sum($lt);
-        $s->section('How early guests book', 'Days between making the booking and the dive')->header(['Booked', 'Bookings', 'Share'])
+        $s->section('How early participants book', 'Days between making the booking and the dive')->header(['Booked', 'Bookings', 'Share'])
             ->row(['Under 4 days before', (int) $lt['under_3_days'], $share($lt['under_3_days'], $leadTotal)])
             ->row(['4–7 days before', (int) $lt['4_to_7_days'], $share($lt['4_to_7_days'], $leadTotal)])
             ->row(['1–2 weeks before', (int) $lt['8_to_14_days'], $share($lt['8_to_14_days'], $leadTotal)])
@@ -258,7 +258,7 @@ class ExportService
         $book->addSheet('Bookings')
             ->widths([16, 14, 24, 28, 16, 12, 8, 14, 14, 16, 24, 14, 14, 14, 10, 10])
             ->table(
-                ['Booking', 'Booked on', 'Guest', 'Email', 'Phone', 'Package', 'Divers', 'Trip starts', 'Trip ends', 'Batch', 'Status', 'Price', 'Paid', 'Still to pay', 'Carpool', 'Boat dive'],
+                ['Booking', 'Booked on', 'Booking contact', 'Email', 'Phone', 'Package', 'Participants', 'Trip starts', 'Trip ends', 'Batch', 'Status', 'Price', 'Paid', 'Still to pay', 'Carpool', 'Boat dive'],
                 $b['bookings_list']->map(function ($bk) use ($paidByBooking) {
                     $paidAmount = (float) ($paidByBooking[$bk->id] ?? 0);
                     $owing = in_array(AnalyticsService::bookingGroup($bk->status), ['going', 'completed'], true) ? max(0, (float) $bk->total_amount - $paidAmount) : 0;
@@ -284,15 +284,15 @@ class ExportService
                 })
             );
 
-        // Divers list
+        // Participants list
         $participants = BookingParticipant::with('booking')
             ->whereIn('booking_id', $b['bookings_list']->pluck('id'))
             ->orderBy('booking_id')
             ->get();
-        $book->addSheet('Divers')
+        $book->addSheet('Participants')
             ->widths([26, 16, 12, 8, 16, 32, 24, 16, 14, 24])
             ->table(
-                ['Diver', 'Booking', 'Package', 'Age', 'Swimming', 'Health notes', 'Booked by', 'Phone', 'Trip starts', 'Status'],
+                ['Participant', 'Booking', 'Package', 'Age', 'Swimming', 'Health notes', 'Booked by', 'Phone', 'Trip starts', 'Status'],
                 $participants->map(fn ($p) => [
                     $p->name,
                     $p->booking?->booking_number ?? '',
@@ -322,13 +322,13 @@ class ExportService
             ->row(['  Still to run', (int) $op['active_batches']])
             ->row(['  Finished', (int) $op['completed_batches']])
             ->row(['  Cancelled', (int) $op['cancelled_batches']])
-            ->row(['Diver slots booked', (int) $op['total_booked_pax']])
-            ->row(['Diver slots available', (int) $op['total_capacity_slots']])
+            ->row(['Participant slots booked', (int) $op['total_booked_pax']])
+            ->row(['Participant slots available', (int) $op['total_capacity_slots']])
             ->row(['How full batches are', [(float) $op['avg_occupancy'], X::PERCENT]])
             ->row(['Batches almost full (90% or more)', (int) $op['full_capacity_batches']])
             ->blank();
 
-        $s->section('Coaches at a glance', "Rule: 1 coach for every {$ratio} divers")->header(['What', 'Count'])
+        $s->section('Coaches at a glance', "Rule: 1 coach for every {$ratio} participants")->header(['What', 'Count'])
             ->row(['Batches with enough coaches', (int) $op['compliant_batches_count'], ['out of ' . (int) $op['running_batches_count'] . ' running batches', X::NOTE]])
             ->row(['Batches with enough coaches (%)', [(float) $op['safety_compliance_rate'], X::PERCENT]])
             ->row(['Coach trips', (int) $co['total_assignments_period']])
@@ -338,7 +338,7 @@ class ExportService
         $book->addSheet('Batches')
             ->widths([16, 14, 14, 16, 10, 10, 10, 32, 10, 10, 18, 16])
             ->table(
-                ['Batch', 'Starts', 'Ends', 'Status', 'Divers', 'Slots', 'Full', 'Coaches', 'Coaches', 'Needed', 'Enough coaches?', 'Sea safety'],
+                ['Batch', 'Starts', 'Ends', 'Status', 'Participants', 'Slots', 'Full', 'Coaches', 'Coaches', 'Needed', 'Enough coaches?', 'Sea safety'],
                 $op['batches_list']->map(function ($batch) use ($ratio) {
                     $pax = $batch->total_participants_count;
                     $cap = $batch->computed_capacity;
@@ -357,7 +357,7 @@ class ExportService
                         $coaches->pluck('name')->implode(', ') ?: 'None yet',
                         $coaches->count(),
                         $needed,
-                        $cancelled ? '—' : ($pax === 0 ? 'No divers yet' : ($coaches->count() >= $needed ? 'Yes' : 'Needs ' . ($needed - $coaches->count()) . ' more')),
+                        $cancelled ? '—' : ($pax === 0 ? 'No participants yet' : ($coaches->count() >= $needed ? 'Yes' : 'Needs ' . ($needed - $coaches->count()) . ' more')),
                         ucwords(str_replace('_', ' ', (string) ($batch->risk_classification ?? 'Not checked'))),
                     ];
                 })

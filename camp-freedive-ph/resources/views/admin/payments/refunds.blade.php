@@ -90,7 +90,7 @@
                         </div>
                     </div>
 
-                    <!-- Students in the booking -->
+                    <!-- Participants in the booking -->
                     @php
                         $studentNames = $booking->participants->pluck('name')->filter()->values();
                         $studentsDisplay = $studentNames->isNotEmpty() ? $studentNames->implode(', ') : $booking->contact_name;
@@ -203,7 +203,7 @@
                 </div>
                 <h3 class="font-bold text-base text-[#1D1D1F]">No Pending Refund Requests</h3>
                 <p class="text-sm text-[#6E6E73] max-w-md mx-auto">
-                    All customer cancellation refund claims have been reviewed and processed.
+                    All participant cancellation refund claims have been reviewed and processed.
                 </p>
             </div>
             @endforelse
@@ -225,7 +225,7 @@
                     <thead class="bg-[#F2F2F7] border-b border-[#E5E5EA] text-[#6E6E73] font-bold">
                         <tr>
                             <th class="py-3 px-4 text-left">Booking #</th>
-                            <th class="py-3 px-4 text-left">Lead Guest</th>
+                            <th class="py-3 px-4 text-left">Booking Contact</th>
                             <th class="py-3 px-4 text-left">Amount</th>
                             <th class="py-3 px-4 text-left">Resolution</th>
                             <th class="py-3 px-4 text-left">Processed By</th>

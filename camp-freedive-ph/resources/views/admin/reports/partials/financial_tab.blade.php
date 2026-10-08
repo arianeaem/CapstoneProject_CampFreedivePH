@@ -30,7 +30,7 @@
             'tone' => 'text-[#B45309]',
         ],
         [
-            'label' => 'Average per diver',
+            'label' => 'Average per participant',
             'value' => $peso($fin['arpd'] ?? 0),
             'hint' => $peso($fin['arpb'] ?? 0) . ' per booking on average',
             'tone' => 'text-[#00838C]',
@@ -43,7 +43,7 @@
         <div class="lg:col-span-8 bg-white rounded-2xl border border-[#E5E5EA] p-5 space-y-4">
             <div>
                 <h3 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Money by package</h3>
-                <p class="text-sm text-[#8E8E93]">How much each package brought in, and how many paid bookings and divers it had</p>
+                <p class="text-sm text-[#8E8E93]">How much each package brought in, and how many paid bookings and participants it had</p>
             </div>
 
             @php
@@ -78,7 +78,7 @@
                                 <span class="w-1.5 self-stretch rounded-full shrink-0" style="background: {{ $pData['color'] }};"></span>
                                 <div class="min-w-0">
                                     <span class="block font-extrabold text-[#1D1D1F]">{{ $pData['name'] }}</span>
-                                    <span class="block text-xs text-[#6E6E73]">{{ $pData['bookings_count'] }} paid {{ Str::plural('booking', $pData['bookings_count']) }} &middot; {{ $pData['pax_count'] }} {{ Str::plural('diver', $pData['pax_count']) }}</span>
+                                    <span class="block text-xs text-[#6E6E73]">{{ $pData['bookings_count'] }} paid {{ Str::plural('booking', $pData['bookings_count']) }} &middot; {{ $pData['pax_count'] }} {{ Str::plural('participant', $pData['pax_count']) }}</span>
                                 </div>
                             </div>
                             <div class="text-right shrink-0">
@@ -112,7 +112,7 @@
                 <div class="py-2.5 flex items-center justify-between gap-3">
                     <dt>
                         <span class="block font-semibold text-[#1D1D1F]">Boat dive</span>
-                        <span class="block text-xs text-[#8E8E93]">{{ $fin['boat_dive']['pax_count'] ?? 0 }} divers &middot; estimate</span>
+                        <span class="block text-xs text-[#8E8E93]">{{ $fin['boat_dive']['pax_count'] ?? 0 }} participants &middot; estimate</span>
                     </dt>
                     <dd class="font-black text-[#1D1D1F] whitespace-nowrap">{{ $peso($fin['boat_dive']['estimated_revenue'] ?? 0) }}</dd>
                 </div>

@@ -146,7 +146,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1.5">
                             <label for="base_price_fundive_cert" class="block font-bold text-xs text-[#1D1D1F]">Certified Diver Base Price (₱)</label>
-                            <p class="text-[11px] text-[#6E6E73]">For verified divers with certification</p>
+                            <p class="text-[11px] text-[#6E6E73]">For verified participants with certification</p>
                             <div class="relative">
                                 <span class="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#6E6E73]">₱</span>
                                 <input type="number" 

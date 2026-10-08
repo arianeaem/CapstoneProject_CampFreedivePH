@@ -118,10 +118,10 @@
                 </div>
             </div>
 
-            <!-- 2. Divers & Participants -->
+            <!-- 2. Participants -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-base font-extrabold text-[#1D1D1F]">2. Divers & Participants</h3>
+                    <h3 class="text-base font-extrabold text-[#1D1D1F]">2. Participants</h3>
                     <button type="button" 
                             @click="addParticipant()"
                             class="btn-primary text-xs sm:text-sm px-3.5 py-1.5 font-bold flex items-center gap-1.5 shadow-2xs">
@@ -332,7 +332,7 @@
                                :aria-checked="pickupOption === 'carpool'"
                                @keydown.enter.prevent="pickupOption = 'carpool'"
                                @keydown.space.prevent="pickupOption = 'carpool'"
-                               class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                               class="p-3.5 rounded-xl border border-transparent border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                :class="pickupOption === 'carpool' ? 'ring-2 ring-[#780000]' : ''">
                             <input type="radio" name="pickup_option" value="carpool" x-model="pickupOption" class="hidden">
                             <div class="space-y-1">
@@ -350,7 +350,7 @@
                                :aria-checked="pickupOption === 'own'"
                                @keydown.enter.prevent="pickupOption = 'own'"
                                @keydown.space.prevent="pickupOption = 'own'"
-                               class="p-3.5 rounded-xl border border-transparent transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
+                               class="p-3.5 rounded-xl border border-transparent border border-[#D1D1D6] transition-all cursor-pointer flex flex-col justify-between select-none bg-transparent hover:bg-transparent hover:ring-1 hover:ring-[#780000] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]"
                                :class="pickupOption === 'own' ? 'ring-2 ring-[#780000]' : ''">
                             <input type="radio" name="pickup_option" value="own" x-model="pickupOption" class="hidden">
                             <div class="space-y-1">
@@ -408,7 +408,7 @@
             <div class="p-5 sm:p-6 rounded-2xl space-y-4">
                 <div class="flex items-center justify-between">
                     <h4 class="font-extrabold text-[#1D1D1F] text-base">Booking Cost &amp; Fee Breakdown</h4>
-                    <span class="text-xs font-bold text-[#780000] bg-red-50 px-2.5 py-0.5 rounded-full" x-text="participants.length + ' Diver' + (participants.length > 1 ? 's' : '')"></span>
+                    <span class="text-xs font-bold text-[#780000] bg-red-50 px-2.5 py-0.5 rounded-full" x-text="participants.length + ' Participant' + (participants.length > 1 ? 's' : '')"></span>
                 </div>
 
                 <div class="space-y-2.5 text-xs sm:text-sm border-t border-[#E5E5EA] pt-3">
@@ -449,7 +449,7 @@
                     </div>
 
                     <!-- Total Amount -->
-                    <div class="flex justify-between items-center text-sm sm:text-base pt-3 border-t border-[#E5E5EA]">
+                    <div class="flex justify-between items-center text-sm sm:text-base pt-3">
                         <span class="font-extrabold text-[#1D1D1F]">Total Trip Amount:</span>
                         <strong class="font-black text-lg text-[#780000]" x-text="'₱' + formatNumber(calculateTotal())"></strong>
                     </div>

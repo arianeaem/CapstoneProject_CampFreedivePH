@@ -70,7 +70,7 @@ class RefundService
                 'status' => 'refunded',
                 'paymongo_refund_id' => $refundId,
                 'amount_refunded' => $amount,
-                'refund_reason' => $notes ?? 'Admin approved customer cancellation refund',
+                'refund_reason' => $notes ?? 'Admin approved participant cancellation refund',
             ]);
 
             $refundRequest->update([
@@ -97,7 +97,7 @@ class RefundService
                 'old_status' => BookingStatus::CancellationRequested->value,
                 'new_status' => BookingStatus::CancelledByGuest->value,
                 'changed_by' => $operator->id,
-                'note' => 'Booking cancelled. 100% refund of ₱' . number_format($amount, 2) . ' credited to guest via PayMongo.',
+                'note' => 'Booking cancelled. 100% refund of ₱' . number_format($amount, 2) . ' credited to participant via PayMongo.',
                 'created_at' => now(),
             ]);
         });

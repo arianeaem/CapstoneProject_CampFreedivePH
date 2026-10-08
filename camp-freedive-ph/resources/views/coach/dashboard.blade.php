@@ -53,7 +53,7 @@
                 ['label' => 'Upcoming dives', 'value' => $upcomingConfirmedDivesCount, 'hint' => Str::plural('Batch', $upcomingConfirmedDivesCount) . ' you are coaching'],
                 ['label' => 'Days you are free', 'value' => $availableDaysCount, 'hint' => 'Available dates you offered', 'tone' => 'text-[#00838C]'],
                 ['label' => 'Open camp slots', 'value' => $activeOpeningsCount, 'hint' => $pendingRequestsCount > 0 ? $pendingRequestsCount . ' of your ' . Str::plural('request', $pendingRequestsCount) . ' waiting for approval' : 'Batches asking for extra coaches', 'tone' => $activeOpeningsCount > 0 ? 'text-[#B45309]' : null, 'url' => $activeOpeningsCount > 0 ? route('coach.requests.index') : null],
-                ['label' => 'Students coached', 'value' => $totalStudentsMentored, 'hint' => 'All students assigned to you'],
+                ['label' => 'Participants coached', 'value' => $totalStudentsMentored, 'hint' => 'All participants assigned to you'],
             ];
         @endphp
         @foreach($cards as $card)
@@ -106,7 +106,7 @@
                         </div>
                         <div class="text-right">
                             <span class="block text-2xl font-black text-[#1D1D1F]">{{ $next['students_count'] }}</span>
-                            <span class="block text-xs text-[#6E6E73]">{{ Str::plural('student', $next['students_count']) }}</span>
+                            <span class="block text-xs text-[#6E6E73]">{{ Str::plural('participant', $next['students_count']) }}</span>
                         </div>
                     </div>
                     @if(!empty($next['class_breakdown']))
@@ -130,7 +130,7 @@
             @else
                 <div class="rounded-xl bg-[#F8F9FA] p-6 text-center space-y-3">
                     <p class="font-bold text-[#1D1D1F]">No dives assigned yet</p>
-                    <p class="text-sm text-[#6E6E73] max-w-md mx-auto">You don't have a batch coming up. Keep your available dates updated so the camp can match you with students.</p>
+                    <p class="text-sm text-[#6E6E73] max-w-md mx-auto">You don't have a batch coming up. Keep your available dates updated so the camp can match you with participants.</p>
                     <a href="{{ route('coach.availability.index') }}" class="btn-primary min-h-[44px] px-4 rounded-xl text-sm font-bold inline-flex items-center shadow-2xs">Update my available dates</a>
                 </div>
             @endif
@@ -147,7 +147,7 @@
                     <thead>
                         <tr class="text-[#8E8E93] text-xs border-b border-[#E5E5EA]">
                             <th class="py-2.5 pr-3 font-semibold">Dates</th>
-                            <th class="py-2.5 pr-3 font-semibold">Students</th>
+                            <th class="py-2.5 pr-3 font-semibold">Participants</th>
                             <th class="py-2.5 font-semibold">Sea safety</th>
                         </tr>
                     </thead>
@@ -176,15 +176,15 @@
         </div>
     </div>
 
-    <!-- 3. Your students -->
+    <!-- 3. Your participants -->
     @if($next)
         <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div>
-                    <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Your students for {{ $next['batch']->batch_number }}</h2>
+                    <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>Your participants for {{ $next['batch']->batch_number }}</h2>
                     <p class="text-sm text-[#8E8E93]">Check swimming ability and health notes before the boat leaves</p>
                 </div>
-                <span class="text-sm font-extrabold text-[#780000] bg-[#F8EAEA] px-3 py-1 rounded-xl self-start">{{ $next['students_count'] }} {{ Str::plural('student', $next['students_count']) }}</span>
+                <span class="text-sm font-extrabold text-[#780000] bg-[#F8EAEA] px-3 py-1 rounded-xl self-start">{{ $next['students_count'] }} {{ Str::plural('participant', $next['students_count']) }}</span>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -335,7 +335,7 @@
                         @endphp
                         <li class="flex items-center gap-3 rounded-xl border border-[#E5E5EA] border-l-4 border-l-[#780000] p-3">
                             <span class="flex-1 min-w-0">
-                                <span class="block text-sm font-semibold text-[#1D1D1F]">{{ $b?->batch_number ?? 'Batch' }} &middot; {{ $opening->needed_students_count }} {{ Str::plural('student', $opening->needed_students_count) }} need a coach</span>
+                                <span class="block text-sm font-semibold text-[#1D1D1F]">{{ $b?->batch_number ?? 'Batch' }} &middot; {{ $opening->needed_students_count }} {{ Str::plural('participant', $opening->needed_students_count) }} need a coach</span>
                                 <span class="block text-xs text-[#8E8E93] truncate">{{ $datesDisplay }}</span>
                             </span>
                             @if($myRequest)
@@ -468,7 +468,7 @@
                         <span x-text="selectedOpeningDate"></span>
                     </p>
                     <p class="text-xs font-semibold text-[#780000]" x-show="selectedOpeningNeeded">
-                        <span x-text="selectedOpeningNeeded"></span> Diver(s) needing instructor
+                        <span x-text="selectedOpeningNeeded"></span> Participant(s) needing a coach
                     </p>
                 </div>
                 <button type="button" 
@@ -492,7 +492,7 @@
                               placeholder="e.g. I have gear ready and available for this entire weekend..." 
                               class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all"></textarea>
                     <p class="text-xs text-[#6E6E73] mt-2">
-                        Submitting interest notifies Camp Admin. If selected, students will be automatically matched to your roster.
+                        Submitting interest notifies Camp Admin. If selected, participants will be automatically matched to your roster.
                     </p>
                 </div>
 

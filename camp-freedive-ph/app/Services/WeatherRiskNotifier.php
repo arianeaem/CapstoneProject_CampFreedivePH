@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\Mail;
 
 /**
  * Weather notices sent less than 18 hours before a dive:
- * - Critical Risk: guests can reschedule for free or cancel with a full downpayment refund. Owners/admins must decide.
+ * - Critical Risk: participants can reschedule for free or cancel with a full downpayment refund. Owners/admins must decide.
  * - High Risk: everyone is told, but the dive is still on (no refund).
- * Each guest only gets each notice once per batch and dive date (saved in notification_logs).
+ * Each participant only gets each notice once per batch and dive date (saved in notification_logs).
  */
 class WeatherRiskNotifier
 {
@@ -61,7 +61,7 @@ class WeatherRiskNotifier
             $mail = new WeatherRiskNoticeMail($booking, $batch, $level, max(0, $hours));
             $subject = $mail->envelope()->subject;
 
-            // Once per guest per batch, rating and dive date
+            // Once per participant per batch, rating and dive date
             $alreadySent = NotificationLog::where('batch_id', $batch->id)
                 ->where('booking_id', $booking->id)
                 ->where('subject', $subject)
@@ -80,7 +80,7 @@ class WeatherRiskNotifier
                     'recipient_name' => $booking->contact_name,
                     'subject' => $subject,
                     'message_body' => $level === 'critical'
-                        ? 'Critical Risk notice: guest may reschedule for free or cancel with a full downpayment refund.'
+                        ? 'Critical Risk notice: participant may reschedule for free or cancel with a full downpayment refund.'
                         : 'High Risk notice: dive still planned, extra safety steps.',
                     'channel' => 'email',
                     'sent_at' => now(),

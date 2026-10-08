@@ -96,7 +96,7 @@
                                     </strong>
                                 </p>
                                 <p>
-                                    Students Needing Coach: <strong class="text-[#1D1D1F]">{{ $op->needed_students_count }} Diver(s)</strong>
+                                    Participants Needing Coach: <strong class="text-[#1D1D1F]">{{ $op->needed_students_count }} Participant(s)</strong>
                                 </p>
                             </div>
 
@@ -132,7 +132,7 @@
             <div class="bg-white rounded-2xl p-8 sm:p-12 border border-[#E5E5EA] text-center space-y-3">
                 <h3 class="text-base font-bold text-[#1D1D1F]">All Camp Slots Currently Staffed</h3>
                 <p class="text-sm text-[#6E6E73] max-w-md mx-auto leading-relaxed">
-                    There are no unstaffed dive openings broadcasted at the moment. When the camp has overflow students needing a coach, openings will appear here.
+                    There are no unstaffed dive openings broadcasted at the moment. When the camp has overflow participants needing a coach, openings will appear here.
                 </p>
             </div>
         @endif
@@ -279,7 +279,7 @@
                     <div class="p-4 rounded-xl bg-[#F2F2F7] space-y-2 text-sm shadow-2xs">
                         <div class="font-bold text-sm text-[#1D1D1F]" x-text="selectedOpening.batch?.name"></div>
                         <div>Dive Date: <strong x-text="selectedOpening.dive_date"></strong></div>
-                        <div>Students Needing Coach: <strong x-text="selectedOpening.needed_students_count"></strong></div>
+                        <div>Participants Needing Coach: <strong x-text="selectedOpening.needed_students_count"></strong></div>
                     </div>
 
                     <div class="space-y-1.5">
@@ -294,7 +294,7 @@
                     </div>
 
                     <div class="banner banner-info">
-                        Submitting interest notifies Camp Admin. If selected, students will be automatically matched to your roster.
+                        Submitting interest notifies Camp Admin. If selected, participants will be automatically matched to your roster.
                     </div>
 
                     <div class="flex items-center justify-end gap-2.5 pt-2">

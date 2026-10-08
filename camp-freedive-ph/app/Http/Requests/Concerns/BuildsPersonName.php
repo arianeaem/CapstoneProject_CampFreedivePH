@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests\Concerns;
 
-/** Shared name rules for staff and guests: letters (including Ñ/ñ), spaces, hyphens, periods. */
+/** Shared name rules for staff and participants: letters (including Ñ/ñ), spaces, hyphens, periods. */
 trait BuildsPersonName
 {
     public const NAME_REGEX = '/^[\p{L}\s\.\'\-]+$/u';

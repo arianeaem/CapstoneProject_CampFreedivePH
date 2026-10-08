@@ -362,7 +362,7 @@ class BatchManagementService
                         'old_status' => $bookingOldStatus,
                         'new_status' => 'rescheduled',
                         'changed_by' => $changer->id,
-                        'note' => "Batch {$batch->name} was rescheduled by camp. Customer notified via email to select their new preferred date via Manage Booking portal." . ($note ? " Note: {$note}" : ""),
+                        'note' => "Batch {$batch->name} was rescheduled by camp. Participant notified via email to select their new preferred date via Manage Booking portal." . ($note ? " Note: {$note}" : ""),
                     ]);
 
                     if (!empty($booking->contact_email)) {

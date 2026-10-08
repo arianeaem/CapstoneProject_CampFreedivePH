@@ -15,7 +15,7 @@
     <div>
         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Camp Capacity</h1>
         <p class="text-[#6E6E73] text-sm mt-1">
-            Configure weekend trip diver capacity limits, safety coaching ratios, and minimum instructor dispatch rules.
+            Configure weekend trip participant capacity limits, safety coaching ratios, and minimum coach dispatch rules.
         </p>
     </div>
 
@@ -41,9 +41,9 @@
             <!-- Max Batch Capacity -->
             <div class="bg-white p-6 rounded-xl border border-[#E5E5EA] shadow-2xs space-y-4">
                 <div class="space-y-1">
-                    <h2 class="text-base font-bold text-[#1D1D1F]">Maximum Guests per Batch</h2>
+                    <h2 class="text-base font-bold text-[#1D1D1F]">Maximum Participants per Batch</h2>
                     <p class="text-xs text-[#6E6E73] leading-relaxed">
-                        Total number of divers allowed across all programs for a single weekend batch.
+                        Total number of participants allowed across all programs for a single weekend batch.
                     </p>
                 </div>
 
@@ -63,18 +63,18 @@
                 </div>
             </div>
 
-            <!-- Coach to Student Ratio -->
+            <!-- Coach to Participant Ratio -->
             <div class="bg-white p-6 rounded-xl border border-[#E5E5EA] shadow-2xs space-y-4">
                 <div class="space-y-1">
-                    <h2 class="text-base font-bold text-[#1D1D1F]">Coach to Student Ratio</h2>
+                    <h2 class="text-base font-bold text-[#1D1D1F]">Coach to Participant Ratio</h2>
                     <p class="text-xs text-[#6E6E73] leading-relaxed">
-                        Standard safety allocation ratio in student matching queue.
+                        Standard safety allocation ratio in participant matching queue.
                     </p>
                 </div>
 
                 <div class="space-y-1.5 pt-2">
                     <label for="coach_student_ratio" class="block font-bold text-xs text-[#1D1D1F]">
-                        Students per 1 Coach
+                        Participants per 1 Coach
                     </label>
                     <div class="flex items-center gap-2">
                         <span class="text-sm font-bold text-[#6E6E73]">1 :</span>
@@ -87,7 +87,7 @@
                                required
                                class="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
                     </div>
-                    <p class="text-[11px] text-[#8E8E93]">Standard is 1 coach per 4 students.</p>
+                    <p class="text-[11px] text-[#8E8E93]">Standard is 1 coach per 4 participants.</p>
                 </div>
             </div>
 
@@ -112,7 +112,7 @@
                            max="10" 
                            required
                            class="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
-                    <p class="text-[11px] text-[#8E8E93]">Standard is 2 instructors.</p>
+                    <p class="text-[11px] text-[#8E8E93]">Standard is 2 coaches.</p>
                 </div>
             </div>
 

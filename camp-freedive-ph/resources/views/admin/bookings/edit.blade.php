@@ -157,7 +157,7 @@
         <div class="bg-white rounded-xl border border-[#E5E5EA] p-6 space-y-4">
             <div class="flex items-center justify-between pb-2">
                 <div>
-                    <h3 class="text-base font-bold text-[#1D1D1F]">2. Divers & Participants ({{ $booking->participants->count() }} pax)</h3>
+                    <h3 class="text-base font-bold text-[#1D1D1F]">2. Participants ({{ $booking->participants->count() }} pax)</h3>
                     <p class="text-sm text-[#6E6E73]">Update participant medical and roster information for this reservation.</p>
                 </div>
                 <span class="text-sm text-[#6E6E73] font-semibold bg-[#F2F2F7] px-2 py-0.5 rounded">Fixed Participant Count</span>
@@ -351,17 +351,17 @@
                 <label class="block font-bold text-[#1D1D1F] text-sm mb-2">
                     Reason for Modifying Booking & Participant Details <span class="text-[#780000]">*</span>
                 </label>
-                <textarea name="edit_reason" rows="2" required placeholder="e.g. Corrected spelling of participant name per customer WhatsApp request" class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white"></textarea>
+                <textarea name="edit_reason" rows="2" required placeholder="e.g. Corrected spelling of participant name per the booking contact's WhatsApp request" class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white"></textarea>
                 <span class="text-sm text-[#6E6E73] block mt-1">
                     This note and the exact changes will be recorded immutably in the system audit logs alongside your account username and IP address.
                 </span>
             </div>
         </div>
 
-        <!-- Customer notification notice -->
+        <!-- Participant notification notice -->
         <div class="rounded-xl border border-[#F5D0D0] bg-[#FFF5F5] p-4 text-sm text-[#1D1D1F]">
             <span class="font-bold text-[#780000]">Note:</span>
-            These changes will be sent to the customer. Once saved, an email listing the updated details will be sent to
+            These changes will be sent to the booking contact. Once saved, an email listing the updated details will be sent to
             <strong>{{ $booking->contact_email }}</strong> (and to the new address if you changed the contact email).
         </div>
 

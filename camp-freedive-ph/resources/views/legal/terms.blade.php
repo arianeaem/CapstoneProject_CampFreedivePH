@@ -177,7 +177,7 @@
                             You must not submit fraudulent payment information, impersonate another person, introduce malicious code, interfere with the operation of the Services, or use the Services in a manner that may harm Camp Freedive PH, its personnel, participants, partners, or other users.
                         </p>
                         <p>
-                            Harassment, abusive conduct, threats, or disruptive behavior toward instructors, safety personnel, boat crew, staff, or other participants is not permitted.
+                            Harassment, abusive conduct, threats, or disruptive behavior toward coaches, safety personnel, boat crew, staff, or other participants is not permitted.
                         </p>
                     </div>
 
@@ -261,7 +261,7 @@
                             All prices displayed through the Services are stated in Philippine Pesos (PHP), unless otherwise indicated. The applicable price may vary depending on the selected class, schedule, number of participants, applicable seasonal or demand-based pricing, transportation or boat arrangements, and other selected services or add-ons.
                         </p>
                         <p>
-                            The applicable charges will be presented to the customer before the booking is confirmed.
+                            The applicable charges will be presented to the participant before the booking is confirmed.
                         </p>
                     </div>
 
@@ -271,7 +271,7 @@
                             Following successful payment, Camp Freedive PH may provide a digital booking confirmation containing the booking reference number, access credentials or PIN where applicable, schedule, participant information, payment details, and other relevant booking information.
                         </p>
                         <p>
-                            Customers are responsible for reviewing their confirmation and promptly notifying Camp Freedive PH of any material error or discrepancy.
+                            Participants are responsible for reviewing their confirmation and promptly notifying Camp Freedive PH of any material error or discrepancy.
                         </p>
                     </div>
                 </div>
@@ -288,9 +288,9 @@
 
                 <div class="space-y-4 text-[#3A3A3C]">
                     <div>
-                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.1 Customer Cancellation More Than Fourteen (14) Days Before the Scheduled Activity</h3>
+                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.1 Participant Cancellation More Than Fourteen (14) Days Before the Scheduled Activity</h3>
                         <p class="mb-2">
-                            Where a customer cancels more than fourteen (14) days before the scheduled activity, the customer may request a 100% downpayment refund or rescheduling, subject to availability.
+                            Where a participant cancels more than fourteen (14) days before the scheduled activity, the participant may request a 100% downpayment refund or rescheduling, subject to availability.
                         </p>
                         <p>
                             Where rescheduling is selected, the reservation may be transferred to another available camp date within the permitted rescheduling period.
@@ -298,7 +298,7 @@
                     </div>
 
                     <div>
-                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.2 Customer Cancellation Within Fourteen (14) Days</h3>
+                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.2 Participant Cancellation Within Fourteen (14) Days</h3>
                         <p>
                             From seven (7) through fourteen (14) days before the scheduled activity, rescheduling is allowed, but cancellation is not allowed and the downpayment is non-refundable.
                         </p>
@@ -314,10 +314,10 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.4 Rescheduling</h3>
                         <p class="mb-2">
-                            All requests for rescheduling are subject to availability and the applicable cancellation period. A rescheduled booking does not guarantee the availability of the original schedule, instructor, accommodation, transportation arrangement, or other booking components.
+                            All requests for rescheduling are subject to availability and the applicable cancellation period. A rescheduled booking does not guarantee the availability of the original schedule, coach, accommodation, transportation arrangement, or other booking components.
                         </p>
                         <p>
-                            Any additional amount resulting from a difference in applicable rates, selected services, or other charges may be payable by the customer.
+                            Any additional amount resulting from a difference in applicable rates, selected services, or other charges may be payable by the participant.
                         </p>
                     </div>
 
@@ -346,7 +346,7 @@
                             Freediving and other open-water activities involve inherent risks associated with immersion, depth, pressure changes, currents, waves, weather conditions, marine life, boat transportation, equipment, and other environmental or operational circumstances.
                         </p>
                         <p>
-                            Participation requires compliance with the instructions of Camp Freedive PH instructors, safety personnel, boat crew, and other authorized personnel.
+                            Participation requires compliance with the instructions of Camp Freedive PH coaches, safety personnel, boat crew, and other authorized personnel.
                         </p>
                     </div>
 
@@ -369,7 +369,7 @@
                             Freediving activities take place in an outdoor marine environment and may be affected by weather, tides, waves, currents, rainfall, wind, visibility, and other environmental conditions.
                         </p>
                         <p class="mb-2">
-                            Rain, cloud cover, surface chop, or other moderate environmental conditions do not automatically require cancellation. Where conditions are assessed by the responsible instructors, boat crew, or authorized personnel to remain within acceptable operational and safety limits, the scheduled activity may proceed.
+                            Rain, cloud cover, surface chop, or other moderate environmental conditions do not automatically require cancellation. Where conditions are assessed by the responsible coaches, boat crew, or authorized personnel to remain within acceptable operational and safety limits, the scheduled activity may proceed.
                         </p>
                         <p>
                             Participants acknowledge that environmental conditions may change before or during an activity and that operational decisions may be adjusted accordingly.
@@ -424,7 +424,7 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">6.2 Liability</h3>
                         <p class="mb-2">
-                            To the maximum extent permitted by applicable Philippine law, Camp Freedive PH, its owners, officers, employees, instructors, safety personnel, boat crew, and authorized representatives shall not be liable for indirect, incidental, special, punitive, or consequential damages arising from the use of the Services or participation in activities, except to the extent that such limitation is prohibited by law.
+                            To the maximum extent permitted by applicable Philippine law, Camp Freedive PH, its owners, officers, employees, coaches, safety personnel, boat crew, and authorized representatives shall not be liable for indirect, incidental, special, punitive, or consequential damages arising from the use of the Services or participation in activities, except to the extent that such limitation is prohibited by law.
                         </p>
                         <p class="mb-2">
                             Participation may also be subject to a separate liability release, waiver, acknowledgment, or other safety document that must be completed before participating in applicable in-water activities.

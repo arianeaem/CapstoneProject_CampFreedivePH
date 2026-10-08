@@ -483,11 +483,11 @@ class BookingController extends Controller
             && $this->notifyCustomerOfEdit($booking->fresh(), $customerChanges, $previousEmail, $currentUser);
 
         return redirect()->route('admin.bookings.show', $booking)
-            ->with('success', "Booking #{$booking->booking_number} updated successfully." . ($notified ? ' The customer has been notified of the changes.' : ''));
+            ->with('success', "Booking #{$booking->booking_number} updated successfully." . ($notified ? ' The booking contact has been notified of the changes.' : ''));
     }
 
     /**
-     * List of changed fields (label, old, new) for the customer email.
+     * List of changed fields (label, old, new) for the participant email.
      */
     protected function collectCustomerChanges(Booking $booking, array $validated, ?string $pickupLocation): array
     {
@@ -528,7 +528,7 @@ class BookingController extends Controller
     }
 
     /**
-     * Email the customer about the changes. If the email address was changed, the old one gets it too.
+     * Email the participant about the changes. If the email address was changed, the old one gets it too.
      */
     protected function notifyCustomerOfEdit(Booking $booking, array $changes, ?string $previousEmail, $currentUser): bool
     {

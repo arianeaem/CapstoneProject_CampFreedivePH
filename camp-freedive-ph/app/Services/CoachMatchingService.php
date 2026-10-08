@@ -269,13 +269,13 @@ class CoachMatchingService
             $dateStr = $batch->start_date->format('Y-m-d');
             $avail = CoachAvailability::where('coach_id', $coach->id)->whereDate('date', $dateStr)->first();
             if ($avail) {
-                $avail->update(['status' => 'assigned', 'notes' => "Assigned to {$batch->batch_code} ({$newTotal} students)"]);
+                $avail->update(['status' => 'assigned', 'notes' => "Assigned to {$batch->batch_code} ({$newTotal} participants)"]);
             } else {
                 CoachAvailability::create([
                     'coach_id' => $coach->id,
                     'date' => $dateStr,
                     'status' => 'assigned',
-                    'notes' => "Assigned to {$batch->batch_code} ({$newTotal} students)",
+                    'notes' => "Assigned to {$batch->batch_code} ({$newTotal} participants)",
                 ]);
             }
 
@@ -302,7 +302,7 @@ class CoachMatchingService
 
     /**
      * Give 2-3 options for how many coaches to use, based on the number of
-     * unassigned students and the 1 coach : 4 students rule.
+     * unassigned participants and the 1 coach : 4 participants rule.
      */
     public function proposeCoachCountOptions(int $studentCount, int $availableCoachCount): array
     {
@@ -314,7 +314,7 @@ class CoachMatchingService
         $maxCoaches = max(1, min($availableCoachCount, $studentCount));
 
         $ratio = $this->getCoachStudentRatio();
-        // Option 1: normal (students / ratio, rounded up)
+        // Option 1: normal (participants / ratio, rounded up)
         $opt1Count = (int) ceil($studentCount / $ratio);
         $opt1Count = max(1, min($opt1Count, $maxCoaches));
 
@@ -323,7 +323,7 @@ class CoachMatchingService
             'id' => 'standard',
             'label' => "Option A: {$opt1Count} Coach" . ($opt1Count > 1 ? 'es' : ''),
             'coach_count' => $opt1Count,
-            'description' => "Standard ~{$ratio}:1 ratio (" . implode(' + ', $opt1Split) . " students)",
+            'description' => "Standard ~{$ratio}:1 ratio (" . implode(' + ', $opt1Split) . " participants)",
             'split' => $opt1Split,
             'is_recommended' => true,
         ];
@@ -336,7 +336,7 @@ class CoachMatchingService
                 'id' => 'distributed',
                 'label' => "Option B: {$opt2Count} Coaches",
                 'coach_count' => $opt2Count,
-                'description' => "Even lighter load (" . implode(' + ', $opt2Split) . " students)",
+                'description' => "Even lighter load (" . implode(' + ', $opt2Split) . " participants)",
                 'split' => $opt2Split,
                 'is_recommended' => false,
             ];
@@ -350,7 +350,7 @@ class CoachMatchingService
                 'id' => 'lean',
                 'label' => "Option C: {$opt3Count} Coach" . ($opt3Count > 1 ? 'es' : ''),
                 'coach_count' => $opt3Count,
-                'description' => "Compact roster (" . implode(' + ', $opt3Split) . " students)",
+                'description' => "Compact roster (" . implode(' + ', $opt3Split) . " participants)",
                 'split' => $opt3Split,
                 'is_recommended' => false,
             ];
@@ -360,7 +360,7 @@ class CoachMatchingService
     }
 
     /**
-     * Split the students between N coaches.
+     * Split the participants between N coaches.
      */
     protected function calculateTargetSplit(int $totalStudents, int $coachCount): array
     {
@@ -404,7 +404,7 @@ class CoachMatchingService
         // Group the participants by class
         $grouped = collect($participants)->groupBy(fn($p) => $p->booking?->class_type ?? 'discovery');
 
-        // Give each participant to the coach with the fewest students
+        // Give each participant to the coach with the fewest participants
         foreach ($grouped as $classType => $students) {
             foreach ($students as $student) {
                 // Coach with the lowest load (if tied, the one with fewer of this class)
@@ -512,13 +512,13 @@ class CoachMatchingService
                 $dateStr = $batch->start_date->format('Y-m-d');
                 $avail = CoachAvailability::where('coach_id', $coach->id)->whereDate('date', $dateStr)->first();
                 if ($avail) {
-                    $avail->update(['status' => 'assigned', 'notes' => "Assigned to {$batch->batch_code} ({$totalLoad} students)"]);
+                    $avail->update(['status' => 'assigned', 'notes' => "Assigned to {$batch->batch_code} ({$totalLoad} participants)"]);
                 } else {
                     CoachAvailability::create([
                         'coach_id' => $coach->id,
                         'date' => $dateStr,
                         'status' => 'assigned',
-                        'notes' => "Assigned to {$batch->batch_code} ({$totalLoad} students)",
+                        'notes' => "Assigned to {$batch->batch_code} ({$totalLoad} participants)",
                     ]);
                 }
             }
@@ -529,7 +529,7 @@ class CoachMatchingService
             $isImbalanced = ($maxH - $minH) > 1;
 
             if ($isImbalanced || !empty($exceptionNote)) {
-                $reason = $exceptionNote ?: "Manual imbalanced split configured by {$assignedBy->name} (Spread: {$minH} to {$maxH} students).";
+                $reason = $exceptionNote ?: "Manual imbalanced split configured by {$assignedBy->name} (Spread: {$minH} to {$maxH} participants).";
                 AuditLogger::log(
                     'BATCH_COACH_ASSIGNMENT_EXCEPTION',
                     "Intentional coach split exception on batch {$batch->batch_code}: {$reason}",
@@ -555,7 +555,7 @@ class CoachMatchingService
     }
 
     /**
-     * Move one student to a different coach.
+     * Move one participant to a different coach.
      *
      * @throws Exception
      */
@@ -604,19 +604,19 @@ class CoachMatchingService
             $dateStr = $diveDate->format('Y-m-d');
             $avail = CoachAvailability::where('coach_id', $newCoach->id)->whereDate('date', $dateStr)->first();
             if ($avail) {
-                $avail->update(['status' => 'assigned', 'notes' => 'Updated via student reassignment']);
+                $avail->update(['status' => 'assigned', 'notes' => 'Updated via participant reassignment']);
             } else {
                 CoachAvailability::create([
                     'coach_id' => $newCoach->id,
                     'date' => $dateStr,
                     'status' => 'assigned',
-                    'notes' => 'Updated via student reassignment',
+                    'notes' => 'Updated via participant reassignment',
                 ]);
             }
 
             AuditLogger::log(
                 'STUDENT_REASSIGNED',
-                "Reassigned student {$participant->name} to Coach {$newCoach->name}. Reason: {$reason}",
+                "Reassigned participant {$participant->name} to Coach {$newCoach->name}. Reason: {$reason}",
                 $changedBy,
                 $changedBy->name
             );

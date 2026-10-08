@@ -145,7 +145,7 @@
 
             <!-- Participant List -->
             <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 sm:p-8">
-                <h3 class="text-base font-bold text-[#1D1D1F] mb-4">Divers in this Booking ({{ $booking->participants->count() }})</h3>
+                <h3 class="text-base font-bold text-[#1D1D1F] mb-4">Participants in this Booking ({{ $booking->participants->count() }})</h3>
                 <div class="divide-y divide-[#E5E5EA]">
                     @foreach($booking->participants as $p)
                     <div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-sm">
@@ -238,7 +238,7 @@
                         <strong class="text-[#1D1D1F]">₱{{ number_format(($booking->lgu_fee ?? 0) + ($booking->environmental_fee ?? 0), 2) }}</strong>
                     </div>
 
-                    <div class="pt-3 border-t border-[#E5E5EA] flex justify-between items-center text-sm sm:text-base">
+                    <div class="pt-3 flex justify-between items-center text-sm sm:text-base">
                         <strong class="text-[#1D1D1F]">Total Trip Cost:</strong>
                         <strong class="text-base sm:text-lg font-black text-[#780000]">₱{{ number_format($booking->total_amount, 2) }}</strong>
                     </div>

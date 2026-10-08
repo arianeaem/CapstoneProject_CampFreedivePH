@@ -15,7 +15,7 @@ use Illuminate\Support\Collection;
  * A batch is one 2-day camp weekend (Saturday to Sunday) in Mabini, Batangas.
  *
  * - max 45 people per batch (boat limit / Coast Guard rules)
- * - 1 coach for every 4 divers (45 divers = up to 12 coaches)
+ * - 1 coach for every 4 participants (45 participants = up to 12 coaches)
  *
  * @property int $id
  * @property string $name

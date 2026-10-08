@@ -127,7 +127,7 @@
                     </div>
 
                     <div>
-                        <span class="text-[#6E6E73] block">Customer Contact:</span>
+                        <span class="text-[#6E6E73] block">Contact:</span>
                         <span class="text-[#1D1D1F] font-medium">{{ $payment->booking->contact_name }} ({{ $payment->booking->contact_phone }})</span>
                     </div>
 
@@ -136,7 +136,7 @@
                         <span class="text-[#1D1D1F] font-medium">{{ $payment->booking->participants->count() }} pax</span>
                     </div>
 
-                    <div class="pt-3 border-t border-[#E5E5EA] space-y-1.5">
+                    <div class="pt-3 space-y-1.5">
                         <div class="flex justify-between">
                             <span class="text-[#6E6E73]">Total Reservation Fee:</span>
                             <strong class="text-[#1D1D1F]">₱{{ number_format($payment->booking->total_amount, 2) }}</strong>
@@ -208,7 +208,7 @@
                     <input type="text" name="transaction_id" placeholder="e.g. BAL-CASH-101" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
                 </div>
 
-                <div class="flex items-center justify-end gap-3 pt-3 border-t border-[#E5E5EA]">
+                <div class="flex items-center justify-end gap-3 pt-3">
                     <button type="button" @click="openBalanceModal = false" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
                     <button type="submit" class="btn-primary px-5 py-2 text-sm font-bold">Save Settlement</button>
                 </div>

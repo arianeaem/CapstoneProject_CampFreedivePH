@@ -15,7 +15,7 @@
     <div>
         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Deposit Rules</h1>
         <p class="text-[#6E6E73] text-sm mt-1">
-            Configure required upfront downpayment rates and amounts per participant for online guest bookings.
+            Configure required upfront downpayment rates and amounts per participant for online participant bookings.
         </p>
     </div>
 
@@ -43,7 +43,7 @@
                 <div class="space-y-1">
                     <h2 class="text-base font-bold text-[#1D1D1F]">Carpool Joiners Downpayment</h2>
                     <p class="text-xs text-[#6E6E73] leading-relaxed">
-                        Required deposit per participant when customer chooses camp-arranged van transportation from Metro Manila.
+                        Required deposit per participant when participant chooses camp-arranged van transportation from Metro Manila.
                     </p>
                 </div>
 
@@ -71,7 +71,7 @@
                 <div class="space-y-1">
                     <h2 class="text-base font-bold text-[#1D1D1F]">Own Transportation Downpayment</h2>
                     <p class="text-xs text-[#6E6E73] leading-relaxed">
-                        Required deposit per participant when customer brings their own vehicle or commutes directly to camp resort.
+                        Required deposit per participant when participant brings their own vehicle or commutes directly to camp resort.
                     </p>
                 </div>
 

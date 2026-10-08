@@ -769,7 +769,7 @@ class DemandForecastService
                 'demand_level' => $demand,
                 'season_period' => $season,
                 'predicted_participants' => $pax,
-                'pill_text' => "⚡ Model Suggestion: {$instructors} " . ($instructors === 1 ? 'Coach' : 'Coaches') . " ({$demand} Demand · ~{$pax} Divers)",
+                'pill_text' => "⚡ Model Suggestion: {$instructors} " . ($instructors === 1 ? 'Coach' : 'Coaches') . " ({$demand} Demand · ~{$pax} Participants)",
                 'badge_short' => "⚡ Suggestion: {$instructors} " . ($instructors === 1 ? 'Coach' : 'Coaches'),
             ];
         }

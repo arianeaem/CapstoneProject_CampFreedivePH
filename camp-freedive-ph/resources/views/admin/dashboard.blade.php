@@ -9,11 +9,11 @@
 
     // Attention items (same data as before, one tidy list)
     $attention = collect([
-        ['count' => $actionInbox['reschedules']->count(), 'label' => 'Reschedule requests', 'hint' => 'Guests asking to move their dates', 'url' => route('admin.bookings.requests'), 'action' => 'Review'],
-        ['count' => $actionInbox['cancellations']->count(), 'label' => 'Cancellation requests', 'hint' => 'Guests asking to cancel', 'url' => route('admin.bookings.requests'), 'action' => 'Review'],
+        ['count' => $actionInbox['reschedules']->count(), 'label' => 'Reschedule requests', 'hint' => 'Participants asking to move their dates', 'url' => route('admin.bookings.requests'), 'action' => 'Review'],
+        ['count' => $actionInbox['cancellations']->count(), 'label' => 'Cancellation requests', 'hint' => 'Participants asking to cancel', 'url' => route('admin.bookings.requests'), 'action' => 'Review'],
         ['count' => $actionInbox['refunds']->count(), 'label' => 'Refunds to process', 'hint' => 'Approved cancellations waiting for payment', 'url' => route('admin.bookings.requests'), 'action' => 'Process'],
         ['count' => $actionInbox['releases']->count(), 'label' => 'Coach release requests', 'hint' => 'Coaches asking to leave a batch', 'url' => route('admin.coaches.requests'), 'action' => 'Review'],
-        ['count' => $actionInbox['understaffed']->count(), 'label' => 'Batches needing coaches', 'hint' => 'Not enough coaches for the divers booked', 'url' => route('admin.coaches.matching'), 'action' => 'Match'],
+        ['count' => $actionInbox['understaffed']->count(), 'label' => 'Batches needing coaches', 'hint' => 'Not enough coaches for the participants booked', 'url' => route('admin.coaches.matching'), 'action' => 'Match'],
         ['count' => $actionInbox['weather_alerts']->count(), 'label' => 'Weather warnings', 'hint' => 'Batches rated High or Critical Risk', 'url' => route('admin.weather.index'), 'action' => 'Check'],
     ])->filter(fn ($i) => $i['count'] > 0)->values();
 
@@ -25,7 +25,7 @@
     ]);
     $chartMax = max(1, (int) $chartBatches->max('capacity'));
     $fullestPax = (int) $chartBatches->max('pax');
-    // Highlight only one bar (the first batch with the most divers)
+    // Highlight only one bar (the first batch with the most participants)
     $fullestIndex = $fullestPax > 0 ? $chartBatches->search(fn ($c) => $c['pax'] === $fullestPax) : null;
 
 @endphp
@@ -54,9 +54,9 @@
             } else {
                 $cards[] = ['label' => 'Coaches available', 'value' => $operationalStats['active_coaches_count'], 'hint' => 'Active coach accounts'];
             }
-            $cards[] = ['label' => 'Divers this month', 'value' => $operationalStats['active_divers_month'], 'hint' => 'Booked on trips this month'];
+            $cards[] = ['label' => 'Participants this month', 'value' => $operationalStats['active_divers_month'], 'hint' => 'Booked on trips this month'];
             $cards[] = ['label' => 'Average batch fill', 'value' => $operationalStats['avg_occupancy'] . '%', 'hint' => 'Across ' . $operationalStats['total_active_batches'] . ' upcoming ' . Str::plural('batch', $operationalStats['total_active_batches'])];
-            $cards[] = ['label' => 'Students without a coach', 'value' => $unmatched, 'hint' => $unmatched > 0 ? 'Need a coach assigned' : 'Everyone has a coach', 'tone' => $unmatched > 0 ? 'text-[#B45309]' : 'text-[#00838C]', 'url' => $unmatched > 0 ? route('admin.coaches.matching') : null];
+            $cards[] = ['label' => 'Participants without a coach', 'value' => $unmatched, 'hint' => $unmatched > 0 ? 'Need a coach assigned' : 'Everyone has a coach', 'tone' => $unmatched > 0 ? 'text-[#B45309]' : 'text-[#00838C]', 'url' => $unmatched > 0 ? route('admin.coaches.matching') : null];
         @endphp
         @foreach($cards as $card)
             <div class="relative overflow-hidden rounded-2xl border border-[#E5E5EA] bg-gradient-to-b from-[#780000]/[0.04] via-white to-white p-5 flex flex-col gap-2 shadow-2xs">
@@ -82,7 +82,7 @@
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h2 class="text-base font-extrabold text-[#1D1D1F] flex items-center gap-2"><span class="w-1 h-4 rounded-full bg-[#780000]" aria-hidden="true"></span>How full are the next batches</h2>
-                    <p class="text-sm text-[#8E8E93]">Divers booked out of each batch's {{ $chartMax }} slots</p>
+                    <p class="text-sm text-[#8E8E93]">Participants booked out of each batch's {{ $chartMax }} slots</p>
                 </div>
                 <a href="{{ route('admin.batches.index') }}" class="text-sm font-bold text-[#780000] hover:underline shrink-0">All batches &rarr;</a>
             </div>
@@ -111,8 +111,8 @@
                                     <span class="whitespace-nowrap rounded-md text-xs font-bold px-1.5 py-0.5 {{ $isFullest ? 'bg-[#780000] text-white' : 'text-[#00838C]' }}">{{ $c['pax'] }}{{ $isFullest ? ' of ' . $c['capacity'] : '' }}</span>
                                     <div class="w-full max-w-16 rounded-lg {{ $isFullest ? 'bg-gradient-to-b from-[#780000] to-[#B4544F]' : 'bg-[#00C3D0]/10 dashboard-bar-stripes' }}"
                                          style="height: {{ $height }}%"
-                                         role="img" aria-label="{{ $c['batch']->batch_number }}: {{ $c['pax'] }} of {{ $c['capacity'] }} divers booked"
-                                         title="{{ $c['batch']->batch_number }}: {{ $c['pax'] }} of {{ $c['capacity'] }} divers"></div>
+                                         role="img" aria-label="{{ $c['batch']->batch_number }}: {{ $c['pax'] }} of {{ $c['capacity'] }} participants booked"
+                                         title="{{ $c['batch']->batch_number }}: {{ $c['pax'] }} of {{ $c['capacity'] }} participants"></div>
                                 </div>
                                 <span class="text-xs text-[#6E6E73] text-center leading-tight">{{ $c['batch']->start_date->format('M d') }}</span>
                             </div>
@@ -133,7 +133,7 @@
                             {{ $isOwner ? $peso($pData['revenue']) : $pData['bookings_count'] . ' ' . Str::plural('booking', $pData['bookings_count']) }}
                         </div>
                         <div class="text-xs text-[#8E8E93]">
-                            {{ $pData['bookings_count'] }} {{ Str::plural('booking', $pData['bookings_count']) }} &middot; {{ $pData['pax_count'] }} {{ Str::plural('diver', $pData['pax_count']) }}
+                            {{ $pData['bookings_count'] }} {{ Str::plural('booking', $pData['bookings_count']) }} &middot; {{ $pData['pax_count'] }} {{ Str::plural('participant', $pData['pax_count']) }}
                         </div>
                         <!-- Share ticks -->
                         <div class="flex gap-[3px]" aria-hidden="true">
@@ -200,10 +200,10 @@
                 <table class="w-full text-left text-sm">
                     <thead>
                         <tr class="text-[#8E8E93] text-xs border-b border-[#E5E5EA]">
-                            <th class="py-2.5 pr-4 font-semibold">Guest</th>
+                            <th class="py-2.5 pr-4 font-semibold">Booking Contact</th>
                             <th class="py-2.5 pr-4 font-semibold">Package</th>
                             <th class="py-2.5 pr-4 font-semibold">Trip dates</th>
-                            <th class="py-2.5 pr-4 font-semibold">Divers</th>
+                            <th class="py-2.5 pr-4 font-semibold">Participants</th>
                             <th class="py-2.5 font-semibold">Status</th>
                         </tr>
                     </thead>
@@ -244,7 +244,7 @@
                     <thead>
                         <tr class="text-[#8E8E93] text-xs border-b border-[#E5E5EA]">
                             <th class="py-2.5 pr-3 font-semibold">Batch</th>
-                            <th class="py-2.5 pr-3 font-semibold">Divers</th>
+                            <th class="py-2.5 pr-3 font-semibold">Participants</th>
                             <th class="py-2.5 font-semibold">Coaches</th>
                         </tr>
                     </thead>
@@ -275,7 +275,7 @@
                                 <td class="py-3 pr-3 font-semibold text-[#1D1D1F]">{{ $pax }}</td>
                                 <td class="py-3 whitespace-nowrap">
                                     @if($pax === 0)
-                                        <span class="text-[#8E8E93]">No divers yet</span>
+                                        <span class="text-[#8E8E93]">No participants yet</span>
                                     @elseif($staffed)
                                         <span class="text-[#00838C] font-semibold">{{ $coachesAssigned }} of {{ $coachesNeeded }}</span>
                                     @else

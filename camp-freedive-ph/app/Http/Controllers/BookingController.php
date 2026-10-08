@@ -23,11 +23,11 @@ use App\Http\Requests\Booking\CheckWeatherRequest;
 use App\Http\Requests\Booking\PricingQuoteRequest;
 
 /**
- * Public booking page for customers.
+ * Public booking page for participants.
  *
  * - shows the booking form (booking.create)
  * - checks the weather for the picked dates
- * - max 45 people per weekend trip (boat limit and 1 coach for every 4 students)
+ * - max 45 people per weekend trip (boat limit and 1 coach for every 4 participants)
  * - holds the slots for 15 minutes during checkout so two people can't take the same slots
  * - new bookings start as pending_downpayment and the slots are released if not paid in time
  */
@@ -331,7 +331,7 @@ class BookingController extends Controller
                 $isCertified,
                 $request
             ) {
-                // Max 45 people per weekend trip (boat limit and 1 coach for every 4 students).
+                // Max 45 people per weekend trip (boat limit and 1 coach for every 4 participants).
                 // Counts saved bookings and the 15-minute checkout holds.
                 $availableSlots = $this->slotReservationService->getAvailableSlots($startDate);
 
@@ -378,7 +378,7 @@ class BookingController extends Controller
                 // Put the booking in the batch for these dates
                 $batch = app(\App\Services\BatchManagementService::class)->findOrCreateBatchForDates($startDate, $endDate);
 
-                // 4-digit PIN so the guest can look up the booking without an account
+                // 4-digit PIN so the participant can look up the booking without an account
                 $bookingNumber = 'CFP-' . date('Y') . '-' . strtoupper(Str::random(5));
                 $pin = str_pad((string) mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
 
@@ -405,7 +405,7 @@ class BookingController extends Controller
                         'total_amount' => $totalAmount,
                         'downpayment_amount' => $downpaymentAmount,
                         'balance_amount' => $balanceAmount,
-                        'contact_name' => $contactName ?: 'Guest',
+                        'contact_name' => $contactName ?: 'Participant',
                         'contact_email' => $validated['contact_email'],
                         'contact_phone' => $validated['contact_phone'],
                         'contact_facebook' => $validated['contact_facebook'] ?? null,

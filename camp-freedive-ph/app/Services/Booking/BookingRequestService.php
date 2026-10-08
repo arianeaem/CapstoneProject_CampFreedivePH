@@ -27,9 +27,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Staff decisions on guests' reschedule and cancellation requests.
+ * Staff decisions on participants' reschedule and cancellation requests.
  * Each decision updates the booking and request together, writes the status log,
- * tells the affected coaches and emails the guest.
+ * tells the affected coaches and emails the participant.
  */
 class BookingRequestService
 {
@@ -174,7 +174,7 @@ class BookingRequestService
                         'status' => 'refunded',
                         'paymongo_refund_id' => $paymongoRefundId,
                         'amount_refunded' => $refundAmount,
-                        'refund_reason' => $adminNotes ?? 'Admin approved customer cancellation refund',
+                        'refund_reason' => $adminNotes ?? 'Admin approved participant cancellation refund',
                     ]);
 
                     PaymentStatusLog::create([
@@ -202,7 +202,7 @@ class BookingRequestService
                     'status' => $isForfeited ? 'forfeited' : 'approved',
                     'paymongo_refund_id' => $paymongoRefundId,
                     'forfeit_reason' => $isForfeited ? 'cancellation_outside_policy_window' : null,
-                    'notes' => 'Processed directly via Guest Cancellation Request. ' . ($adminNotes ?? ''),
+                    'notes' => 'Processed directly via Participant Cancellation Request. ' . ($adminNotes ?? ''),
                     'reviewed_by' => $operator->id,
                     'reviewed_at' => now(),
                 ]);

@@ -146,7 +146,7 @@
             <h1 class="text-xl sm:text-3xl font-black text-[#1D1D1F] tracking-tight" x-text="stepTitles[currentStep - 1]"></h1>
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 1">Choose the package that matches your freediving experience level.</p>
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 2">Select your 2D1N weekend dive schedule with real-time weather safety validation.</p>
-            <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 3">Enter guest details, emergency contact, carpool hub, and optional add-ons.</p>
+            <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 3">Enter participant details, emergency contact, carpool hub, and optional add-ons.</p>
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 4">Review your reservation breakdown and complete downpayment.</p>
             <p class="text-xs sm:text-sm text-[#6E6E73] mt-1" x-show="currentStep === 5">Save your booking reference PIN and view your camp itinerary.</p>
         </div>
@@ -288,7 +288,7 @@
                         </div>
 
                         <!-- Exclusions -->
-                        <div class="pt-3 border-t border-[#E5E5EA]">
+                        <div class="pt-3">
                             <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#6E6E73] mb-2 flex items-center gap-1.5">
                                 <span>Exclusions</span>
                             </h4>
@@ -418,7 +418,7 @@
                         </div>
 
                         <!-- Exclusions -->
-                        <div class="pt-3 border-t border-[#E5E5EA]">
+                        <div class="pt-3">
                             <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#6E6E73] mb-2 flex items-center gap-1.5">
                                 <span>Exclusions</span>
                             </h4>
@@ -465,7 +465,7 @@
 
                             <!-- Target Audience Description -->
                             <p class="text-sm text-[#4A4A4F] font-medium my-3 mb-4 min-h-[44px] flex items-center justify-center leading-relaxed text-center">
-                                Divers who already completed an intro class but want to fix their form.
+                                Participants who already completed an intro class but want to fix their form.
                             </p>
                         </div>
 
@@ -517,7 +517,7 @@
                         </div>
 
                         <!-- Exclusions -->
-                        <div class="pt-3 border-t border-[#E5E5EA]">
+                        <div class="pt-3">
                             <h4 class="text-xs font-extrabold uppercase tracking-wider text-[#6E6E73] mb-2 flex items-center gap-1.5">
                                 <span>Exclusions</span>
                             </h4>
@@ -1347,7 +1347,7 @@
                             </div>
 
                             <div id="booking-confirmations"
-                                 class="mt-4 p-3.5 sm:p-4 space-y-3 scroll-mt-24"
+                                 class="mt-4 space-y-3 scroll-mt-24"
                                  :class="touchedStep3 && (!form.confirmation_ack || !form.hasAgreedToTerms) ? 'border-2 border-[#D70015] bg-red-50/40 ring-2 ring-[#D70015]/20' : ''">
                                 <label tabindex="0" role="checkbox"
                                        :aria-checked="form.confirmation_ack"
@@ -1489,7 +1489,7 @@
                                 Cancellation & Reschedule Policy
                             </h3>
                             <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">
-                                These notice periods apply to customer requests. Camp FreedivePH may also cancel or reschedule a dive when safety, weather, site, boat, or other operational conditions require it. We will notify affected customers and provide the applicable next steps.
+                                These notice periods apply to participant requests. Camp FreedivePH may also cancel or reschedule a dive when safety, weather, site, boat, or other operational conditions require it. We will notify affected participants and provide the applicable next steps.
                             </p>
                         </div>
 

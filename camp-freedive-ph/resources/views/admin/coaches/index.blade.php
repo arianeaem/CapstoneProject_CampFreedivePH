@@ -21,7 +21,7 @@
             <!-- Matching queue button -->
             <a href="{{ route('admin.coaches.matching') }}" 
                class="btn-primary px-4 py-2 text-sm sm:text-sm font-bold flex items-center gap-2 shadow-2xs">
-                <span>Students Needing Coach</span>
+                <span>Participants Needing Coach</span>
                 @if($unassignedStudentsCount > 0)
                     <span class="px-2 py-0.5 rounded-md text-sm font-bold bg-white text-[#780000]">
                         {{ $unassignedStudentsCount }}
@@ -204,7 +204,7 @@
                     <div>
                         <span class="text-xs font-bold uppercase tracking-wider text-[#8E8E93] block">NEXT BATCH LOAD</span>
                         <span class="text-sm font-semibold block mt-0.5 {{ $loadOnNext > ($coach->max_ratio ?? 4) ? 'text-rose-700 font-bold' : ($nextAssignment ? 'text-[#1D1D1F]' : 'text-[#8E8E93]') }}">
-                            {{ $nextAssignment ? $loadOnNext . ' / ' . ($coach->max_ratio ?? 4) . ' Students' : '0 / ' . ($coach->max_ratio ?? 4) . ' Students' }}
+                            {{ $nextAssignment ? $loadOnNext . ' / ' . ($coach->max_ratio ?? 4) . ' Participants' : '0 / ' . ($coach->max_ratio ?? 4) . ' Participants' }}
                         </span>
                     </div>
                 </div>

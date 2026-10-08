@@ -244,7 +244,7 @@ class WeatherSafetyService
                 'bg_color' => '#FEF2F2',
                 'text_color' => '#991B1B',
                 'icon' => 'x-circle',
-                'description' => 'Severe weather advisory, storm signal, or dangerous marine sea state in Batangas. Online bookings suspended for diver safety.',
+                'description' => 'Severe weather advisory, storm signal, or dangerous marine sea state in Batangas. Online bookings suspended for participant safety.',
             ],
             default => [
                 'title' => 'Safe',

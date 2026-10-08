@@ -264,7 +264,7 @@ class AnalyticsService
         $netRevenue = max(0, $grossRevenue - $refundsProcessed);
 
         // Still to collect = price minus what was paid, for bookings that are still active.
-        // (balance_amount isn't cleared when the guest pays in full, so we can't just add it up.)
+        // (balance_amount isn't cleared when the participant pays in full, so we can't just add it up.)
         $outstandingReceivables = (float) Booking::whereIn('status', array_merge(self::BOOKING_GROUPS['going'], self::BOOKING_GROUPS['completed']))
             ->whereBetween('created_at', [$start, $end])
             ->withSum(['payments as paid_sum' => fn ($q) => $q->whereIn('status', ['completed', 'paid'])], 'amount')
@@ -310,7 +310,7 @@ class AnalyticsService
             ->groupBy('bookings.class_type')
             ->pluck('s', 'class_type');
 
-        // Bookings and divers per class, with carpool / boat dive counts
+        // Bookings and participants per class, with carpool / boat dive counts
         $addonColumns = "COUNT(*) AS c,
                 SUM(CASE WHEN bookings.pickup_option = 'carpool' THEN 1 ELSE 0 END) AS carpool,
                 SUM(CASE WHEN bookings.boat_dive THEN 1 ELSE 0 END) AS boat";
@@ -372,7 +372,7 @@ class AnalyticsService
         $discountsGiven = (float) abs($adjustmentTotals->negative);
         $netDynamicLift = $positiveYield - $discountsGiven;
 
-        // Average income per diver and per booking
+        // Average income per participant and per booking
         $totalPax = (int) $paxStats->sum('c');
         $totalBookings = (int) $bookingStats->sum('c');
 
@@ -444,10 +444,10 @@ class AnalyticsService
 
         // Group sizes
         $groupSizeDistribution = [
-            'solo' => 0,      // 1 diver
-            'duo' => 0,       // 2 divers
-            'small_group' => 0, // 3-4 divers
-            'large_group' => 0, // 5+ divers
+            'solo' => 0,      // 1 participant
+            'duo' => 0,       // 2 participants
+            'small_group' => 0, // 3-4 participants
+            'large_group' => 0, // 5+ participants
         ];
 
         $allPeriodBookings = Booking::whereBetween('created_at', [$start, $end])
@@ -571,7 +571,7 @@ class AnalyticsService
         // Batches that are 90% full or more
         $fullCapacityBatches = $runningBatches->filter(fn($b) => ($b->occupancy_percentage ?? 0) >= 90)->count();
 
-        // Coach to student ratio
+        // Coach to participant ratio
         $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
         $compliantBatches = $runningBatches->filter(function ($b) use ($coachRatio) {
             $pax = $b->total_participants_count;

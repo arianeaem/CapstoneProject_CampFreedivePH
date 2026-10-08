@@ -47,7 +47,7 @@
                 $exportQuery = ['preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')];
                 $exports = array_filter([
                     'revenue' => $isOwner ? ['Revenue', 'Money summary, by package, by month, and every payment'] : null,
-                    'bookings' => ['Bookings', 'Booking summary, every booking and every diver'],
+                    'bookings' => ['Bookings', 'Booking summary, every booking and every participant'],
                     'batches' => ['Batches & Coaches', 'Batch summary, every batch and every coach'],
                 ]);
             @endphp

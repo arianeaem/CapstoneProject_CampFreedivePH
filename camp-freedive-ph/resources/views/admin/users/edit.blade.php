@@ -182,7 +182,7 @@
             </div>
 
             <!-- Optional Password Reset by Admin/Owner -->
-            <div class="pt-3 border-t border-[#E5E5EA]">
+            <div class="pt-3">
                 <label for="new_password" class="block font-bold text-[#1D1D1F] mb-1.5 text-sm">
                     Assign New Temporary Password (Optional)
                 </label>
@@ -238,7 +238,7 @@
                     Are you sure you want to permanently delete the account for <strong>{{ $user->name }}</strong> (<span class="font-mono text-[#6E6E73]">{{ $user->email }}</span>)? This action cannot be undone.
                 </p>
 
-                <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="pt-2 flex items-center justify-end border-t border-[#F2F2F7] gap-2">
+                <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="flex items-center justify-end gap-2">
                     @csrf
                     @method('DELETE')
                     <button type="button" @click="openDeleteConfirm = false" class="btn-secondary px-3.5 py-1.5 text-sm font-semibold cursor-pointer">Cancel</button>

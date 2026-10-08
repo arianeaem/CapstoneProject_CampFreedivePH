@@ -25,7 +25,7 @@
     <!-- Top Header & Tabs -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">My Assigned Schedule &amp; Student Rosters</h1>
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">My Assigned Schedule &amp; Participant Rosters</h1>
         </div>
 
         <!-- Tab Controls -->
@@ -60,7 +60,7 @@
         </div>
     </div>
 
-    <!-- 1. Upcoming assignments (click a batch to see the students) -->
+    <!-- 1. Upcoming assignments (click a batch to see the participants) -->
     <div x-show="activeTab === 'upcoming'" role="tabpanel" id="panel-upcoming" aria-labelledby="tab-upcoming" class="space-y-4">
         @forelse($upcomingBatches as $item)
             @php
@@ -76,7 +76,7 @@
                 <!-- Batch Header Banner -->
                 <div class="p-4 sm:p-6 select-none flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white">
                     
-                    <!-- Left Column: Weather + Batch Title + Dive Dates & Students -->
+                    <!-- Left Column: Weather + Batch Title + Dive Dates & Participants -->
                     <div class="space-y-2.5 flex-1 min-w-0">
                         <!-- Weather (uses components/dive-safety/status) -->
                         <x-dive-safety.status :classification="$item['weather_class']"
@@ -97,7 +97,7 @@
                                     Dive Dates: <strong class="text-[#1D1D1F]">{{ $batch->formatted_date_range }} ({{ $batch->start_date->format('D') }} - {{ $batch->end_date->format('D') }})</strong>
                                 </p>
                                 <p>
-                                    Assigned Students: <strong class="text-[#1D1D1F]">{{ $item['students_count'] }} Student(s)</strong>
+                                    Assigned Participants: <strong class="text-[#1D1D1F]">{{ $item['students_count'] }} Participant(s)</strong>
                                     @if(!empty($item['class_counts']))
                                         <span class="text-[#6E6E73] mx-1">·</span>
                                         <span class="text-[#1D1D1F] font-semibold">
@@ -137,7 +137,7 @@
                                 :aria-expanded="isBatchOpen({{ $batch->id }}) ? 'true' : 'false'"
                                 aria-controls="roster-panel-{{ $batch->id }}"
                                 class="min-h-[44px] px-4 py-2.5 rounded-xl bg-white hover:bg-[#F2F2F7] border border-[#E5E5EA] text-sm font-bold text-[#1D1D1F] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                            <span x-text="isBatchOpen({{ $batch->id }}) ? 'Hide Roster' : 'View Student Roster'"></span>
+                            <span x-text="isBatchOpen({{ $batch->id }}) ? 'Hide Roster' : 'View Participant Roster'"></span>
                             <svg class="w-4 h-4 text-[#6E6E73] transition-transform duration-200" 
                                  :class="isBatchOpen({{ $batch->id }}) ? 'rotate-180' : ''"
                                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -149,7 +149,7 @@
 
                 </div>
 
-                <!-- Assigned students (can be expanded) -->
+                <!-- Assigned participants (can be expanded) -->
                 <div x-show="isBatchOpen({{ $batch->id }})" 
                      x-cloak 
                      id="roster-panel-{{ $batch->id }}"
@@ -160,18 +160,18 @@
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
                         <div>
                             <h3 class="text-base font-black text-[#1D1D1F]">
-                                {{ ($item['is_current_dive'] ?? false) ? 'Students Assigned to You Today' : 'Assigned Student Roster' }}
+                                {{ ($item['is_current_dive'] ?? false) ? 'Participants Assigned to You Today' : 'Assigned Participant Roster' }}
                             </h3>
                             <p class="text-sm text-[#6E6E73]">
-                                {{ ($item['is_current_dive'] ?? false) ? 'Your assigned students for today’s dive.' : 'Review student swimming abilities and health conditions prior to boat departure' }}
+                                {{ ($item['is_current_dive'] ?? false) ? 'Your assigned participants for today’s dive.' : 'Review participant swimming abilities and health conditions prior to boat departure' }}
                             </p>
                         </div>
                         <span class="text-sm font-extrabold text-[#1D1D1F] bg-white border border-[#E5E5EA] px-3 py-1 rounded-xl self-start sm:self-auto shadow-2xs">
-                            {{ $item['students_count'] }} Diver(s) in Group
+                            {{ $item['students_count'] }} Participant(s) in Group
                         </span>
                     </div>
 
-                    <!-- Student cards (2 columns) -->
+                    <!-- Participant cards (2 columns) -->
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                         @foreach($students as $student)
                             @php
@@ -192,13 +192,13 @@
                                 $shortClassType = ucfirst($student->booking?->class_type ?? 'Discovery');
                             @endphp
                             
-                            <!-- Individual Student Card -->
+                            <!-- Individual Participant Card -->
                             <div class="bg-white rounded-2xl border border-[#E5E5EA] p-4 sm:p-5 space-y-4 flex flex-col justify-between">
                                 
-                                <!-- Card Header: Student Name & Compact Package Badge -->
+                                <!-- Card Header: Participant Name & Compact Package Badge -->
                                 <div class="flex items-start justify-between gap-2.5">
                                     <div class="min-w-0 flex-1">
-                                        <span class="text-sm uppercase font-bold text-[#6E6E73] tracking-wider block">Student</span>
+                                        <span class="text-sm uppercase font-bold text-[#6E6E73] tracking-wider block">Participant</span>
                                         <h4 class="font-black text-[#1D1D1F] text-base sm:text-lg tracking-tight mt-0.5 truncate">{{ $student->name }}</h4>
                                     </div>
                                     <span class="px-2.5 py-1 rounded-lg text-sm font-black bg-[#F8EAEA] text-[#780000] shrink-0">
@@ -278,7 +278,7 @@
             <div class="bg-white rounded-2xl p-12 border border-[#E5E5EA] text-center space-y-3">
                 <h3 class="text-base font-bold text-[#1D1D1F]">No Upcoming Confirmed Assignments</h3>
                 <p class="text-sm text-[#6E6E73] max-w-md mx-auto leading-relaxed">
-                    You currently have no students assigned for upcoming dates. Make sure your availability calendar is marked free or browse the Open Slot Requests board.
+                    You currently have no participants assigned for upcoming dates. Make sure your availability calendar is marked free or browse the Open Slot Requests board.
                 </p>
                 <div class="pt-2">
                     <a href="{{ route('coach.availability.index') }}" class="btn-primary min-h-[44px] px-4 py-2.5 rounded-xl text-white text-sm font-bold inline-flex items-center gap-2 shadow-xs active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2">
@@ -388,8 +388,8 @@
             </div>
             <div class="p-4 sm:p-5 rounded-2xl bg-white border border-[#E5E5EA] flex items-center justify-between">
                 <div>
-                    <div class="text-sm text-[#6E6E73] font-bold uppercase tracking-wider">Total Students Coached</div>
-                    <div class="text-2xl sm:text-3xl font-black text-[#1D1D1F] mt-1">{{ $totalPastStudentsCount }} Students</div>
+                    <div class="text-sm text-[#6E6E73] font-bold uppercase tracking-wider">Total Participants Coached</div>
+                    <div class="text-2xl sm:text-3xl font-black text-[#1D1D1F] mt-1">{{ $totalPastStudentsCount }} Participants</div>
                 </div>
             </div>
         </div>
@@ -411,7 +411,7 @@
                                 Dive Dates: <strong class="text-[#1D1D1F]">{{ $batch->formatted_date_range }} ({{ $batch->start_date->format('D') }} - {{ $batch->end_date->format('D') }})</strong>
                             </p>
                             <p>
-                                Students Coached: <strong class="text-[#1D1D1F]">{{ $item['students_count'] }} Student(s)</strong>
+                                Participants Coached: <strong class="text-[#1D1D1F]">{{ $item['students_count'] }} Participant(s)</strong>
                                 @if(!empty($item['class_counts']))
                                     <span class="text-[#6E6E73] mx-1">·</span>
                                     <span class="text-[#1D1D1F] font-semibold">
@@ -444,7 +444,7 @@
                     </button>
                 </div>
 
-                <!-- Expandable Past Student Roster -->
+                <!-- Expandable Past Participant Roster -->
                 <div x-show="isBatchOpen('hist_{{ $batch->id }}')" 
                      x-cloak 
                      id="roster-panel-hist-{{ $batch->id }}"
@@ -455,7 +455,7 @@
                         <table class="w-full text-left text-sm">
                             <thead class="bg-[#F2F2F7] border-b border-[#E5E5EA] text-[#6E6E73] font-bold uppercase text-sm">
                                 <tr>
-                                    <th class="px-4 py-3">Student Name</th>
+                                    <th class="px-4 py-3">Participant Name</th>
                                     <th class="px-4 py-3">Age</th>
                                     <th class="px-4 py-3">Class Type</th>
                                     <th class="px-4 py-3">Swimming Ability</th>
@@ -571,7 +571,7 @@
 
                     <div class="p-3.5 rounded-xl bg-[#F2F2F7] text-sm space-y-1 shadow-2xs">
                         <div class="font-bold text-[#1D1D1F]" x-text="selectedBatch.batch?.name || selectedBatch.batch?.batch_number"></div>
-                        <div class="text-[#6E6E73]">Students Assigned: <strong x-text="selectedBatch.students_count"></strong></div>
+                        <div class="text-[#6E6E73]">Participants Assigned: <strong x-text="selectedBatch.students_count"></strong></div>
                     </div>
 
                     <div class="space-y-1.5">

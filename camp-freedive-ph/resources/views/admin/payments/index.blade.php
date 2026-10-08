@@ -42,7 +42,7 @@
                 <div class="hidden lg:block absolute left-0 top-2 bottom-2 w-px bg-[#E5E5EA]"></div>
                 <span class="text-sm sm:text-sm font-bold text-[#6E6E73] uppercase tracking-wider block truncate">Total Refunded</span>
                 <div class="text-base sm:text-2xl font-extrabold text-[#780000] mt-0.5">₱{{ number_format($stats['total_refunded'] ?? 0, 2) }}</div>
-                <span class="text-sm text-[#8E8E93] hidden sm:block mt-0.5">Returned to guest accounts</span>
+                <span class="text-sm text-[#8E8E93] hidden sm:block mt-0.5">Returned to participants</span>
             </div>
 
             <!-- Forfeited -->
@@ -99,7 +99,7 @@
                             <input type="text" 
                                    name="search" 
                                    value="{{ request('search') }}" 
-                                   placeholder="Search booking, txn, guest..." 
+                                   placeholder="Search booking, txn, participant..." 
                                    class="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[#D1D1D6] bg-white focus:bg-white focus:border-[#780000]">
                             <svg class="w-3.5 h-3.5 text-[#8E8E93] absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="11" cy="11" r="8"></circle>
@@ -187,7 +187,7 @@
                     <tr>
                         <th class="py-3 px-4 text-left">Transaction ID</th>
                         <th class="py-3 px-4 text-left">Booking #</th>
-                        <th class="py-3 px-4 text-left">Lead Guest</th>
+                        <th class="py-3 px-4 text-left">Booking Contact</th>
                         <th class="py-3 px-4 text-left">Stage</th>
                         <th class="py-3 px-4 text-left">Method</th>
                         <th class="py-3 px-4 text-left">Amount</th>
@@ -217,7 +217,7 @@
                             @endif
                         </td>
 
-                        <!-- Lead Guest Contact -->
+                        <!-- Booking Contact -->
                         <td class="py-3 px-4 text-left">
                             @if($payment->booking)
                                 <strong class="text-[#1D1D1F] block">{{ $payment->booking->contact_name }}</strong>

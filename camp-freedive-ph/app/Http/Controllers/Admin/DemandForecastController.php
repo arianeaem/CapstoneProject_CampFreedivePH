@@ -17,7 +17,7 @@ use Illuminate\View\View;
  */
 class DemandForecastController extends Controller
 {
-    /** Divers per coach, for "coaches needed" (same as the monthly total). */
+    /** Participants per coach, for "coaches needed" (same as the monthly total). */
     protected const DIVERS_PER_COACH = 4;
 
     /** Day ranges you can pick on the page. */

@@ -33,7 +33,7 @@ class UserManagementController extends Controller
         }
 
         return back()
-            ->with('error', "{$user->name} can't be {$action} yet because they still have upcoming batches. Reassign their students to other coaches first: " . $this->accounts->describeCommitments($commitments) . '.')
+            ->with('error', "{$user->name} can't be {$action} yet because they still have upcoming batches. Reassign their participants to other coaches first: " . $this->accounts->describeCommitments($commitments) . '.')
             ->with('blocked_coach', [
                 'name' => $user->name,
                 'action' => $action,

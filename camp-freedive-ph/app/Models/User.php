@@ -70,7 +70,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Number of students assigned on a dive date.
+     * Number of participants assigned on a dive date.
      */
     public function assignedCountForDate($date): int
     {

@@ -63,9 +63,9 @@
                                 </span>
                             </div>
                             <div>
-                                <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">STUDENTS</span>
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">PARTICIPANTS</span>
                                 <span class="text-xs sm:text-sm font-bold text-[#1D1D1F] block mt-0.5 leading-snug">
-                                    {{ $headcount }} {{ Str::plural('Student', $headcount) }}
+                                    {{ $headcount }} {{ Str::plural('Participant', $headcount) }}
                                 </span>
                             </div>
                         </div>

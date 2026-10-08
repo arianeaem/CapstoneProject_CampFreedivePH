@@ -305,7 +305,7 @@ class WeatherSafetyController extends Controller
 
             $msg = "Manual override applied to batch {$batch->batch_code}. Both days forced to Critical Risk.";
             if ($cancelBatch) {
-                $msg .= " Batch cancelled, 100% force majeure refund eligibility triggered, and customer cancellation notifications dispatched.";
+                $msg .= " Batch cancelled, 100% force majeure refund eligibility triggered, and participant cancellation notifications dispatched.";
             }
 
             return back()->with('success', $msg);
@@ -328,7 +328,7 @@ class WeatherSafetyController extends Controller
                 auth()->user()
             );
 
-            return back()->with('success', "Batch {$batch->batch_code} is cancelled. {$sentCount} guest(s) were emailed and their full refunds are waiting in Refunds.");
+            return back()->with('success', "Batch {$batch->batch_code} is cancelled. {$sentCount} participant(s) were emailed and their full refunds are waiting in Refunds.");
         } catch (Exception $e) {
             return back()->with('error', "Cancellation failed: " . $e->getMessage());
         }

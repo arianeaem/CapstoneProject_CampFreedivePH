@@ -11,7 +11,7 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Sent to each guest when their batch is rated High or Critical Risk less than 18 hours before the dive.
+ * Sent to each participant when their batch is rated High or Critical Risk less than 18 hours before the dive.
  * Critical: they may reschedule for free or cancel with a full downpayment refund.
  * High: informational only, the dive is still planned.
  */

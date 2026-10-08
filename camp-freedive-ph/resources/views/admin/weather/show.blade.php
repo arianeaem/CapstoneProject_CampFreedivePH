@@ -390,7 +390,7 @@
                     <label class="flex items-start gap-2 cursor-pointer">
                         <input type="checkbox" name="cancel_batch" value="1" class="rounded border-[#D1D1D6] text-[#780000] mt-0.5">
                         <span class="font-bold text-[#991B1B]">
-                            Also cancel this batch now: every guest gets a full refund and the cancellation email.
+                            Also cancel this batch now: every participant gets a full refund and the cancellation email.
                         </span>
                     </label>
                 </div>
@@ -426,7 +426,7 @@
                 </div>
                 <div class="rounded-xl bg-[#F2F2F7] p-3">
                     <div class="text-xl font-extrabold text-[#1D1D1F]">{{ $impact['divers'] }}</div>
-                    <div class="text-[11px] text-[#6E6E73] font-semibold">Divers</div>
+                    <div class="text-[11px] text-[#6E6E73] font-semibold">Participants</div>
                 </div>
                 <div class="rounded-xl bg-[#F2F2F7] p-3">
                     <div class="text-xl font-extrabold text-[#1D1D1F]">{{ $impact['refunds'] }}</div>
@@ -439,8 +439,8 @@
                 <p class="font-bold text-[#1D1D1F]">What happens when you confirm</p>
                 <ol class="list-decimal pl-5 space-y-1 text-[#3A3A3C]">
                     <li>The batch and its {{ $impact['bookings'] }} active booking(s) are marked <strong>Cancelled by Camp</strong>.</li>
-                    <li>A <strong>full refund (100%)</strong> of what each guest paid is created and waits for you in <strong>Refunds</strong>.</li>
-                    <li>Each guest gets the email below: why it was cancelled, their refund, and that they can ask to move to another date for free instead.</li>
+                    <li>A <strong>full refund (100%)</strong> of what each participant paid is created and waits for you in <strong>Refunds</strong>.</li>
+                    <li>Each participant gets the email below: why it was cancelled, their refund, and that they can ask to move to another date for free instead.</li>
                 </ol>
                 <p class="banner banner-warning mt-2">This cannot be undone.</p>
             </div>
@@ -462,18 +462,18 @@
                     <input id="cancel-reason" type="text" name="cancellation_reason" x-model="cancelReason" required maxlength="1000"
                            placeholder="Pick one above or type your own reason"
                            class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white font-medium">
-                    <p class="text-[#6E6E73]">Guests will read this exact sentence, so keep it simple.</p>
+                    <p class="text-[#6E6E73]">Participants will read this exact sentence, so keep it simple.</p>
                 </div>
 
                 <!-- Email preview: mirrors resources/views/emails/batch_weather_cancellation.blade.php -->
                 <div class="space-y-1.5">
-                    <span class="block font-bold text-[#1D1D1F]">Email each guest will receive</span>
+                    <span class="block font-bold text-[#1D1D1F]">Email each participant will receive</span>
                     <div class="rounded-xl bg-[#F2F2F7] p-2 text-xs text-[#1D1D1F] leading-relaxed">
                         <div class="px-4 py-2 bg-[#780000] text-white font-extrabold rounded-t-lg">Camp FreedivePH</div>
                         <div class="p-4 space-y-2.5 bg-white rounded-b-lg">
                             <p class="text-[11px] text-[#6E6E73]">Subject: Your {{ $batch->start_date->format('M d') }} dive has been cancelled for your safety</p>
                             <p class="text-sm font-extrabold">Your dive has been cancelled for your safety</p>
-                            <p>Hello <strong>[Guest name]</strong>,</p>
+                            <p>Hello <strong>[Contact name]</strong>,</p>
                             <p>We're sorry, but we had to cancel your freediving trip on <strong>{{ $batch->formatted_date_range }}</strong>. Our safety team decided the sea will not be safe for diving on those dates.</p>
                             <div class="rounded-lg bg-[#FEF2F2] text-[#991B1B] px-3 py-2">
                                 <strong class="block">Why we cancelled</strong>
@@ -491,13 +491,13 @@
 
                 <label class="flex items-start gap-2 cursor-pointer">
                     <input type="checkbox" x-model="understood" class="rounded border-[#D1D1D6] text-[#780000] mt-0.5">
-                    <span class="text-[#1D1D1F]">I understand this cancels <strong>{{ $impact['bookings'] }} booking(s)</strong>, starts full refunds and emails every guest.</span>
+                    <span class="text-[#1D1D1F]">I understand this cancels <strong>{{ $impact['bookings'] }} booking(s)</strong>, starts full refunds and emails every participant.</span>
                 </label>
 
-                <div class="flex items-center justify-end gap-2 pt-3 border-t border-[#E5E5EA]">
+                <div class="flex items-center justify-end gap-2 pt-3">
                     <button type="button" @click="openCancelModal = false" class="btn-secondary px-3.5 py-1.5 text-xs">Keep batch</button>
                     <button type="submit" :disabled="!understood || !cancelReason.trim()" class="btn-danger px-4 py-2 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed">
-                        Cancel batch &amp; email guests
+                        Cancel batch &amp; email participants
                     </button>
                 </div>
             </form>

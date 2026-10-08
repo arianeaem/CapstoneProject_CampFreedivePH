@@ -391,7 +391,7 @@
                     <div class="p-4 rounded-xl bg-[#F2F2F7] space-y-2 text-sm shadow-2xs">
                         <div class="flex items-center justify-between">
                             <span class="font-bold text-[#1D1D1F]" x-text="selectedAssignedDay.batch?.batch_number || 'Dive Batch'"></span>
-                            <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold" x-text="selectedAssignedDay.students_count + ' Student(s) Assigned'"></span>
+                            <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold" x-text="selectedAssignedDay.students_count + ' Participant(s) Assigned'"></span>
                         </div>
                         <div><strong>Dive Date:</strong> <span x-text="selectedAssignedDay.date_str"></span></div>
                         <div x-text="'Hours until dive departure: ' + selectedAssignedDay.hours_until_dive + 'h'"></div>
@@ -421,7 +421,7 @@
                                           required 
                                           placeholder="Please explain the emergency, illness, or unavoidable circumstance requiring reassignment..."
                                           class="w-full text-sm rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:ring-[#780000] p-3"></textarea>
-                                <span class="text-sm text-[#8E8E93]">Your request will be submitted to Camp Admin for review and student reassignment.</span>
+                                <span class="text-sm text-[#8E8E93]">Your request will be submitted to Camp Admin for review and participant reassignment.</span>
                             </div>
 
                             <div class="flex items-center justify-end gap-2.5 pt-2">

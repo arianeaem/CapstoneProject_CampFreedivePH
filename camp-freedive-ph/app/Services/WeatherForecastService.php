@@ -69,7 +69,7 @@ class WeatherForecastService
         'Very Safe' => 'Conditions are optimal for freediving. Environmental hazards are minimal.',
         'Safe' => 'Conditions are generally safe, but normal safety protocols should still be followed.',
         'Moderate' => 'Some conditions may affect safety or comfort. Increased monitoring is needed.',
-        'High Risk' => 'Conditions present significant hazards that could compromise diver safety.',
+        'High Risk' => 'Conditions present significant hazards that could compromise participant safety.',
         'Critical Risk' => 'Conditions are unsafe for freediving due to severe weather or sea state.',
         'Not Available' => 'Forecast model not yet available for dates beyond 16 days.',
     ];
@@ -352,7 +352,7 @@ class WeatherForecastService
         if (in_array($classification, ['High Risk', 'Critical Risk'], true)) {
             $assessedBatch = $batch->fresh();
             app(\App\Services\AdminNotificationService::class)->risk($assessedBatch, $classification);
-            // Less than 18 hours before the dive: email guests and admins (Critical = reschedule/refund, High = heads-up)
+            // Less than 18 hours before the dive: email participants and admins (Critical = reschedule/refund, High = heads-up)
             app(\App\Services\WeatherRiskNotifier::class)->handle($assessedBatch, $classification);
         }
 
@@ -475,11 +475,12 @@ class WeatherForecastService
 
         // ML model check for the dive hours
         $mlAssessment = !$overrideTriggered ? $this->assessMLSafetyForDate($date->format('Y-m-d'), '08:00', '18:00', $overrides) : null;
-        $mlRank = $mlAssessment ? (self::RISK_RANK[$mlAssessment['overall_recommendation'] ?? 'Safe'] ?? 1) : 1;
+        // Anything missing counts as "Not Available" (rank 0), never as Safe
+        $mlRank = $mlAssessment ? (self::RISK_RANK[$mlAssessment['overall_recommendation'] ?? 'Not Available'] ?? 0) : 0;
 
-        $amRank = self::RISK_RANK[$amData['classification']] ?? 1;
-        $pmRank = self::RISK_RANK[$pmData['classification']] ?? 1;
-        $daytimeRank = self::RISK_RANK[$cachedDay['daytime_classification'] ?? 'Safe'] ?? 1;
+        $amRank = self::RISK_RANK[$amData['classification']] ?? 0;
+        $pmRank = self::RISK_RANK[$pmData['classification']] ?? 0;
+        $daytimeRank = self::RISK_RANK[$cachedDay['daytime_classification'] ?? 'Not Available'] ?? 0;
 
         if ($overrideTriggered || $amRank === 5 || $pmRank === 5 || $daytimeRank === 5 || $mlRank === 5) {
             $dayClassification = 'Critical Risk';
@@ -489,11 +490,19 @@ class WeatherForecastService
             $recommendedAction = self::MEANING_MAP['Critical Risk'];
         } else {
             $dayRank = max($amRank, $pmRank, $daytimeRank, $mlRank);
-            $dayClassification = array_search($dayRank, self::RISK_RANK) ?: 'Safe';
+            $dayClassification = array_search($dayRank, self::RISK_RANK) ?: 'Not Available';
             $weightedScorePct = max($amData['weighted_score_pct'] ?? 0, $pmData['weighted_score_pct'] ?? 0, $cachedDay['daytime_score_pct'] ?? 0);
             $worstWindow = ($pmRank >= $amRank) ? '15:30-17:30' : '09:30-12:00';
             $worstHour = ($pmRank >= $amRank) ? $pmData['worst_hour'] : $amData['worst_hour'];
             $recommendedAction = self::MEANING_MAP[$dayClassification] ?? 'Proceed with caution.';
+
+            if ($dayClassification === 'Not Available') {
+                $weightedScorePct = null;
+                $worstWindow = null;
+                $worstHour = null;
+                $recommendedAction = "Open-Meteo's sea forecast (waves, swell, currents) only reaches about 9-10 days ahead, "
+                    . 'so this day cannot be rated yet. It will be rated automatically once the data is available.';
+            }
         }
 
         // Save the day assessment
@@ -987,7 +996,7 @@ class WeatherForecastService
                     return null;
                 }
             }
-            if (empty($apiDay) || empty($apiDay['hourly'])) {
+            if (empty($apiDay) || empty($apiDay['hourly']) || ($apiDay['overall_classification'] ?? null) === 'Not Available') {
                 return null;
             }
 
@@ -1184,7 +1193,7 @@ class WeatherForecastService
     }
 
     /**
-     * Cancel the whole batch, mark refunds as 100% and email the guests.
+     * Cancel the whole batch, mark refunds as 100% and email the participants.
      */
     public function cancelBatchWithRefundsAndNotifications(Batch $batch, string $cancellationReason, User $operator): int
     {
@@ -1352,6 +1361,15 @@ class WeatherForecastService
             $timeStr = sprintf('%sT%02d:00:00+08:00', $plannedDate, $hour);
             $idx = $hour; // index in the hourly array
 
+            // Skip hours without real Open-Meteo values (sea data stops ~9-10 days ahead)
+            if (!isset(
+                $marineData['wave_height'][$idx], $marineData['wave_period'][$idx], $marineData['swell_wave_height'][$idx],
+                $marineData['wind_wave_height'][$idx], $marineData['ocean_current_velocity'][$idx],
+                $weatherData['wind_speed_10m'][$idx], $weatherData['pressure_msl'][$idx]
+            )) {
+                continue;
+            }
+
             $waveHeight = isset($marineData['wave_height'][$idx]) ? (float)$marineData['wave_height'][$idx] : 0.70;
             $wavePeriod = isset($marineData['wave_period'][$idx]) ? (float)$marineData['wave_period'][$idx] : 6.10;
             $swellHeight = isset($marineData['swell_wave_height'][$idx]) ? (float)$marineData['swell_wave_height'][$idx] : 0.60;
@@ -1420,7 +1438,25 @@ class WeatherForecastService
             ];
         }
 
-        $count = count($hours);
+        // No real data for any hour of the window: no rating (an override still forces Critical)
+        if (empty($hourlyList)) {
+            return [
+                'planned_date' => $plannedDate,
+                'window_type' => $windowType,
+                'dive_start' => $diveStart,
+                'dive_end' => $diveEnd,
+                'classification' => $overrideTriggered ? 'Critical Risk' : 'Not Available',
+                'weighted_score_pct' => null,
+                'sustained_wind_speed' => null,
+                'max_wind_gust' => null,
+                'mean_wave_height' => null,
+                'mean_ocean_current' => null,
+                'worst_hour' => null,
+                'hourly' => [],
+            ];
+        }
+
+        $count = count($hourlyList);
         $meanWindSpeed = $count ? array_sum($windowWindSpeeds) / $count : 12.0;
         $maxWindGust = !empty($windowWindGusts) ? max($windowWindGusts) : 0.0;
         $meanWaveHeight = $count ? array_sum($windowWaveHeights) / $count : 0.70;
@@ -1593,15 +1629,20 @@ class WeatherForecastService
                 ];
             }
 
+            // Open-Meteo leaves the sea values empty past its marine range (~9-10 days ahead).
+            // Missing values stay null, so nothing is rated on made-up numbers.
+            $num = fn (array $series, string $key) => isset($series[$key][$index]) ? (float) $series[$key][$index] : null;
+
             // Marine values
             $dayBuckets[$dateKey]['marine']['time'][] = $isoTime;
-            $wHeight = (float) ($marineHourly['wave_height'][$index] ?? 0.7);
-            $wPeriod = (float) ($marineHourly['wave_period'][$index] ?? 6.1);
-            $sHeight = (float) ($marineHourly['swell_wave_height'][$index] ?? 0.6);
-            $wwHeight = (float) ($marineHourly['wind_wave_height'][$index] ?? 0.35);
-            $rawCurrent = (float) ($marineHourly['ocean_current_velocity'][$index] ?? 1.1);
-            $swPeriod = isset($marineHourly['swell_wave_period'][$index]) ? (float) $marineHourly['swell_wave_period'][$index] : null;
-            $wwPeriod = isset($marineHourly['wind_wave_period'][$index]) ? (float) $marineHourly['wind_wave_period'][$index] : null;
+            $wHeight = $num($marineHourly, 'wave_height');
+            $wPeriod = $num($marineHourly, 'wave_period');
+            $sHeight = $num($marineHourly, 'swell_wave_height');
+            $wwHeight = $num($marineHourly, 'wind_wave_height');
+            $rawCurrent = $num($marineHourly, 'ocean_current_velocity');
+            $swPeriod = $num($marineHourly, 'swell_wave_period');
+            $wwPeriod = $num($marineHourly, 'wind_wave_period');
+            $hasMarine = $wHeight !== null && $wPeriod !== null && $sHeight !== null && $wwHeight !== null && $rawCurrent !== null;
 
             $dayBuckets[$dateKey]['marine']['wave_height'][] = $wHeight;
             $dayBuckets[$dateKey]['marine']['wave_period'][] = $wPeriod;
@@ -1613,16 +1654,13 @@ class WeatherForecastService
 
             // Weather values
             $dayBuckets[$dateKey]['weather']['time'][] = $isoTime;
-            $precipVal = (float) ($weatherHourly['precipitation'][$index] ?? 0.0);
-            $rawRainVal = (float) ($weatherHourly['rain'][$index] ?? 0.0);
-            $showersVal = (float) ($weatherHourly['showers'][$index] ?? 0.0);
-            $rainVal = max($precipVal, $rawRainVal, $showersVal);
-
-            $pressVal = (float) ($weatherHourly['pressure_msl'][$index] ?? 1010.5);
-            $rawWindSpd = (float) ($weatherHourly['wind_speed_10m'][$index] ?? 12.0);
-            $windGustsVal = (float) ($weatherHourly['wind_gusts_10m'][$index] ?? 0.0);
-            $windSpd = max($rawWindSpd, $windGustsVal * 0.75);
-            $windDir = (float) ($weatherHourly['wind_direction_10m'][$index] ?? 245.0);
+            $rawWindSpd = $num($weatherHourly, 'wind_speed_10m');
+            $pressVal = $num($weatherHourly, 'pressure_msl');
+            $hasWeather = $rawWindSpd !== null && $pressVal !== null;
+            $rainVal = $hasWeather ? max($num($weatherHourly, 'precipitation') ?? 0.0, $num($weatherHourly, 'rain') ?? 0.0, $num($weatherHourly, 'showers') ?? 0.0) : null;
+            $windGustsVal = $num($weatherHourly, 'wind_gusts_10m') ?? $rawWindSpd;
+            $windSpd = $rawWindSpd === null ? null : max($rawWindSpd, ($windGustsVal ?? 0.0) * 0.75);
+            $windDir = $num($weatherHourly, 'wind_direction_10m');
 
             $dayBuckets[$dateKey]['weather']['rain'][] = $rainVal;
             $dayBuckets[$dateKey]['weather']['pressure_msl'][] = $pressVal;
@@ -1631,18 +1669,21 @@ class WeatherForecastService
             $dayBuckets[$dateKey]['weather']['wind_direction_10m'][] = $windDir;
 
             // Score for this hour (0-100%)
-            $oceanCurrent = round($rawCurrent * 0.27778, 2);
+            $oceanCurrent = $rawCurrent === null ? null : round($rawCurrent * 0.27778, 2);
 
-            // Hard limits (Coast Guard small boat limits)
-            $isPhysicalBreach = (
+            // Hard limits (Coast Guard small boat limits). The weather ones still count when
+            // Open-Meteo has no sea data for the hour.
+            $isWeatherBreach = $hasWeather && (
                 $rawWindSpd >= 38.0 || $windGustsVal >= 48.0 ||
-                $wHeight >= 1.80 || $sHeight >= 1.80 ||
-                $oceanCurrent >= 0.80 ||
                 $rainVal >= 25.0 ||
                 $pressVal <= 998.0
             );
+            $isPhysicalBreach = $isWeatherBreach || ($hasMarine && (
+                $wHeight >= 1.80 || $sHeight >= 1.80 ||
+                $oceanCurrent >= 0.80
+            ));
 
-            $scores = [
+            $scores = !($hasMarine && $hasWeather) ? null : [
                 'wave_height' => $this->scoreWaveHeight($wHeight),
                 'wind_speed' => $this->scoreWindSpeed($rawWindSpd, $windGustsVal),
                 'ocean_current' => $this->scoreOceanCurrent($oceanCurrent),
@@ -1652,11 +1693,19 @@ class WeatherForecastService
                 'rain' => $this->scoreRain($rainVal),
                 'sea_level_pressure' => $this->scoreSeaLevelPressure($pressVal),
                 'tide_height' => 0,
-                'wind_direction' => $this->scoreWindDirection($windDir),
+                'wind_direction' => $this->scoreWindDirection($windDir ?? 0.0),
             ];
 
-            $weightedScorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($scores);
-            $hourClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScores($scores, $weightedScorePct);
+            if ($isPhysicalBreach) {
+                $weightedScorePct = 100.0;
+                $hourClass = 'Critical Risk';
+            } elseif ($scores === null) {
+                $weightedScorePct = null;
+                $hourClass = 'Not Available';
+            } else {
+                $weightedScorePct = $this->computeWeightedScore($scores);
+                $hourClass = $this->classifyScores($scores, $weightedScorePct);
+            }
 
             $dayBuckets[$dateKey]['hourly_scores'][$hour] = [
                 'hour' => $hour,
@@ -1674,6 +1723,7 @@ class WeatherForecastService
                 'wind_gusts' => $windGustsVal,
                 'wind_direction' => $windDir,
                 'tide_height' => 0.0,
+                'sea_data_available' => $hasMarine,
             ];
         }
 
@@ -1698,34 +1748,41 @@ class WeatherForecastService
             $daytimeWindWaves = [];
             $daytimeWindDirs = [];
 
+            // Only hours Open-Meteo really has: weather and sea values are collected separately
             foreach ($daytimeHours as $dh) {
-                if (isset($bucket['weather']['wind_speed_10m'][$dh])) {
+                if (isset($bucket['weather']['wind_speed_10m'][$dh], $bucket['weather']['pressure_msl'][$dh])) {
                     $daytimeWinds[] = $bucket['weather']['wind_speed_10m'][$dh];
-                    $daytimeGusts[] = $bucket['weather']['wind_gusts_10m'][$dh] ?? 0.0;
-                    $daytimeWaves[] = $bucket['marine']['wave_height'][$dh] ?? 0.70;
-                    $daytimeSwells[] = $bucket['marine']['swell_wave_height'][$dh] ?? 0.60;
-                    $daytimeCurrents[] = ($bucket['marine']['ocean_current_velocity'][$dh] ?? 1.1) * 0.27778;
+                    $daytimeGusts[] = $bucket['weather']['wind_gusts_10m'][$dh] ?? $bucket['weather']['wind_speed_10m'][$dh];
                     $daytimeRains[] = $bucket['weather']['rain'][$dh] ?? 0.0;
-                    $daytimePressures[] = $bucket['weather']['pressure_msl'][$dh] ?? 1010.5;
-                    $daytimePeriods[] = $bucket['marine']['wave_period'][$dh] ?? 6.0;
-                    $daytimeWindWavePeriods[] = $bucket['marine']['wind_wave_period'][$dh] ?? null;
-                    $daytimeSwellPeriods[] = $bucket['marine']['swell_wave_period'][$dh] ?? null;
-                    $daytimeWindWaves[] = $bucket['marine']['wind_wave_height'][$dh] ?? 0.35;
-                    $daytimeWindDirs[] = $bucket['weather']['wind_direction_10m'][$dh] ?? 245.0;
+                    $daytimePressures[] = $bucket['weather']['pressure_msl'][$dh];
+                    $daytimeWindDirs[] = $bucket['weather']['wind_direction_10m'][$dh] ?? 0.0;
+                }
+                $m = $bucket['marine'];
+                if (isset($m['wave_height'][$dh], $m['swell_wave_height'][$dh], $m['ocean_current_velocity'][$dh], $m['wave_period'][$dh], $m['wind_wave_height'][$dh])) {
+                    $daytimeWaves[] = $m['wave_height'][$dh];
+                    $daytimeSwells[] = $m['swell_wave_height'][$dh];
+                    $daytimeCurrents[] = $m['ocean_current_velocity'][$dh] * 0.27778;
+                    $daytimePeriods[] = $m['wave_period'][$dh];
+                    $daytimeWindWavePeriods[] = $m['wind_wave_period'][$dh] ?? null;
+                    $daytimeSwellPeriods[] = $m['swell_wave_period'][$dh] ?? null;
+                    $daytimeWindWaves[] = $m['wind_wave_height'][$dh];
                 }
             }
 
+            $weatherAvailable = !empty($daytimeWinds);
+            $seaAvailable = !empty($daytimeWaves);
             $dayCount = count($daytimeWinds) ?: 1;
+            $seaCount = count($daytimeWaves) ?: 1;
             $meanDaytimeWind = array_sum($daytimeWinds) / $dayCount;
             $maxDaytimeGust = !empty($daytimeGusts) ? max($daytimeGusts) : 0.0;
-            $meanDaytimeWave = array_sum($daytimeWaves) / $dayCount;
-            $meanDaytimeSwell = array_sum($daytimeSwells) / $dayCount;
-            $meanDaytimeCurrent = array_sum($daytimeCurrents) / $dayCount;
+            $meanDaytimeWave = array_sum($daytimeWaves) / $seaCount;
+            $meanDaytimeSwell = array_sum($daytimeSwells) / $seaCount;
+            $meanDaytimeCurrent = array_sum($daytimeCurrents) / $seaCount;
             $daytimeRainTotal = array_sum($daytimeRains);
             $daytimeMaxRainRate = !empty($daytimeRains) ? max($daytimeRains) : 0.0;
-            $meanDaytimePressure = array_sum($daytimePressures) / $dayCount;
-            $meanDaytimePeriod = array_sum($daytimePeriods) / $dayCount;
-            $meanDaytimeWindWave = array_sum($daytimeWindWaves) / $dayCount;
+            $meanDaytimePressure = $weatherAvailable ? array_sum($daytimePressures) / $dayCount : null;
+            $meanDaytimePeriod = array_sum($daytimePeriods) / $seaCount;
+            $meanDaytimeWindWave = array_sum($daytimeWindWaves) / $seaCount;
             $meanDaytimeWindDir = array_sum($daytimeWindDirs) / $dayCount;
 
             // A fast pressure drop (>= 2.5 hPa in 3h) only counts if strong gusts (>= 38 km/h)
@@ -1744,18 +1801,19 @@ class WeatherForecastService
                 }
             }
 
-            // Hard limits (Coast Guard small boat limits)
-            $isDaytimePhysicalBreach = (
+            // Hard limits (Coast Guard small boat limits). The weather ones still count without sea data.
+            $isDaytimePhysicalBreach = ($weatherAvailable && (
                 $meanDaytimeWind >= 42.0 ||
                 $maxDaytimeGust >= 48.0 ||
-                $meanDaytimeWave >= 1.80 ||
-                $meanDaytimeSwell >= 1.80 ||
-                $meanDaytimeCurrent >= 0.80 ||
                 $daytimeRainTotal >= 25.0 ||
                 $daytimeMaxRainRate >= 25.0 ||
                 $meanDaytimePressure <= 998.0 ||
                 $hasCompoundPressureBreach
-            );
+            )) || ($seaAvailable && (
+                $meanDaytimeWave >= 1.80 ||
+                $meanDaytimeSwell >= 1.80 ||
+                $meanDaytimeCurrent >= 0.80
+            ));
 
             $daytimeScores = [
                 'wave_height' => $this->scoreWaveHeight($meanDaytimeWave),
@@ -1765,18 +1823,27 @@ class WeatherForecastService
                 'wave_period' => $this->scoreWavePeriods($meanDaytimePeriod, $this->meanOrNull($daytimeWindWavePeriods), $meanDaytimeWindWave, $this->meanOrNull($daytimeSwellPeriods), $meanDaytimeSwell),
                 'wind_wave_height' => $this->scoreWindWaveHeight($meanDaytimeWindWave),
                 'rain' => $this->scoreRain($daytimeMaxRainRate),
-                'sea_level_pressure' => $this->scoreSeaLevelPressure($meanDaytimePressure),
+                'sea_level_pressure' => $this->scoreSeaLevelPressure($meanDaytimePressure ?? 1013.0),
                 'wind_direction' => $this->scoreWindDirection($meanDaytimeWindDir),
             ];
 
-            $daytimeScorePct = $isDaytimePhysicalBreach ? 100.0 : $this->computeWeightedScore($daytimeScores);
-            $daytimeClass = $isDaytimePhysicalBreach ? 'Critical Risk' : $this->classifyScores($daytimeScores, $daytimeScorePct);
+            if ($isDaytimePhysicalBreach) {
+                $daytimeScorePct = 100.0;
+                $daytimeClass = 'Critical Risk';
+            } elseif (!$seaAvailable || !$weatherAvailable) {
+                // No real sea (or weather) data from Open-Meteo for this day: no rating
+                $daytimeScorePct = null;
+                $daytimeClass = 'Not Available';
+            } else {
+                $daytimeScorePct = $this->computeWeightedScore($daytimeScores);
+                $daytimeClass = $this->classifyScores($daytimeScores, $daytimeScorePct);
+            }
 
             $amScores = array_filter($bucket['hourly_scores'], fn($i) => in_array($i['hour'], [10, 11, 12]));
-            $amClass = $this->worstClass(array_column($amScores, 'classification'));
+            $amClass = $this->worstClass(array_column($amScores, 'classification'), 'Not Available');
 
             $pmScores = array_filter($bucket['hourly_scores'], fn($i) => in_array($i['hour'], [16, 17]));
-            $pmClass = $this->worstClass(array_column($pmScores, 'classification'));
+            $pmClass = $this->worstClass(array_column($pmScores, 'classification'), 'Not Available');
 
             $summary = [
                 'date' => $dateKey,
@@ -1786,20 +1853,26 @@ class WeatherForecastService
                 'daytime_score_pct' => $daytimeScorePct,
                 'am_classification' => $amClass,
                 'pm_classification' => $pmClass,
-                'avg_wave_height' => round($meanDaytimeWave, 2),
-                'max_wave_height' => !empty($daytimeWaves) ? max($daytimeWaves) : 0.0,
-                'avg_wind_speed' => round($meanDaytimeWind, 1),
-                'max_wind_speed' => round($maxDaytimeGust, 1),
-                'avg_ocean_current' => round($meanDaytimeCurrent, 2),
-                'total_rain' => round($daytimeRainTotal, 2),
-                'avg_pressure' => round($meanDaytimePressure, 1),
+                'avg_wave_height' => $seaAvailable ? round($meanDaytimeWave, 2) : null,
+                'max_wave_height' => $seaAvailable ? max($daytimeWaves) : null,
+                'avg_wind_speed' => $weatherAvailable ? round($meanDaytimeWind, 1) : null,
+                'max_wind_speed' => $weatherAvailable ? round($maxDaytimeGust, 1) : null,
+                'avg_ocean_current' => $seaAvailable ? round($meanDaytimeCurrent, 2) : null,
+                'total_rain' => $weatherAvailable ? round($daytimeRainTotal, 2) : null,
+                'avg_pressure' => $weatherAvailable ? round($meanDaytimePressure, 1) : null,
+                'sea_data_available' => $seaAvailable,
+                'weather_data_available' => $weatherAvailable,
                 'hourly' => $bucket['hourly_scores'],
             ];
 
             Cache::put("forecast:date:{$dateKey}", $summary, now()->addMinutes(60));
             $dailySummaries[$dateKey] = $summary;
 
-            // Forecast snapshot for later accuracy checks (saved below in one query)
+            // Forecast snapshot for later accuracy checks (saved below in one query).
+            // Days without real Open-Meteo data are skipped so they can't skew the accuracy history.
+            if (!$seaAvailable || !$weatherAvailable) {
+                continue;
+            }
             $daysOut = max(0, (int) Carbon::now(self::TIMEZONE)->startOfDay()->diffInDays(Carbon::parse($dateKey)->startOfDay(), false));
             $snapshotRows[] = $this->forecastSnapshotRow($dateKey, $daysOut, $summary);
         }
@@ -2282,9 +2355,13 @@ class WeatherForecastService
     }
 
     /** The worst rating in a list (e.g. the hours of a dive window). */
-    protected function worstClass(array $classes): string
+    protected function worstClass(array $classes, string $whenEmpty = 'Very Safe'): string
     {
-        return array_reduce($classes, fn ($worst, $class) => $this->raiseToFloor($worst, $class), 'Very Safe');
+        if (empty($classes)) {
+            return $whenEmpty;
+        }
+
+        return array_reduce($classes, fn ($worst, $class) => $this->raiseToFloor($worst, $class), 'Not Available');
     }
 
     public function classifyScore(float $weightedPct): string
@@ -2434,14 +2511,14 @@ class WeatherForecastService
         $daytimeWindDirs = [];
 
         foreach ($daytimeHours as $dh) {
-            if (isset($marineData['wave_height'][$dh])) {
+            if (isset($marineData['wave_height'][$dh], $marineData['swell_wave_height'][$dh], $marineData['wave_period'][$dh], $marineData['wind_wave_height'][$dh], $marineData['ocean_current_velocity'][$dh])) {
                 $daytimeWindWavePeriods[] = $marineData['wind_wave_period'][$dh] ?? null;
                 $daytimeSwellPeriods[] = $marineData['swell_wave_period'][$dh] ?? null;
                 $daytimeWaves[] = (float) $marineData['wave_height'][$dh];
-                $daytimeSwells[] = (float) ($marineData['swell_wave_height'][$dh] ?? 0.60);
-                $daytimePeriods[] = (float) ($marineData['wave_period'][$dh] ?? 6.0);
-                $daytimeWindWaves[] = (float) ($marineData['wind_wave_height'][$dh] ?? 0.35);
-                $daytimeCurrents[] = (float) (($marineData['ocean_current_velocity'][$dh] ?? 1.1) * 0.27778);
+                $daytimeSwells[] = (float) $marineData['swell_wave_height'][$dh];
+                $daytimePeriods[] = (float) $marineData['wave_period'][$dh];
+                $daytimeWindWaves[] = (float) $marineData['wind_wave_height'][$dh];
+                $daytimeCurrents[] = (float) $marineData['ocean_current_velocity'][$dh] * 0.27778;
             }
             if (isset($weatherData['wind_speed_10m'][$dh])) {
                 $daytimeWinds[] = (float) $weatherData['wind_speed_10m'][$dh];
@@ -2472,17 +2549,8 @@ class WeatherForecastService
                     $daytimeWindDirs[] = (float) $ha->wind_direction;
                 }
             } else {
-                // Default calm sea values
-                $daytimeWaves = [0.50];
-                $daytimeSwells = [0.40];
-                $daytimePeriods = [7.0];
-                $daytimeWindWaves = [0.20];
-                $daytimeCurrents = [0.25];
-                $daytimeWinds = [10.0];
-                $daytimeGusts = [12.0];
-                $daytimeRains = [0.0];
-                $daytimePressures = [1012.0];
-                $daytimeWindDirs = [45.0];
+                // No real readings for this date: don't invent a calm sea, the accuracy check skips it
+                return ['date' => $date, 'available' => false];
             }
         }
 
@@ -2553,6 +2621,17 @@ class WeatherForecastService
 
         // 1. Get the actual weather
         $realized = $this->fetchRealizedWeather($dateStr);
+        if (($realized['available'] ?? true) === false) {
+            return [
+                'target_date' => $dateStr,
+                'actual_classification' => 'Not Available',
+                'actual_metrics' => ['wave_height' => null, 'wind_speed' => null, 'ocean_current' => null, 'rain' => null, 'score_pct' => null],
+                'verified_horizons' => [],
+                'verified_count' => 0,
+                'average_accuracy_score' => null,
+                'mae_metrics' => ['wave_height' => null, 'wind_speed' => null, 'ocean_current' => null],
+            ];
+        }
         $actualClass = $realized['actual_classification'];
         $actualWave = (float) $realized['actual_wave_height'];
         $actualWind = (float) $realized['actual_wind_speed'];

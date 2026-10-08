@@ -175,7 +175,7 @@
                                         <option value="dive_date_desc" {{ request('sort') === 'dive_date_desc' ? 'selected' : '' }}>Past Dive Date (Furthest First)</option>
                                         <option value="amount_desc" {{ request('sort') === 'amount_desc' ? 'selected' : '' }}>Highest Booking Amount (₱)</option>
                                         <option value="amount_asc" {{ request('sort') === 'amount_asc' ? 'selected' : '' }}>Lowest Booking Amount (₱)</option>
-                                        <option value="guest_asc" {{ request('sort') === 'guest_asc' ? 'selected' : '' }}>Guest Name (A Z)</option>
+                                        <option value="guest_asc" {{ request('sort') === 'guest_asc' ? 'selected' : '' }}>Participant Name (A Z)</option>
                                         <option value="status" {{ request('sort') === 'status' ? 'selected' : '' }}>Booking Status</option>
                                     </select>
                                 </div>
@@ -191,7 +191,7 @@
                                         <option value="completed" {{ request('status') === 'completed' ? 'selected' : '' }}>Completed</option>
                                         <option value="no_show" {{ request('status') === 'no_show' ? 'selected' : '' }}>No-Show</option>
                                         <option value="cancelled_by_camp" {{ request('status') === 'cancelled_by_camp' ? 'selected' : '' }}>Cancelled by Camp</option>
-                                        <option value="cancelled_by_guest" {{ request('status') === 'cancelled_by_guest' ? 'selected' : '' }}>Cancelled by Guest</option>
+                                        <option value="cancelled_by_guest" {{ request('status') === 'cancelled_by_guest' ? 'selected' : '' }}>Cancelled by Participant</option>
                                     </select>
                                 </div>
 
@@ -222,7 +222,7 @@
             <thead class="bg-[#F2F2F7] border-b border-[#E5E5EA] text-sm uppercase font-bold text-[#6E6E73]">
                 <tr>
                     <th class="p-4 pl-6">Booking Number</th>
-                    <th class="p-4">Customer Name</th>
+                    <th class="p-4">Contact Name</th>
                     <th class="p-4">Class Package</th>
                     <th class="p-4">Dive Dates</th>
                     <th class="p-4">Batch Assignment</th>
@@ -244,7 +244,7 @@
                         @endif
                     </td>
 
-                    <!-- Customer Details -->
+                    <!-- Participant Details -->
                     <td class="p-4">
                         <div class="font-bold text-[#1D1D1F]">{{ $b->contact_name }}</div>
                         <div class="text-sm text-[#6E6E73]">{{ $b->contact_phone }}</div>

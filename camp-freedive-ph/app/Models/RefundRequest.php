@@ -49,7 +49,7 @@ class RefundRequest extends Model
     {
         return match ($this->forfeit_reason) {
             'cancellation_outside_policy_window' => 'Cancellation Outside Policy Window (< 1 Week)',
-            'customer_no_show' => 'Customer No-Show (Departure Forfeiture)',
+            'customer_no_show' => 'Participant No-Show (Departure Forfeiture)',
             'unapproved_late_withdrawal' => 'Unapproved Late Withdrawal',
             'custom_administrative_decision' => 'Administrative Management Decision',
             default => $this->forfeit_reason ?: 'N/A',

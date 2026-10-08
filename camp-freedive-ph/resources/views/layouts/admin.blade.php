@@ -204,7 +204,7 @@
                         <span x-show="!sidebarCollapsed" class="truncate">Availability Calendar</span>
                     </a>
 
-                    <!-- My Schedule & Students -->
+                    <!-- My Schedule & Participants -->
                     <a href="{{ route('coach.schedule.index') }}" 
                        title="My Schedule & History"
                        class="flex items-center rounded-xl font-semibold transition-all {{ request()->routeIs('coach.schedule.*') ? 'bg-[#780000]/10 text-[#780000] font-bold shadow-2xs' : 'text-[#3A3A3C] hover:bg-[#F2F2F7] hover:text-[#780000]' }}"

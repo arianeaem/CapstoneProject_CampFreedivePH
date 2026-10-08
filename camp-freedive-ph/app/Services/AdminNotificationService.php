@@ -38,16 +38,16 @@ class AdminNotificationService
         $this->notify(
             'New booking received',
             "Booking {$booking->booking_number} was created for {$booking->contact_name}.",
-            ['Booking' => $booking->booking_number, 'Customer' => $booking->contact_name, 'Schedule' => "{$booking->start_date?->format('M d, Y')} - {$booking->end_date?->format('M d, Y')}", 'Status' => $booking->status],
+            ['Booking' => $booking->booking_number, 'Contact' => $booking->contact_name, 'Schedule' => "{$booking->start_date?->format('M d, Y')} - {$booking->end_date?->format('M d, Y')}", 'Status' => $booking->status],
         );
     }
 
     public function customerRequest(string $type, \App\Models\Booking $booking, string $reason): void
     {
         $this->notify(
-            "Customer {$type} request",
-            "Booking {$booking->booking_number} has a new customer {$type} request.",
-            ['Booking' => $booking->booking_number, 'Customer' => $booking->contact_name, 'Reason' => $reason],
+            "Participant {$type} request",
+            "Booking {$booking->booking_number} has a new participant {$type} request.",
+            ['Booking' => $booking->booking_number, 'Contact' => $booking->contact_name, 'Reason' => $reason],
             'warning',
         );
     }
@@ -76,7 +76,7 @@ class AdminNotificationService
     }
 
     /**
-     * Critical Risk less than 18 hours before the dive: tell owners/admins what the guests were offered
+     * Critical Risk less than 18 hours before the dive: tell owners/admins what the participants were offered
      * (free reschedule or full downpayment refund) and that they need to decide on the batch.
      */
     public function imminentCriticalRisk(Batch $batch, int $guestsNotified = 0): void
@@ -94,13 +94,13 @@ class AdminNotificationService
         $this->notify(
             "URGENT: Critical Risk for {$batch->batch_code} - starts in about {$hoursUntilDive} hours",
             "The latest weather and sea check rates batch {$batch->batch_code} as Critical Risk, and the dive starts in about {$hoursUntilDive} hours. "
-                . "Guests in this batch have been emailed that they can reschedule for free or cancel with a full refund of their downpayment (force-majeure). "
+                . "Participants in this batch have been emailed that they can reschedule for free or cancel with a full refund of their downpayment (force-majeure). "
                 . "Please review the conditions in Safety Monitoring now and decide whether to cancel the batch.",
             [
                 'Batch' => $batch->batch_code,
                 'Dive dates' => "{$batch->start_date?->format('M d, Y')} - {$batch->end_date?->format('M d, Y')}",
                 'Starts in' => "About {$hoursUntilDive} hours",
-                'Guests emailed' => (string) $guestsNotified,
+                'Participants emailed' => (string) $guestsNotified,
                 'What to do' => 'Check Safety Monitoring, then cancel the batch or confirm it is safe to go',
             ],
             'critical',
@@ -108,7 +108,7 @@ class AdminNotificationService
     }
 
     /**
-     * High Risk less than 18 hours before the dive: just a heads-up. Guests were told the dive is still on.
+     * High Risk less than 18 hours before the dive: just a heads-up. Participants were told the dive is still on.
      */
     public function imminentHighRisk(Batch $batch, int $guestsNotified = 0): void
     {
@@ -125,13 +125,13 @@ class AdminNotificationService
         $this->notify(
             "High Risk for {$batch->batch_code} - starts in about {$hoursUntilDive} hours",
             "The latest weather and sea check rates batch {$batch->batch_code} as High Risk, and the dive starts in about {$hoursUntilDive} hours. "
-                . "Guests have been told the dive is still planned and that coaches will take extra safety steps. No free cancellation or refund was offered. "
+                . "Participants have been told the dive is still planned and that coaches will take extra safety steps. No free cancellation or refund was offered. "
                 . "Please brief the coaches and check Safety Monitoring again before departure.",
             [
                 'Batch' => $batch->batch_code,
                 'Dive dates' => "{$batch->start_date?->format('M d, Y')} - {$batch->end_date?->format('M d, Y')}",
                 'Starts in' => "About {$hoursUntilDive} hours",
-                'Guests emailed' => (string) $guestsNotified,
+                'Participants emailed' => (string) $guestsNotified,
                 'What to do' => 'Brief coaches on extra safety steps and recheck conditions before departure',
             ],
             'high',
@@ -143,7 +143,7 @@ class AdminNotificationService
         $this->notify(
             'Coach matching required',
             "Batch {$batch->batch_code} starts within 24 hours and still needs coach matching.",
-            ['Batch' => $batch->batch_code, 'Participants' => (string) $participants, 'Assigned students' => (string) $assigned, 'Unmatched students' => (string) max(0, $participants - $assigned)],
+            ['Batch' => $batch->batch_code, 'Participants' => (string) $participants, 'Assigned participants' => (string) $assigned, 'Unmatched participants' => (string) max(0, $participants - $assigned)],
             'critical',
         );
     }

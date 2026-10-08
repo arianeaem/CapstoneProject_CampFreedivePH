@@ -74,7 +74,7 @@
                     $glance = [];
                     if ($isOwner) $glance[] = ['Money kept', $peso($fin['net_revenue'] ?? 0), 'After refunds'];
                     $glance[] = ['Bookings made', $total, ($b['paid_bookings'] ?? 0) . ' paid the downpayment'];
-                    $glance[] = ['Divers', $b['total_participants'] ?? 0, 'In those bookings'];
+                    $glance[] = ['Participants', $b['total_participants'] ?? 0, 'In those bookings'];
                     $glance[] = ['How full batches are', ($op['avg_occupancy'] ?? 0) . '%', ($op['total_booked_pax'] ?? 0) . ' of ' . ($op['total_capacity_slots'] ?? 0) . ' slots'];
                     $glance[] = ['Enough coaches', ($op['safety_compliance_rate'] ?? 100) . '%', ($op['compliant_batches_count'] ?? 0) . ' of ' . ($op['running_batches_count'] ?? 0) . ' batches'];
                 @endphp
@@ -97,16 +97,16 @@
                         <thead><tr><th>What</th><th class="num">Amount</th></tr></thead>
                         <tbody>
                             <tr><td>Money collected</td><td class="num">{{ $peso($fin['gross_revenue'] ?? 0) }}</td></tr>
-                            <tr><td>Refunded to guests</td><td class="num">{{ $peso($fin['refunds_processed'] ?? 0) }}</td></tr>
+                            <tr><td>Refunded to participants</td><td class="num">{{ $peso($fin['refunds_processed'] ?? 0) }}</td></tr>
                             <tr class="total"><td>Money kept</td><td class="num">{{ $peso($fin['net_revenue'] ?? 0) }}</td></tr>
                             <tr><td>Paid as deposit</td><td class="num">{{ $peso($fin['downpayment_revenue'] ?? 0) }}</td></tr>
                             <tr><td>Paid in full</td><td class="num">{{ $peso($fin['balance_revenue'] ?? 0) }}</td></tr>
                             <tr><td>Still to collect</td><td class="num">{{ $peso($fin['outstanding_receivables'] ?? 0) }}</td></tr>
-                            <tr><td>Average per diver</td><td class="num">{{ $peso($fin['arpd'] ?? 0) }}</td></tr>
+                            <tr><td>Average per participant</td><td class="num">{{ $peso($fin['arpd'] ?? 0) }}</td></tr>
                         </tbody>
                     </table>
                     <table class="rpt w-full">
-                        <thead><tr><th>Package</th><th class="num">Bookings</th><th class="num">Divers</th><th class="num">Money</th><th class="num">Share</th></tr></thead>
+                        <thead><tr><th>Package</th><th class="num">Bookings</th><th class="num">Participants</th><th class="num">Money</th><th class="num">Share</th></tr></thead>
                         <tbody>
                             @foreach($fin['packages'] ?? [] as $pkg)
                                 <tr><td>{{ $pkg['name'] }}</td><td class="num">{{ $pkg['bookings_count'] }}</td><td class="num">{{ $pkg['pax_count'] }}</td><td class="num">{{ $peso($pkg['revenue']) }}</td><td class="num">{{ $pkg['share_percentage'] }}%</td></tr>
@@ -137,7 +137,7 @@
                 <table class="rpt w-full">
                     <thead><tr><th>Who books together</th><th class="num">Bookings</th><th class="num">Share</th></tr></thead>
                     <tbody>
-                        @foreach(['solo' => 'Alone (1 diver)', 'duo' => 'Pairs (2 divers)', 'small_group' => 'Small groups (3–4)', 'large_group' => 'Big groups (5 or more)'] as $key => $label)
+                        @foreach(['solo' => 'Alone (1 participant)', 'duo' => 'Pairs (2 participants)', 'small_group' => 'Small groups (3–4)', 'large_group' => 'Big groups (5 or more)'] as $key => $label)
                             <tr><td>{{ $label }}</td><td class="num">{{ $b['group_sizes'][$key] ?? 0 }}</td><td class="num">{{ $pct($b['group_sizes'][$key] ?? 0, $total) }}</td></tr>
                         @endforeach
                         <tr class="total"><td>Total</td><td class="num">{{ array_sum($b['group_sizes'] ?? []) }}</td><td></td></tr>
@@ -147,7 +147,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 avoid-break">
                 @php $sw = $b['swimmer_ability'] ?? ['cannot_swim' => 0, 'can_swim' => 0, 'strong' => 0, 'total' => 0]; @endphp
                 <table class="rpt w-full">
-                    <thead><tr><th>Can Discovery divers swim?</th><th class="num">Divers</th><th class="num">Share</th></tr></thead>
+                    <thead><tr><th>Can Discovery participants swim?</th><th class="num">Participants</th><th class="num">Share</th></tr></thead>
                     <tbody>
                         @foreach(['cannot_swim' => "Can't swim", 'can_swim' => 'Can swim', 'strong' => 'Strong swimmer'] as $key => $label)
                             <tr><td>{{ $label }}</td><td class="num">{{ $sw[$key] }}</td><td class="num">{{ $pct($sw[$key], $sw['total']) }}</td></tr>
@@ -157,7 +157,7 @@
                 </table>
                 @php $lt = $b['lead_times'] ?? []; $ltTotal = array_sum($lt); @endphp
                 <table class="rpt w-full">
-                    <thead><tr><th>How early guests book</th><th class="num">Bookings</th><th class="num">Share</th></tr></thead>
+                    <thead><tr><th>How early participants book</th><th class="num">Bookings</th><th class="num">Share</th></tr></thead>
                     <tbody>
                         @foreach(['Under 4 days before' => $lt['under_3_days'] ?? 0, '4–7 days before' => $lt['4_to_7_days'] ?? 0, '1–2 weeks before' => $lt['8_to_14_days'] ?? 0, '15 or more days before' => ($lt['15_to_30_days'] ?? 0) + ($lt['over_30_days'] ?? 0)] as $label => $n)
                             <tr><td>{{ $label }}</td><td class="num">{{ $n }}</td><td class="num">{{ $pct($n, $ltTotal) }}</td></tr>
@@ -174,10 +174,10 @@
             <h2 class="text-base font-extrabold text-[#1D1D1F]">{{ ++$section }}. Batches &amp; coaches</h2>
             <p class="text-xs text-[#6E6E73]">
                 {{ $op['total_batches'] ?? 0 }} batches: {{ $op['active_batches'] ?? 0 }} still to run, {{ $op['completed_batches'] ?? 0 }} finished, {{ $op['cancelled_batches'] ?? 0 }} cancelled.
-                Rule: 1 coach for every {{ $ratio }} divers.
+                Rule: 1 coach for every {{ $ratio }} participants.
             </p>
             <table class="rpt w-full">
-                <thead><tr><th>Batch</th><th>Dates</th><th class="num">Divers</th><th>Coaches</th><th>Enough coaches?</th><th>Status</th></tr></thead>
+                <thead><tr><th>Batch</th><th>Dates</th><th class="num">Participants</th><th>Coaches</th><th>Enough coaches?</th><th>Status</th></tr></thead>
                 <tbody>
                     @forelse($op['batches_list'] ?? [] as $batch)
                         @php
@@ -191,7 +191,7 @@
                             <td class="whitespace-nowrap">{{ $batch->start_date->format('M d') }} – {{ $batch->end_date?->format('M d, Y') }}</td>
                             <td class="num">{{ $pax }} / {{ $batch->computed_capacity }}</td>
                             <td>{{ $coaches->pluck('name')->implode(', ') ?: 'None yet' }}</td>
-                            <td>{{ $cancelled ? '—' : ($pax === 0 ? 'No divers yet' : ($coaches->count() >= $needed ? 'Yes' : 'Needs ' . ($needed - $coaches->count()) . ' more')) }}</td>
+                            <td>{{ $cancelled ? '—' : ($pax === 0 ? 'No participants yet' : ($coaches->count() >= $needed ? 'Yes' : 'Needs ' . ($needed - $coaches->count()) . ' more')) }}</td>
                             <td>{{ \App\Services\Analytics\AnalyticsService::batchStatusLabel($batch->status) }}</td>
                         </tr>
                     @empty
