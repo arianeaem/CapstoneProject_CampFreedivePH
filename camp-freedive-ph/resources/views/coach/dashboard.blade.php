@@ -339,7 +339,7 @@
                                 ? $b->formatted_date_range . ' (' . $b->start_date->format('D') . ' - ' . $b->end_date->format('D') . ')'
                                 : $opening->dive_date->format('M d, Y · l');
                         @endphp
-                        <li class="flex items-center gap-3 rounded-xl border border-[#E5E5EA] border-l-4 border-l-[#780000] p-3">
+                        <li class="flex items-center gap-3 rounded-xl border border-[#E5E5EA] p-3">
                             <span class="flex-1 min-w-0">
                                 <span class="block text-sm font-semibold text-[#1D1D1F]">{{ $b?->batch_number ?? 'Batch' }} &middot; {{ $opening->needed_students_count }} {{ Str::plural('participant', $opening->needed_students_count) }} need a coach</span>
                                 <span class="block text-xs text-[#8E8E93] truncate">{{ $datesDisplay }}</span>

@@ -70,7 +70,7 @@ class CoachPortalModuleTest extends TestCase
 
         $responseSched = $this->actingAs($this->coach)->get('/coach/schedule');
         $responseSched->assertStatus(200);
-        $responseSched->assertSee('My Assigned Schedule');
+        $responseSched->assertSee('My Schedule');
 
         $responseReq = $this->actingAs($this->coach)->get('/coach/open-requests');
         $responseReq->assertStatus(200);

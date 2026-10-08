@@ -214,4 +214,35 @@ class ParticipantDirectoryTest extends TestCase
         $owner = User::where('role', 'owner')->first();
         $this->actingAs($owner)->get(route('owner.pricing.triggered', $rule))->assertOk()->assertDontSee('/admin/pricing/', false);
     }
+
+    public function test_coach_schedule_lists_upcoming_and_past_dives_with_roster_details(): void
+    {
+        $coach = User::where('role', 'coach')->first();
+        $admin = User::where('role', 'admin')->first();
+        $assign = function (Booking $booking) use ($coach, $admin) {
+            $batch = \App\Models\Batch::create([
+                'name' => 'B-' . $booking->id, 'batch_code' => 'B-' . $booking->id,
+                'start_date' => $booking->start_date, 'end_date' => $booking->end_date, 'status' => 'open', 'lifecycle_status' => 'open',
+            ]);
+            $booking->update(['batch_id' => $batch->id]);
+            foreach ($booking->participants as $p) {
+                \App\Models\ParticipantAssignment::create([
+                    'participant_id' => $p->id, 'booking_id' => $booking->id, 'coach_id' => $coach->id, 'batch_id' => $batch->id,
+                    'dive_date' => $booking->start_date, 'assigned_by' => $admin->id, 'status' => 'assigned',
+                ]);
+            }
+        };
+
+        $assign($this->book([['Kid Diver', now()->subYears(12)->toDateString()]], '+5 days'));
+        $assign($this->book([['Past Diver', '1990-01-01']], '-40 days', ['status' => 'completed']));
+
+        $this->actingAs($coach)->get(route('coach.schedule.index'))
+            ->assertOk()
+            ->assertSee('My Schedule')
+            ->assertSee('Kid Diver')
+            ->assertSee('1 under 18')
+            ->assertSee('1 health note')
+            ->assertSee('In 5 days')
+            ->assertSee('Past Diver');
+    }
 }

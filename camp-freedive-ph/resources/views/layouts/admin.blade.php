@@ -110,7 +110,7 @@
                        title="Participants"
                        class="flex items-center rounded-xl font-semibold transition-all {{ request()->routeIs(['admin.participants.*', 'owner.participants.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold shadow-2xs' : 'text-[#3A3A3C] hover:bg-[#F2F2F7] hover:text-[#780000]' }}"
                        :class="sidebarCollapsed ? 'justify-center p-2.5' : 'gap-3 px-3.5 py-2.5'">
-                        <svg class="w-5 h-5 shrink-0 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 5.5 5"/></svg>
+                        <img src="{{ asset('icons/icons8-person-60.png') }}" class="w-5 h-5 shrink-0" alt="Participants">
                         <span x-show="!sidebarCollapsed" class="truncate">Participants</span>
                     </a>
 
@@ -267,7 +267,7 @@
                         <span>Bookings</span>
                     </a>
                     <a href="{{ auth()->user()->isOwner() ? route('owner.participants.index') : route('admin.participants.index') }}" class="flex items-center gap-3 px-3.5 py-2 rounded-xl font-semibold {{ request()->routeIs(['admin.participants.*', 'owner.participants.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold' : 'text-[#3A3A3C] hover:bg-[#F2F2F7]' }}">
-                        <svg class="w-5 h-5 shrink-0 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 5.5 5"/></svg>
+                        <img src="{{ asset('icons/icons8-person-60.png') }}" class="w-5 h-5 shrink-0" alt="Participants">
                         <span>Participants</span>
                     </a>
                     <a href="{{ auth()->user()->isOwner() ? route('owner.batches.index') : route('admin.batches.index') }}" class="flex items-center gap-3 px-3.5 py-2 rounded-xl font-semibold {{ request()->routeIs(['admin.batches.*', 'owner.batches.*']) ? 'bg-[#780000]/10 text-[#780000] font-bold' : 'text-[#3A3A3C] hover:bg-[#F2F2F7]' }}">
