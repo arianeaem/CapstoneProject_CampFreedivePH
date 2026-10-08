@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Batch;
 use App\Models\BookingParticipant;
 use App\Models\PricingRule;
 use App\Support\DemandRules;
@@ -12,6 +13,8 @@ use Carbon\Carbon;
  *
  * - looks at season, how full the batch is, the demand forecast and how early people book
  * - all adjustments together are kept between -30% and +30% of the base price
+ * - discounts do not stack: only the single biggest discount is applied (premiums still add up)
+ * - a rule with max_fill_percent only applies while the batch is less than that % full
  * - Peak / Shoulder / Off-Peak months come from config/demand.php (based on the 553 real
  *   registration records), not from this file
  */
@@ -111,12 +114,7 @@ class PricingRuleEngine
      */
     public function getDemandForDate(string|Carbon $date): string
     {
-        $dateStr = Carbon::parse($date)->format('Y-m-d');
-
-        $bookedCount = BookingParticipant::whereHas('booking', function ($q) use ($dateStr) {
-            $q->whereDate('start_date', $dateStr)
-              ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']);
-        })->count();
+        $bookedCount = $this->getBookedCountForDate($date);
 
         $rank = [DemandRules::LOW => 1, DemandRules::MEDIUM => 2, DemandRules::HIGH => 3];
 
@@ -133,6 +131,31 @@ class PricingRuleEngine
         }
 
         return strtolower($level);
+    }
+
+    /**
+     * Participants in active bookings starting on this date.
+     */
+    public function getBookedCountForDate(string|Carbon $date): int
+    {
+        $dateStr = Carbon::parse($date)->format('Y-m-d');
+
+        return BookingParticipant::whereHas('booking', function ($q) use ($dateStr) {
+            $q->whereDate('start_date', $dateStr)
+              ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']);
+        })->count();
+    }
+
+    /**
+     * How full the batch on this date is (0-100), using the batch capacity or the camp max (45).
+     */
+    public function getFillPercentForDate(string|Carbon $date): float
+    {
+        $batch = Batch::whereDate('start_date', Carbon::parse($date)->format('Y-m-d'))->first();
+        $capacity = $batch?->computed_capacity
+            ?: (int) ($this->settingService?->get('camp_operations.max_batch_capacity', 45) ?? 45);
+
+        return $capacity > 0 ? round($this->getBookedCountForDate($date) / $capacity * 100, 1) : 0.0;
     }
 
     /**
@@ -157,6 +180,7 @@ class PricingRuleEngine
         $season = $this->getSeasonForDate($diveDate);
         $demand = $this->getDemandForDate($diveDate);
         $leadTimeDays = $this->getLeadTimeDays($diveDate);
+        $fillPercent = null; // only looked up if a rule needs it
 
         // Get the matching active rules
         $rules = PricingRule::active()
@@ -198,6 +222,12 @@ class PricingRuleEngine
                     break;
             }
 
+            // Optional extra condition: only while the batch is less than X% full
+            if ($matched && $rule->max_fill_percent !== null) {
+                $fillPercent ??= $this->getFillPercentForDate($diveDate);
+                $matched = $fillPercent < (float) $rule->max_fill_percent;
+            }
+
             if ($matched) {
                 // Change per person
                 $amount = ($rule->adjustment_method === 'percentage')
@@ -205,7 +235,6 @@ class PricingRuleEngine
                     : (float) $rule->adjustment_value;
 
                 $delta = ($rule->adjustment_type === 'increase') ? $amount : -$amount;
-                $rawTotalDelta += $delta;
 
                 $appliedAdjustments[] = [
                     'rule_id' => $rule->id,
@@ -219,6 +248,23 @@ class PricingRuleEngine
                 ];
             }
         }
+
+        // Discounts don't stack: keep only the biggest one (first by priority if tied)
+        $discounts = array_filter($appliedAdjustments, fn ($a) => $a['delta_per_pax'] < 0);
+        if (count($discounts) > 1) {
+            $biggest = array_key_first($discounts);
+            foreach ($discounts as $key => $a) {
+                if ($a['delta_per_pax'] < $discounts[$biggest]['delta_per_pax']) {
+                    $biggest = $key;
+                }
+            }
+            $appliedAdjustments = array_values(array_filter(
+                $appliedAdjustments,
+                fn ($a, $key) => $a['delta_per_pax'] >= 0 || $key === $biggest,
+                ARRAY_FILTER_USE_BOTH
+            ));
+        }
+        $rawTotalDelta = array_sum(array_column($appliedAdjustments, 'delta_per_pax'));
 
         // Keep the total within the max %
         $cap = $this->getAdjustmentCap();

@@ -139,7 +139,9 @@ class DemoSeeder extends Seeder
                 'adjustment_method' => 'percentage',
                 'adjustment_value' => $amount,
                 'priority' => $index + 1,
-                'status' => 'active',
+                // Off-Peak repeats Low Demand and shoulder months are average demand: kept but off
+                'status' => in_array($name, ['Off-Peak Discount', 'Shoulder Season Offer'], true) ? 'inactive' : 'active',
+                'max_fill_percent' => $name === 'Last-Minute Fill' ? 50 : null,
                 'created_by' => $adminId,
             ]);
         })->all();

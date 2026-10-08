@@ -33,6 +33,7 @@ class StorePricingRuleRequest extends FormRequest
                 }
             }
             ],
+            'max_fill_percent' => 'nullable|integer|min:1|max:100',
             'applies_to' => 'required|in:all,discovery,fundive,refinement',
             'adjustment_type' => 'required|in:increase,decrease',
             'adjustment_method' => 'required|in:percentage,fixed',

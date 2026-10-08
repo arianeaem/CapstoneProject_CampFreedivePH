@@ -395,7 +395,7 @@
                     </label>
                 </div>
 
-                <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#E5E5EA]">
+                <div class="flex items-center justify-end gap-2">
                     <button type="button" @click="openOverrideModal = false" class="btn-secondary px-3.5 py-1.5 text-xs">Cancel</button>
                     <button type="submit" class="btn-primary px-5 py-1.5 text-xs font-bold shadow-2xs">
                         Apply Override

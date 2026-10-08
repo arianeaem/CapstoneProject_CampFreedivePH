@@ -222,6 +222,17 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Optional extra condition: batch fill -->
+                    <div class="space-y-1.5 pt-2">
+                        <label class="block text-xs sm:text-sm font-bold text-[#1D1D1F]">Only when the batch is less than (Optional):</label>
+                        <div class="relative sm:w-1/2">
+                            <input type="number" name="max_fill_percent" value="{{ old('max_fill_percent', $rule->max_fill_percent) }}" min="1" max="100" placeholder="e.g. 50"
+                                   class="w-full text-sm rounded-xl border border-[#D1D1D6] px-3.5 py-2.5 bg-white font-medium text-[#1D1D1F] focus:border-[#780000] pr-16">
+                            <span class="absolute right-3.5 top-2.5 text-sm text-[#6E6E73] font-semibold">% full</span>
+                        </div>
+                        <p class="text-xs text-[#6E6E73]">Leave empty to apply no matter how many are booked. Useful for discounts, so they stop once the batch is filling up.</p>
+                    </div>
                 </div>
             </div>
 

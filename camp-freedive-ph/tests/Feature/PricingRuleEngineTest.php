@@ -304,4 +304,83 @@ class PricingRuleEngineTest extends TestCase
         $this->assertEquals(4887.50, $quote['adjusted_price_per_pax']);
         $this->assertCount(1, $quote['adjustments']);
     }
+
+    private function discount(string $name, string $type, string $value, float $pct, array $extra = []): PricingRule
+    {
+        return PricingRule::create(array_merge([
+            'name' => $name,
+            'rule_type' => $type,
+            'condition_operator' => $type === 'lead_time' ? '<=' : '==',
+            'condition_value' => $value,
+            'applies_to' => 'all',
+            'adjustment_type' => 'decrease',
+            'adjustment_method' => 'percentage',
+            'adjustment_value' => $pct,
+            'priority' => 1,
+            'status' => 'active',
+        ], $extra));
+    }
+
+    public function test_discounts_do_not_stack_only_the_biggest_applies(): void
+    {
+        // October is Off-Peak; both rules match
+        $this->discount('Off-Peak 10', 'seasonality', 'off_peak', 10);
+        $this->discount('Lead Time 5', 'lead_time', '3650', 5);
+
+        $quote = app(PricingRuleEngine::class)->evaluate('discovery', '2027-10-15', false, 1);
+
+        $this->assertCount(1, $quote['adjustments']);
+        $this->assertSame('Off-Peak 10', $quote['adjustments'][0]['rule_name']);
+        $this->assertEquals(-425.00, $quote['delta_per_pax']); // 10% of 4,250, not 15%
+    }
+
+    public function test_premium_still_applies_next_to_the_biggest_discount(): void
+    {
+        PricingRule::create([
+            'name' => 'Peak +10', 'rule_type' => 'seasonality', 'condition_value' => 'peak', 'applies_to' => 'all',
+            'adjustment_type' => 'increase', 'adjustment_method' => 'percentage', 'adjustment_value' => 10, 'priority' => 1, 'status' => 'active',
+        ]);
+        $this->discount('Lead A 5', 'lead_time', '3650', 5);
+        $this->discount('Lead B 8', 'lead_time', '3650', 8);
+
+        $quote = app(PricingRuleEngine::class)->evaluate('discovery', '2027-03-15', false, 1);
+
+        $this->assertEqualsCanonicalizing(['Peak +10', 'Lead B 8'], array_column($quote['adjustments'], 'rule_name'));
+        $this->assertEquals(85.00, $quote['delta_per_pax']); // +425 - 340
+    }
+
+    public function test_rule_with_max_fill_percent_stops_once_batch_is_filling_up(): void
+    {
+        $date = now()->addDays(5)->format('Y-m-d');
+        $this->discount('Last-Minute', 'lead_time', '7', 10, ['max_fill_percent' => 50]);
+
+        $engineAt = function (float $fill) {
+            $engine = \Mockery::mock(PricingRuleEngine::class, [
+                app(\App\Services\DemandForecastService::class),
+                app(\App\Services\SystemSettingService::class),
+            ])->makePartial();
+            $engine->shouldReceive('getFillPercentForDate')->andReturn($fill);
+
+            return $engine;
+        };
+
+        $this->assertEquals(-425.00, $engineAt(20.0)->evaluate('discovery', $date)['delta_per_pax']);
+        $this->assertEquals(0.0, $engineAt(55.0)->evaluate('discovery', $date)['delta_per_pax']);
+    }
+
+    public function test_admin_can_save_max_fill_percent_on_a_rule(): void
+    {
+        $this->seed();
+        $admin = User::where('role', 'admin')->first();
+        $rule = $this->discount('Fill Rule', 'lead_time', '7', 10);
+
+        $this->actingAs($admin)->put(route('admin.pricing.update', $rule), [
+            'name' => 'Fill Rule', 'rule_type' => 'lead_time', 'condition_operator' => '<=', 'condition_value' => '7',
+            'max_fill_percent' => 50, 'applies_to' => 'all', 'adjustment_type' => 'decrease',
+            'adjustment_method' => 'percentage', 'adjustment_value' => 10, 'priority' => 1, 'status' => 'active',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(50, $rule->fresh()->max_fill_percent);
+        $this->assertStringContainsString('batch < 50% full', $rule->fresh()->condition_summary);
+    }
 }

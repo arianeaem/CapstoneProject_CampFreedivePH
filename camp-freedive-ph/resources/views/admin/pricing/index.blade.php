@@ -309,7 +309,7 @@
                 </template>
             </div>
 
-            <div class="flex items-center justify-end gap-2 pt-2 border-t border-[#E5E5EA]">
+            <div class="flex items-center justify-end gap-2">
                 <button type="button" @click="deleteModal = false" class="btn-secondary px-3.5 py-1.5 text-sm font-semibold">
                     Cancel
                 </button>
