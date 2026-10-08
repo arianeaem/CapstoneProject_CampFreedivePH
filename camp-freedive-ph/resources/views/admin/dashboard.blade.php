@@ -170,12 +170,12 @@
                     @foreach($attention as $item)
                         <li>
                             <a href="{{ $item['url'] }}" class="group flex items-center gap-3 rounded-xl border border-[#E5E5EA] p-3 hover:bg-[#F8EAEA]/40 transition-colors">
+                                <span class="min-w-8 shrink-0 text-center rounded-full bg-[#780000] text-white text-sm font-black px-2 py-0.5">{{ $item['count'] }}</span>
                                 <span class="flex-1 min-w-0">
                                     <span class="block text-sm font-semibold text-[#1D1D1F]">{{ $item['label'] }}</span>
                                     <span class="block text-xs text-[#8E8E93] truncate">{{ $item['hint'] }}</span>
                                 </span>
-                                <span class="min-w-8 text-center rounded-full bg-[#780000] text-white text-sm font-black px-2 py-0.5">{{ $item['count'] }}</span>
-                                <span class="text-xs font-bold text-[#780000] shrink-0">{{ $item['action'] }} &rarr;</span>
+                                <span class="text-xs font-bold text-[#780000] shrink-0">{{ $item['action'] }}</span>
                             </a>
                         </li>
                     @endforeach
