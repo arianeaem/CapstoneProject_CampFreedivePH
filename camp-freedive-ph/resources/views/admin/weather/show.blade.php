@@ -156,6 +156,9 @@
             <h3 class="text-sm font-bold text-[#1D1D1F]">
                 {{ $vm->verdictMeaning() }}
             </h3>
+            @if($vm->peakLabel())
+                <p class="text-sm font-semibold text-[#B45309] mt-0.5">{{ $vm->peakLabel() }}</p>
+            @endif
         </div>
 
     </div>
@@ -207,6 +210,9 @@
                                         </span>
                                         <span class="font-bold {{ $d['tone'] }}">{{ $d['classification'] }}</span>
                                     </div>
+                                    @if(!empty($d['peak']))
+                                        <div class="px-3 pb-2 -mt-1 text-right text-xs font-semibold text-[#B45309]">{{ $d['peak'] }}</div>
+                                    @endif
                                 @endforeach
                             </div>
                         @endif

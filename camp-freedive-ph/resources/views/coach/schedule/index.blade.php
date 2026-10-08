@@ -95,6 +95,9 @@
                             <h2 class="text-base sm:text-lg font-extrabold text-[#1D1D1F]">{{ $batch->batch_number }}</h2>
                             <span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $item['is_current_dive'] ? 'bg-[#780000] text-white' : 'bg-[#F2F2F7] text-[#3A3A3C]' }}">{{ $when }}</span>
                             <span class="px-2 py-0.5 rounded-md text-xs font-bold {{ $item['weather_badge']['class'] ?? 'bg-gray-100 text-gray-700' }}">Weather: {{ $item['weather_badge']['label'] ?? $item['weather_class'] }}</span>
+                            @if(!empty($item['weather_peak']))
+                                <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-[#B45309]">{{ $item['weather_peak'] }}</span>
+                            @endif
                         </div>
                         <p class="text-[#6E6E73]">{{ $batch->formatted_date_range }} ({{ $batch->start_date->format('D') }}–{{ $batch->end_date->format('D') }})</p>
                     </div>
@@ -170,6 +173,7 @@
 
                     <div class="p-4 sm:p-5 border-t border-[#E5E5EA] bg-[#FAFAFA]">
                         <x-dive-safety.status :classification="$item['weather_class']"
+                                              :peak="$item['weather_peak'] ?? null"
                                               :description="\App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($item['assessment']?->recommended_action ?? null)"
                                               :engines="$item['model_comparison'] ?? null" />
                     </div>

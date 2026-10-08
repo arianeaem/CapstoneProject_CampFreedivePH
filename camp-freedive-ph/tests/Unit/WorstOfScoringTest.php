@@ -68,4 +68,61 @@ class WorstOfScoringTest extends TestCase
         $this->assertFalse($this->service->checkOverrideConditions(['tcws_signal' => 2]));
         $this->assertTrue($this->service->checkOverrideConditions(['tcws_signal' => 3]));
     }
+
+    /** Hours 06-18, all Safe with calm readings, except the ones given. */
+    private function day(array $rough): array
+    {
+        $hours = [];
+        foreach (range(6, 18) as $h) {
+            $hours[] = ['hour' => $h, 'classification' => 'Safe', 'ocean_current' => 0.15, 'wave_height' => 0.2, 'swell_height' => 0.1, 'wind_speed' => 12, 'wind_gusts' => 18, 'rain' => 0];
+        }
+        foreach ($rough as $h => $values) {
+            $hours[$h - 6] = array_merge($hours[$h - 6], $values);
+        }
+
+        return $hours;
+    }
+
+    public function test_one_rough_hour_keeps_the_whole_day_rating_and_shows_the_peak(): void
+    {
+        [$class, $sustained, $peak] = $this->service->applySustainedAndPeak(
+            $this->day([12 => ['classification' => 'Moderate', 'ocean_current' => 0.42]]), 'Safe');
+
+        $this->assertSame('Safe', $class);
+        $this->assertNull($sustained);
+        $this->assertSame('Roughest: Moderate at 12 PM · current 0.42 m/s', \App\Services\WeatherForecastService::peakLabel($peak));
+    }
+
+    public function test_two_rough_hours_in_a_row_lift_the_day(): void
+    {
+        [$class, $sustained, $peak] = $this->service->applySustainedAndPeak($this->day([
+            11 => ['classification' => 'Moderate', 'ocean_current' => 0.36],
+            12 => ['classification' => 'High Risk', 'ocean_current' => 0.6],
+        ]), 'Safe');
+
+        $this->assertSame('Moderate', $class); // the milder level of the 2-hour stretch
+        $this->assertSame(['11:00', '13:00'], [$sustained['from'], $sustained['to']]);
+        $this->assertSame('High Risk', $peak['classification']); // 12 PM is still rougher than the day
+    }
+
+    public function test_a_lifted_day_explains_the_rough_stretch(): void
+    {
+        [$class, , $peak] = $this->service->applySustainedAndPeak($this->day([
+            11 => ['classification' => 'Moderate', 'ocean_current' => 0.36],
+            12 => ['classification' => 'Moderate', 'ocean_current' => 0.42],
+        ]), 'Safe');
+
+        $this->assertSame('Moderate', $class);
+        $this->assertSame('Roughest: Moderate at 11 AM–1 PM · current 0.36 m/s', \App\Services\WeatherForecastService::peakLabel($peak));
+    }
+
+    public function test_rough_hours_apart_do_not_count_as_sustained(): void
+    {
+        [$class] = $this->service->applySustainedAndPeak($this->day([
+            9 => ['classification' => 'Moderate', 'ocean_current' => 0.4],
+            15 => ['classification' => 'Moderate', 'ocean_current' => 0.4],
+        ]), 'Very Safe');
+
+        $this->assertSame('Very Safe', $class);
+    }
 }

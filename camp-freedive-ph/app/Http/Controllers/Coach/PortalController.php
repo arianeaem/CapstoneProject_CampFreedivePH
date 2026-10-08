@@ -54,7 +54,9 @@ class PortalController extends Controller
             }
 
             // Weather for this batch
-            $d1Assessment = $batch->latestDay1Assessment;
+            $d1Assessment = \App\Services\WeatherForecastService::RISK_RANK[$batch->latestDay2Assessment?->overall_classification] ?? -1
+                > (\App\Services\WeatherForecastService::RISK_RANK[$batch->latestDay1Assessment?->overall_classification] ?? -1)
+                ? $batch->latestDay2Assessment : $batch->latestDay1Assessment;
             $weatherClass = $d1Assessment ? $d1Assessment->overall_classification : 'Safe';
             $weatherBadge = $d1Assessment ? $d1Assessment->classification_badge : [
                 'label' => 'Safe',
@@ -74,6 +76,7 @@ class PortalController extends Controller
                 'class_breakdown' => $classBreakdown,
                 'weather_class' => $weatherClass,
                 'weather_badge' => $weatherBadge,
+                'weather_peak' => $d1Assessment?->peak_label,
                 'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                 'hours_until_dive' => $hoursUntilDive,
                 'can_request_release' => $canRequestRelease,
@@ -102,7 +105,9 @@ class PortalController extends Controller
                     $classBreakdown[$type] = ($classBreakdown[$type] ?? 0) + 1;
                 }
 
-                $d1Assessment = $batch->latestDay1Assessment;
+                $d1Assessment = \App\Services\WeatherForecastService::RISK_RANK[$batch->latestDay2Assessment?->overall_classification] ?? -1
+                > (\App\Services\WeatherForecastService::RISK_RANK[$batch->latestDay1Assessment?->overall_classification] ?? -1)
+                ? $batch->latestDay2Assessment : $batch->latestDay1Assessment;
                 $weatherClass = $d1Assessment ? $d1Assessment->overall_classification : 'Safe';
                 $weatherBadge = $d1Assessment ? $d1Assessment->classification_badge : [
                     'label' => 'Safe',
@@ -121,6 +126,7 @@ class PortalController extends Controller
                     'class_breakdown' => $classBreakdown,
                     'weather_class' => $weatherClass,
                     'weather_badge' => $weatherBadge,
+                'weather_peak' => $d1Assessment?->peak_label,
                     'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                     'hours_until_dive' => $hoursUntilDive,
                     'can_request_release' => $canRequestRelease,

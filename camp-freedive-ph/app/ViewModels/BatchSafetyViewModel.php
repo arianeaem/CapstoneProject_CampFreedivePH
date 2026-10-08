@@ -93,6 +93,22 @@ class BatchSafetyViewModel
         return self::score($this->verdict, 0);
     }
 
+    /** "Roughest: Moderate at 12 PM · current 0.42 m/s" from the roughest day, or null. */
+    public function peakLabel(): ?string
+    {
+        if (in_array($this->verdict, ['Critical Risk', 'Not Available'], true)) {
+            return null;
+        }
+        $rank = fn ($a) => \App\Services\WeatherForecastService::RISK_RANK[$a?->peak_classification] ?? 0;
+        $a1 = $this->data['day1Assessment'] ?? null;
+        $a2 = $this->data['day2Assessment'] ?? null;
+        $worst = $rank($a2) > $rank($a1) ? $a2 : $a1;
+
+        return $worst && $rank($worst) >= (\App\Services\WeatherForecastService::RISK_RANK[$this->verdict] ?? 0)
+            ? $worst->peak_label
+            : null;
+    }
+
     public function verdictMeaning(): string
     {
         return \App\Services\WeatherForecastService::MEANING_MAP[$this->verdict] ?? 'Proceed with standard camp freediving protocols.';
@@ -134,8 +150,8 @@ class BatchSafetyViewModel
                 'tone' => self::toneText($overall, $seasonal),
                 'score' => self::score($overall),
                 'days' => [
-                    ['label' => 'Day 1', 'date' => $m['day1']['date'] ?? '', 'classification' => $m['day1']['classification'] ?? 'N/A', 'tone' => self::toneText($m['day1']['classification'] ?? null, $seasonal)],
-                    ['label' => 'Day 2', 'date' => $m['day2']['date'] ?? '', 'classification' => $m['day2']['classification'] ?? 'N/A', 'tone' => self::toneText($m['day2']['classification'] ?? null, $seasonal)],
+                    ['label' => 'Day 1', 'date' => $m['day1']['date'] ?? '', 'classification' => $m['day1']['classification'] ?? 'N/A', 'tone' => self::toneText($m['day1']['classification'] ?? null, $seasonal), 'peak' => $seasonal ? null : ($m['day1']['peak_label'] ?? null)],
+                    ['label' => 'Day 2', 'date' => $m['day2']['date'] ?? '', 'classification' => $m['day2']['classification'] ?? 'N/A', 'tone' => self::toneText($m['day2']['classification'] ?? null, $seasonal), 'peak' => $seasonal ? null : ($m['day2']['peak_label'] ?? null)],
                 ],
                 'note' => match (true) {
                     empty($m['available']) => 'No result for these dates yet.',

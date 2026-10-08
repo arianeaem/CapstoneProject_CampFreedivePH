@@ -105,6 +105,8 @@ class WeatherSafetyService
                 'text_color' => $riskConfig['text_color'],
                 'icon' => $riskConfig['icon'],
                 'description' => $formattedDescription,
+                // Roughest hour, shown when rougher than the whole-day rating
+                'peak_label' => $seasonalEstimate ? null : ($assessment['peak_label'] ?? null),
                 'is_bookable' => $seasonalEstimate || $riskLevel !== 'critical_risk',
                 'has_storm_signal' => $riskLevel === 'critical_risk',
                 'days_out' => $daysOut,
@@ -116,6 +118,7 @@ class WeatherSafetyService
                     'confidence_advisory' => $day1['confidence_advisory'] ?? $confidenceAdvisory,
                     'recommended_action' => $day1['recommended_action'] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $day1['worst_hour'] ?? '11:00 AM',
+                    'peak_label' => $seasonalEstimate ? null : \App\Services\WeatherForecastService::peakLabel($day1['peak'] ?? null),
                 ]),
                 'day2' => array_merge($day2, [
                     'date' => $end->format('M d, Y'),
@@ -124,6 +127,7 @@ class WeatherSafetyService
                     'confidence_advisory' => $day2['confidence_advisory'] ?? $confidenceAdvisory,
                     'recommended_action' => $day2['recommended_action'] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $day2['worst_hour'] ?? '11:00 AM',
+                    'peak_label' => $seasonalEstimate ? null : \App\Services\WeatherForecastService::peakLabel($day2['peak'] ?? null),
                 ]),
                 'suggested_dates' => $suggestedDates,
                 'location' => 'Mabini / Anilao, Batangas',

@@ -10,9 +10,14 @@
             </h2>
         </div>
 
-        <span class="px-3 py-1 rounded-full text-xs font-black uppercase {{ $day['badge'] }}">
-            {{ $day['recommendation'] }}
-        </span>
+        <div class="text-right space-y-1">
+            <span class="px-3 py-1 rounded-full text-xs font-black uppercase {{ $day['badge'] }}">
+                {{ $day['recommendation'] }}
+            </span>
+            @if($day['assessment']->peak_label && !in_array($day['recommendation'], ['Critical Risk', 'Not Available'], true))
+                <span class="block text-xs font-semibold text-[#B45309]">{{ $day['assessment']->peak_label }}</span>
+            @endif
+        </div>
     </div>
 
     <!-- Quick stats -->

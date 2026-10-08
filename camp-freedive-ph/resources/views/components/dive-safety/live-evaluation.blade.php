@@ -37,6 +37,7 @@
             </template>
         </div>
         <p class="text-xs sm:text-sm text-[#48484A] leading-snug" x-show="{{ $f }}.description" x-text="{{ $f }}.description"></p>
+        <p class="text-xs sm:text-sm font-semibold text-[#B45309]" x-show="{{ $f }}.peak_label" x-text="{{ $f }}.peak_label"></p>
         <template x-if="{{ $f }}.confidence_advisory">
             <p class="text-xs text-[#6E6E73]" x-text="{{ $f }}.confidence_advisory"></p>
         </template>
@@ -57,6 +58,7 @@
                             </div>
                             <div class="text-sm font-extrabold truncate" :class="$safety.text(day.classification, {{ $seasonal }})"
                                  x-text="{{ $seasonal }} ? 'Seasonal outlook' : day.classification"></div>
+                            <div class="text-xs font-semibold text-[#B45309]" x-show="day.peak_label" x-text="day.peak_label"></div>
                         </div>
                         <!-- Roughest hour (worst_hour: when wind and waves are highest) -->
                         <div class="text-right shrink-0" x-show="$safety.hasTime(day.worst_hour)" title="When wind and waves peak that day">
@@ -139,10 +141,13 @@
                             <template x-if="engine.available">
                                 <div class="space-y-1">
                                     <template x-for="(day, idx) in [engine.day1, engine.day2]" :key="engine.title + '-' + idx">
-                                        <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
-                                            <span x-text="'Day ' + (idx + 1)"></span>
-                                            <span class="font-semibold" :class="$safety.text(day.classification, engine.is_seasonal_estimate)"
-                                                  x-text="engine.is_seasonal_estimate ? 'Seasonal (' + day.classification + ')' : day.classification"></span>
+                                        <div>
+                                            <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
+                                                <span x-text="'Day ' + (idx + 1)"></span>
+                                                <span class="font-semibold" :class="$safety.text(day.classification, engine.is_seasonal_estimate)"
+                                                      x-text="engine.is_seasonal_estimate ? 'Seasonal (' + day.classification + ')' : day.classification"></span>
+                                            </div>
+                                            <div class="text-right text-[#B45309]" x-show="!engine.is_seasonal_estimate && day.peak_label" x-text="day.peak_label"></div>
                                         </div>
                                     </template>
                                     <p class="text-[#8E8E93] leading-snug break-words pt-0.5" x-show="engine.data_source" x-text="engine.data_source"></p>

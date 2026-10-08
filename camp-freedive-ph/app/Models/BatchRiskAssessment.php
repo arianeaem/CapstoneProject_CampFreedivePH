@@ -39,6 +39,9 @@ class BatchRiskAssessment extends Model
         'worst_hour',
         'override_triggered',
         'override_details',
+        'peak_classification',
+        'peak_time',
+        'peak_reason',
         'assessed_by',
         'assessed_at',
     ];
@@ -87,7 +90,19 @@ class BatchRiskAssessment extends Model
             ->orderBy('forecast_time', 'asc');
     }
 
-    public function getClassificationBadgeAttribute(): array
+    /** "Roughest: Moderate at 12 PM · current 0.42 m/s", or null when there is nothing to add. */
+    public function getPeakLabelAttribute(): ?string
+    {
+        return $this->peak_classification
+            ? \App\Services\WeatherForecastService::peakLabel([
+                'classification' => $this->peak_classification,
+                'time' => $this->peak_time,
+                'reason' => $this->peak_reason,
+            ])
+            : null;
+    }
+
+        public function getClassificationBadgeAttribute(): array
     {
         return match ($this->overall_classification) {
             'Very Safe' => [

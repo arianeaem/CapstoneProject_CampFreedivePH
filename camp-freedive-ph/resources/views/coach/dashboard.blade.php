@@ -124,7 +124,7 @@
                 </div>
 
                 <!-- Weather (uses components/dive-safety/status) -->
-                <x-dive-safety.status :classification="$next['weather_class']" :engines="$next['model_comparison'] ?? null" />
+                <x-dive-safety.status :classification="$next['weather_class']" :peak="$next['weather_peak'] ?? null" :engines="$next['model_comparison'] ?? null" />
 
                 <div class="flex flex-col sm:flex-row gap-2.5">
                     <a href="{{ route('coach.schedule.index') }}" class="btn-primary flex-1 min-h-[44px] rounded-xl text-sm font-bold inline-flex items-center justify-center shadow-2xs">View full schedule</a>

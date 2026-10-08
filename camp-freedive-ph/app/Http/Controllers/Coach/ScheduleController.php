@@ -87,6 +87,7 @@ class ScheduleController extends Controller
                 'class_counts' => $classCounts,
                 'weather_class' => $weatherClass,
                 'weather_badge' => $weatherBadge,
+                'weather_peak' => $d1?->peak_label,
                 'assessment' => $d1,
                 'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                 'hours_until_dive' => max(0, $hoursUntilDive),

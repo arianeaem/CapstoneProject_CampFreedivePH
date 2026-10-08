@@ -205,6 +205,15 @@
                             <span class="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide inline-block {{ $cardBadgeClass }}">
                                 {{ $cardRec }}
                             </span>
+                            @php
+                                $peakRank = fn ($a) => \App\Services\WeatherForecastService::RISK_RANK[$a?->peak_classification] ?? 0;
+                                $peakDay = $peakRank($day2) > $peakRank($day1) ? $day2 : $day1;
+                                $cardPeak = !$isConcluded && $peakDay && $peakRank($peakDay) >= (\App\Services\WeatherForecastService::RISK_RANK[$cardRec] ?? 0)
+                                    ? $peakDay->peak_label : null;
+                            @endphp
+                            @if($cardPeak)
+                                <span class="text-[11px] font-semibold text-[#B45309] block max-w-[160px] ml-auto leading-snug">{{ $cardPeak }}</span>
+                            @endif
                             @if($isConcluded)
                                 <span class="text-[10px] uppercase font-extrabold text-slate-500 block">Concluded</span>
                             @elseif($batch->status === 'cancelled_by_camp')

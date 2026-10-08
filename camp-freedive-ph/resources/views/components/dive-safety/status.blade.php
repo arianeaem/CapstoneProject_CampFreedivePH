@@ -11,6 +11,7 @@
     'description' => null,
     'engines' => null,
     'label' => 'Weather status',
+    'peak' => null,
 ])
 @php
     $tone = fn (?string $c, bool $seasonal = false) => (!$c || $seasonal) ? 'neutral' : match ($c) {
@@ -50,6 +51,9 @@
             </div>
         </div>
         <p class="text-xs sm:text-sm text-[#48484A] leading-snug">{{ $description }}</p>
+        @if($peak)
+            <p class="text-xs sm:text-sm font-semibold text-[#B45309]">{{ $peak }}</p>
+        @endif
     </div>
 
     @if($models)
@@ -78,6 +82,9 @@
                                         <span>{{ $dayLabel }}</span>
                                         <span class="font-semibold {{ $styles[$tone($dayClass, $seasonal)]['text'] }}">{{ $seasonal ? "Seasonal ({$dayClass})" : $dayClass }}</span>
                                     </div>
+                                    @if(!$seasonal && !empty($model[$key]['peak_label']))
+                                        <div class="text-right text-[#B45309]">{{ $model[$key]['peak_label'] }}</div>
+                                    @endif
                                 @endforeach
                                 @if(!empty($model['data_source']))
                                     <p class="text-[#8E8E93] leading-snug break-words pt-0.5">{{ $model['data_source'] }}</p>

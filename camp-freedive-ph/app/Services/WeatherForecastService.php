@@ -478,20 +478,22 @@ class WeatherForecastService
         // Anything missing counts as "Not Available" (rank 0), never as Safe
         $mlRank = $mlAssessment ? (self::RISK_RANK[$mlAssessment['overall_recommendation'] ?? 'Not Available'] ?? 0) : 0;
 
+        // The day's rating is the whole day (06:00-18:00) and the ML check (08:00-18:00).
+        // The AM/PM open-water windows are kept as hourly detail and do not change the rating.
         $amRank = self::RISK_RANK[$amData['classification']] ?? 0;
         $pmRank = self::RISK_RANK[$pmData['classification']] ?? 0;
         $daytimeRank = self::RISK_RANK[$cachedDay['daytime_classification'] ?? 'Not Available'] ?? 0;
 
-        if ($overrideTriggered || $amRank === 5 || $pmRank === 5 || $daytimeRank === 5 || $mlRank === 5) {
+        if ($overrideTriggered || $daytimeRank === 5 || $mlRank === 5) {
             $dayClassification = 'Critical Risk';
             $weightedScorePct = 100.0;
             $worstWindow = ($pmRank >= $amRank) ? '15:30-17:30' : '09:30-12:00';
             $worstHour = ($pmRank >= $amRank) ? $pmData['worst_hour'] : $amData['worst_hour'];
             $recommendedAction = self::MEANING_MAP['Critical Risk'];
         } else {
-            $dayRank = max($amRank, $pmRank, $daytimeRank, $mlRank);
+            $dayRank = max($daytimeRank, $mlRank);
             $dayClassification = array_search($dayRank, self::RISK_RANK) ?: 'Not Available';
-            $weightedScorePct = max($amData['weighted_score_pct'] ?? 0, $pmData['weighted_score_pct'] ?? 0, $cachedDay['daytime_score_pct'] ?? 0);
+            $weightedScorePct = $cachedDay['daytime_score_pct'] ?? null;
             $worstWindow = ($pmRank >= $amRank) ? '15:30-17:30' : '09:30-12:00';
             $worstHour = ($pmRank >= $amRank) ? $pmData['worst_hour'] : $amData['worst_hour'];
             $recommendedAction = self::MEANING_MAP[$dayClassification] ?? 'Proceed with caution.';
@@ -504,6 +506,11 @@ class WeatherForecastService
                     . 'so this day cannot be rated yet. It will be rated automatically once the data is available.';
             }
         }
+
+        // Roughest hour of the whole day, kept only when rougher than the day's rating
+        $dayPeak = (!$overrideTriggered && !empty($cachedDay['peak'])
+            && (self::RISK_RANK[$cachedDay['peak']['classification']] ?? 0) >= (self::RISK_RANK[$dayClassification] ?? 0))
+            ? $cachedDay['peak'] : null;
 
         // Save the day assessment
         $riskAssessment = BatchRiskAssessment::create([
@@ -518,6 +525,9 @@ class WeatherForecastService
             'worst_hour' => $worstHour,
             'override_triggered' => $overrideTriggered,
             'override_details' => $overrides,
+            'peak_classification' => $dayPeak['classification'] ?? null,
+            'peak_time' => $dayPeak['time'] ?? null,
+            'peak_reason' => $dayPeak['reason'] ?? null,
             'assessed_by' => $assessedBy?->id,
             'assessed_at' => $assessedAt,
         ]);
@@ -584,6 +594,8 @@ class WeatherForecastService
             : null;
         $historical = $this->previewFromHistoricalModel($startDate, $historicalReplay);
 
+        $legacy = $legacy ? $this->withOverallPeak($legacy) : null;
+        $historical = $this->withOverallPeak($historical);
         $primary = $legacy ?? $historical;
         $primary['engines'] = [
             'historical' => $this->summarizePreviewEngine('Historical Model', $historical),
@@ -614,6 +626,22 @@ class WeatherForecastService
     /**
      * Short summary of one engine's result for the comparison on the booking form.
      */
+    /** Adds the roughest day peak to a preview when it is rougher than the overall rating. */
+    private function withOverallPeak(array $preview): array
+    {
+        $overallRank = self::RISK_RANK[$preview['overall_classification'] ?? 'Not Available'] ?? 0;
+        $peak = collect([$preview['day1']['peak'] ?? null, $preview['day2']['peak'] ?? null])
+            ->filter()
+            ->sortByDesc(fn ($p) => self::RISK_RANK[$p['classification']] ?? 0)
+            ->first();
+        $peak = $peak && (self::RISK_RANK[$peak['classification']] ?? 0) >= $overallRank ? $peak : null;
+
+        $preview['peak'] = $peak;
+        $preview['peak_label'] = self::peakLabel($peak);
+
+        return $preview;
+    }
+
     protected function summarizePreviewEngine(string $label, ?array $preview): array
     {
         if (empty($preview['available'])) {
@@ -625,6 +653,7 @@ class WeatherForecastService
             'classification' => $d['classification'] ?? 'Safe',
             'worst_hour' => $d['worst_hour'] ?? 'N/A',
             'recommended_action' => $d['recommended_action'] ?? null,
+            'peak_label' => self::peakLabel($d['peak'] ?? null),
         ];
         $seasonal = ($preview['day1']['seasonal_estimate'] ?? false) && ($preview['day2']['seasonal_estimate'] ?? false);
 
@@ -632,6 +661,7 @@ class WeatherForecastService
             'label' => $label,
             'available' => true,
             'overall_classification' => $preview['overall_classification'] ?? 'Safe',
+            'peak_label' => $preview['peak_label'] ?? null,
             'data_source' => $preview['data_source'] ?? null,
             'is_seasonal_estimate' => $seasonal,
             'day1' => $day($preview['day1'] ?? []),
@@ -782,6 +812,7 @@ class WeatherForecastService
                 return [
                     'date' => $date->format('M d, Y'),
                     'classification' => $dayClassification,
+                    'peak' => !empty($cache['peak']) && (self::RISK_RANK[$cache['peak']['classification']] ?? 0) >= (self::RISK_RANK[$dayClassification] ?? 0) ? $cache['peak'] : null,
                     'confidence' => $conf,
                     'confidence_advisory' => $advisory,
                     'recommended_action' => self::MEANING_MAP[$dayClassification] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
@@ -1000,13 +1031,9 @@ class WeatherForecastService
                 return null;
             }
 
-            // Rate the day by its dive times too (AM 10-12, PM 4-5), like a batch assessment:
-            // a risky hour while people are in the water must not be averaged away by the whole day.
-            $apiClass = $this->worstClass(array_filter([
-                $apiDay['overall_classification'] ?? null,
-                $apiDay['am_classification'] ?? null,
-                $apiDay['pm_classification'] ?? null,
-            ]), 'Not Available');
+            // The day's rating is the whole day (06:00-18:00); dive times are not used for it
+            $apiClass = $apiDay['overall_classification'] ?? 'Not Available';
+            $apiPeak = $apiDay['peak'] ?? null;
 
             // Worst daytime hour (06:00 - 18:00) based on the rule score
             $worstApiHour = null;
@@ -1038,6 +1065,7 @@ class WeatherForecastService
                 'api_classification' => $apiClass,
                 'model_classification' => $modelClass,
                 'model_primary_hazard' => $model['worst_hour']['primary_hazard'] ?? null,
+                'peak' => $apiPeak && (self::RISK_RANK[$apiPeak['classification']] ?? 0) >= (self::RISK_RANK[$classification] ?? 0) ? $apiPeak : null,
                 'seasonal_estimate' => false,
                 // Weather readings from the forecast (06:00 - 18:00)
                 'wave_height_m' => round((float) ($apiDay['max_wave_height'] ?? 0), 2),
@@ -1852,6 +1880,10 @@ class WeatherForecastService
                 $daytimeClass = $this->classifyScores($daytimeScores, $daytimeScorePct);
             }
 
+            // B: 2+ hours in a row at Moderate or worse lift the whole day to at least that level
+            // A: the roughest single hour, shown next to the rating when it is rougher than the day
+            [$daytimeClass, $sustained, $peak] = $this->applySustainedAndPeak($bucket['hourly_scores'], $daytimeClass);
+
             $amScores = array_filter($bucket['hourly_scores'], fn($i) => in_array($i['hour'], [10, 11, 12]));
             $amClass = $this->worstClass(array_column($amScores, 'classification'), 'Not Available');
 
@@ -1874,6 +1906,8 @@ class WeatherForecastService
                 'total_rain' => $weatherAvailable ? round($daytimeRainTotal, 2) : null,
                 'avg_pressure' => $weatherAvailable ? round($meanDaytimePressure, 1) : null,
                 'sea_data_available' => $seaAvailable,
+                'sustained' => $sustained,
+                'peak' => $peak,
                 'weather_data_available' => $weatherAvailable,
                 'hourly' => $bucket['hourly_scores'],
             ];
@@ -2359,6 +2393,99 @@ class WeatherForecastService
         $worst = max(array_map(fn ($key) => (int) ($scores[$key] ?? 0), self::FLOOR_PARAMETERS));
 
         return $this->raiseToFloor($this->classifyScore($weightedPct), self::FLOOR_BY_SCORE[min($worst, 3)]);
+    }
+
+    /** Hours in a row at Moderate or worse that lift a day's rating (sustained-hours rule). */
+    public const SUSTAINED_HOURS = 2;
+
+    /**
+     * Whole-day rating with two refinements, using the day's hourly ratings (06:00-18:00):
+     * - sustained: SUSTAINED_HOURS in a row at Moderate or worse lift the day to at least the
+     *   mildest level of that stretch (one rough hour alone does not)
+     * - peak: the roughest hour, returned only when it is rougher than the final day rating
+     *
+     * @return array{0: string, 1: ?array, 2: ?array} [day rating, sustained stretch, peak hour]
+     */
+    public function applySustainedAndPeak(array $hourly, string $dayClass): array
+    {
+        if (in_array($dayClass, ['Critical Risk', 'Not Available'], true)) {
+            return [$dayClass, null, null];
+        }
+
+        $hours = collect($hourly)
+            ->filter(fn ($h) => isset($h['hour']) && $h['hour'] >= 6 && $h['hour'] <= 18
+                && ($h['classification'] ?? 'Not Available') !== 'Not Available')
+            ->sortBy('hour')->values();
+
+        // Strongest run of consecutive hours at Moderate or worse
+        $sustained = null;
+        for ($i = 0; $i + self::SUSTAINED_HOURS - 1 < $hours->count(); $i++) {
+            $run = $hours->slice($i, self::SUSTAINED_HOURS)->values();
+            if ($run->last()['hour'] - $run->first()['hour'] !== self::SUSTAINED_HOURS - 1) {
+                continue; // a gap in the hours
+            }
+            $mildest = $run->min(fn ($h) => self::RISK_RANK[$h['classification']] ?? 0);
+            if ($mildest >= self::RISK_RANK['Moderate'] && $mildest > ($sustained['rank'] ?? 0)) {
+                $sustained = [
+                    'rank' => $mildest,
+                    'classification' => array_search($mildest, self::RISK_RANK),
+                    'from' => sprintf('%02d:00', $run->first()['hour']),
+                    'to' => sprintf('%02d:00', $run->last()['hour'] + 1),
+                ];
+            }
+        }
+        $originalRank = self::RISK_RANK[$dayClass] ?? 0;
+        if ($sustained) {
+            $dayClass = $this->raiseToFloor($dayClass, $sustained['classification']);
+        }
+
+        // Roughest single hour (first one if tied)
+        $peakHour = $hours->reduce(fn ($worst, $h) => !$worst || (self::RISK_RANK[$h['classification']] ?? 0) > (self::RISK_RANK[$worst['classification']] ?? 0) ? $h : $worst);
+        $peak = null;
+        if ($peakHour && (self::RISK_RANK[$peakHour['classification']] ?? 0) > (self::RISK_RANK[$dayClass] ?? 0)) {
+            $peak = [
+                'classification' => $peakHour['classification'],
+                'time' => Carbon::createFromTime($peakHour['hour'])->format('g A'),
+                'reason' => $this->peakReason($peakHour),
+            ];
+        } elseif ($sustained && $sustained['rank'] > ($originalRank ?? 0)) {
+            // The day was lifted by a rough stretch: say when and why
+            $stretch = $hours->filter(fn ($h) => $h['hour'] >= (int) $sustained['from'] && $h['hour'] < (int) $sustained['to']);
+            $roughest = $stretch->sortByDesc(fn ($h) => self::RISK_RANK[$h['classification']] ?? 0)->first();
+            $peak = [
+                'classification' => $sustained['classification'],
+                'time' => Carbon::createFromTime((int) $sustained['from'])->format('g A') . '–' . Carbon::createFromTime((int) $sustained['to'] % 24)->format('g A'),
+                'reason' => $roughest ? $this->peakReason($roughest) : 'combined conditions',
+            ];
+        }
+
+        return [$dayClass, $sustained, $peak];
+    }
+
+    /** What made an hour rough, in plain words ("current 0.42 m/s"). */
+    private function peakReason(array $h): string
+    {
+        $candidates = [
+            ['score' => $this->scoreOceanCurrent((float) ($h['ocean_current'] ?? 0)), 'text' => 'current ' . number_format((float) ($h['ocean_current'] ?? 0), 2) . ' m/s', 'limit' => ($h['ocean_current'] ?? 0) >= 0.80],
+            ['score' => $this->scoreWaveHeight((float) ($h['wave_height'] ?? 0)), 'text' => 'waves ' . number_format((float) ($h['wave_height'] ?? 0), 1) . ' m', 'limit' => ($h['wave_height'] ?? 0) >= 1.80],
+            ['score' => $this->scoreSwellHeight((float) ($h['swell_height'] ?? 0)), 'text' => 'swell ' . number_format((float) ($h['swell_height'] ?? 0), 1) . ' m', 'limit' => ($h['swell_height'] ?? 0) >= 1.80],
+            ['score' => $this->scoreWindSpeed((float) ($h['wind_speed'] ?? 0), (float) ($h['wind_gusts'] ?? 0)), 'text' => 'gusts ' . round((float) ($h['wind_gusts'] ?? 0)) . ' km/h', 'limit' => ($h['wind_gusts'] ?? 0) >= 48.0],
+            ['score' => $this->scoreRain((float) ($h['rain'] ?? 0)), 'text' => 'rain ' . number_format((float) ($h['rain'] ?? 0), 1) . ' mm/h', 'limit' => ($h['rain'] ?? 0) >= 25.0],
+        ];
+
+        $hardLimit = collect($candidates)->firstWhere('limit', true);
+        if ($hardLimit) {
+            return $hardLimit['text'];
+        }
+        $top = collect($candidates)->sortByDesc('score')->first();
+
+        return $top && $top['score'] >= 2 ? $top['text'] : 'combined conditions';
+    }
+
+    /** "Roughest: Moderate at 12 PM · current 0.42 m/s" (or a stretch: "at 11 AM–1 PM") */
+    public static function peakLabel(?array $peak): ?string
+    {
+        return $peak ? "Roughest: {$peak['classification']} at {$peak['time']} · {$peak['reason']}" : null;
     }
 
     /** The worse of two ratings. */
