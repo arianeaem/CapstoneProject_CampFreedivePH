@@ -224,7 +224,10 @@ class BookingController extends Controller
             $currentUser
         );
 
+        $guardianFields = $request->guardianFields();
+
         $booking = DB::transaction(function () use (
+            $guardianFields,
             $validated,
             $batch,
             $bookingNumber,
@@ -266,7 +269,7 @@ class BookingController extends Controller
                 'contact_facebook' => $validated['contact_facebook'] ?? null,
                 'status' => 'confirmed',
                 'created_by' => $currentUser->id,
-            ] + $request->guardianFields());
+            ] + $guardianFields);
 
             foreach ($validated['participants'] as $p) {
                 BookingParticipant::create([
