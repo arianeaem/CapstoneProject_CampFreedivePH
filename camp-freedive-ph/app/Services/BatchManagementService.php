@@ -124,7 +124,7 @@ class BatchManagementService
             'end_date' => $endDate,
             'status' => 'confirmed',
             'lifecycle_status' => 'confirmed',
-            'risk_classification' => 'safe',
+            'risk_classification' => null, // not assessed yet
             'created_by' => $creatorId,
         ]);
 
@@ -180,7 +180,7 @@ class BatchManagementService
                     'end_date' => $endDate,
                     'status' => 'confirmed',
                     'lifecycle_status' => 'confirmed',
-                    'risk_classification' => $data['risk_classification'] ?? 'safe',
+                    'risk_classification' => $data['risk_classification'] ?? null,
                     'capacity_note' => $data['capacity_note'] ?? null,
                     'notes' => $data['notes'] ?? null,
                     'created_by' => $creator->id,
@@ -194,7 +194,7 @@ class BatchManagementService
                     'end_date' => $endDate,
                     'status' => 'confirmed',
                     'lifecycle_status' => 'confirmed',
-                    'risk_classification' => $data['risk_classification'] ?? 'safe',
+                    'risk_classification' => $data['risk_classification'] ?? null,
                     'capacity_note' => $data['capacity_note'] ?? null,
                     'notes' => $data['notes'] ?? null,
                     'created_by' => $creator->id,

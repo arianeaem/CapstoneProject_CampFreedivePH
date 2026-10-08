@@ -36,7 +36,8 @@ class ForecastQuantileScoringTest extends TestCase
 
         $this->assertIsArray($result);
         $this->assertEquals('high', $result['confidence']);
-        $this->assertContains($result['classification'], ['Very Safe', 'Safe']);
+        // 0.6 m waves: experts put 0.5-0.6 m in Moderate, so the worst-of floor applies
+        $this->assertSame('Moderate', $result['classification']);
         $this->assertFalse($result['is_physical_breach']);
         $this->assertLessThan(40.0, $result['weighted_score_pct']);
     }
@@ -126,8 +127,9 @@ class ForecastQuantileScoringTest extends TestCase
             'p_high_gust' => 0.99,
         ]);
 
-        $this->assertSame('Very Safe', $result['tier']);
-        $this->assertSame($result['score_details']['classification_from_weighted_score'], 'Very Safe');
+        // 0.4 m waves are felt (Coach LC: from 0.3 m), so the worst-of floor makes it Safe
+        $this->assertSame('Safe', $result['tier']);
+        $this->assertSame($result['score_details']['classification_from_weighted_score'], 'Safe');
         $this->assertFalse($result['score_details']['p_high_gust_used']);
         $this->assertFalse($result['score_details']['hard_gate_triggered']);
     }

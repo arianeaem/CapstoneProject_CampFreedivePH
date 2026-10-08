@@ -330,8 +330,8 @@
                     </label>
                     <select name="tcws_signal" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-xs text-[#1D1D1F] bg-white font-medium">
                         <option value="0">No Active TCWS Signal</option>
-                        <option value="1">Signal No. 1</option>
-                        <option value="2">Signal No. 2</option>
+                        <option value="1">Signal No. 1 (At least High Risk)</option>
+                        <option value="2">Signal No. 2 (At least High Risk)</option>
                         <option value="3" selected>Signal No. 3 (Forces Critical Risk)</option>
                         <option value="4">Signal No. 4 (Forces Critical Risk)</option>
                         <option value="5">Signal No. 5 (Forces Critical Risk)</option>

@@ -23,7 +23,7 @@ use Illuminate\Support\Collection;
  * @property Carbon $start_date Saturday start date
  * @property Carbon $end_date Sunday end date
  * @property string $lifecycle_status open, closing_soon, sold_out, completed, archived
- * @property string $risk_classification very_safe, safe, moderate, high_risk, critical_risk
+ * @property string|null $risk_classification very_safe, safe, moderate, high_risk, critical_risk (null = not assessed yet)
  * @property int $max_capacity max people (default 45)
  * @property string $status confirmed, open, completed, rescheduled, cancelled_by_camp
  */
@@ -481,6 +481,10 @@ class Batch extends Model
 
     public function getRiskBadgeAttribute(): array
     {
+        if (!$this->risk_classification) {
+            return ['label' => 'Not yet assessed', 'class' => 'bg-gray-100 text-gray-600'];
+        }
+
         $key = strtolower(str_replace([' ', '-'], '_', $this->risk_classification ?: 'safe'));
         return match ($key) {
             'very_safe' => [

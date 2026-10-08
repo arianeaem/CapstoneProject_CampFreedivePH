@@ -296,7 +296,7 @@ class WeatherForecastService
                 'Moderate' => 'moderate',
                 'High Risk' => 'high_risk',
                 'Critical Risk' => 'critical_risk',
-                'Not Available' => 'safe',
+                'Not Available' => null, // no forecast yet = not assessed
                 default => 'safe',
             };
 
@@ -377,7 +377,7 @@ class WeatherForecastService
                 'moderate' => 'Moderate',
                 'high_risk' => 'High Risk',
                 'critical_risk' => 'Critical Risk',
-                default => ($batch->status === 'completed' ? 'Very Safe' : 'Safe'),
+                default => 'Not Available',
             };
 
             $recommendedAction = self::MEANING_MAP[$finalClass] ?? 'Concluded batch operations.';
@@ -387,6 +387,7 @@ class WeatherForecastService
                 'Moderate' => 50.0,
                 'High Risk' => 70.0,
                 'Critical Risk' => 100.0,
+                'Not Available' => 0.0,
                 default => 25.0,
             };
 
@@ -1168,7 +1169,9 @@ class WeatherForecastService
 
             AuditLogger::log(
                 'MANUAL_OVERRIDE_APPLIED',
-                "Manual weather override applied to batch {$batch->batch_code}. Critical Risk forced. Cancelled=" . ($cancelBatch ? 'Yes' : 'No'),
+                "Manual weather override applied to batch {$batch->batch_code}. "
+                    . ($isOverrideActive ? 'Critical Risk forced.' : ($this->overrideFloor($overrideData) ? 'At least High Risk.' : 'No forced rating.'))
+                    . " Cancelled=" . ($cancelBatch ? 'Yes' : 'No'),
                 $operator,
                 $operator->name
             );
@@ -1295,6 +1298,17 @@ class WeatherForecastService
     }
 
     /**
+     * Lowest rating an override allows without forcing Critical:
+     * PAGASA Signal No. 1-2 = at least High Risk (Signal No. 3+ is Critical above).
+     */
+    public function overrideFloor(?array $overrides): ?string
+    {
+        $signal = (int) ($overrides['tcws_signal'] ?? 0);
+
+        return ($signal >= 1 && $signal <= 2) ? 'High Risk' : null;
+    }
+
+    /**
      * Check one dive window (e.g. 09:30-12:00 or 15:30-17:30).
      */
     protected function assessWindow(string $plannedDate, string $diveStart, string $diveEnd, string $windowType, ?array $overrides = null): array
@@ -1309,6 +1323,7 @@ class WeatherForecastService
     protected function evaluateWindowNatively(string $plannedDate, string $diveStart, string $diveEnd, string $windowType, ?array $overrides): array
     {
         $overrideTriggered = $this->checkOverrideConditions($overrides);
+        $overrideFloor = $this->overrideFloor($overrides);
 
         // AM 09:30-12:00 -> 10:00, 11:00, 12:00
         // PM 15:30-17:30 -> 16:00, 17:00
@@ -1324,6 +1339,8 @@ class WeatherForecastService
         $windowWindGusts = [];
         $windowWaveHeights = [];
         $windowWavePeriods = [];
+        $windowWindWavePeriods = [];
+        $windowSwellPeriods = [];
         $windowSwellHeights = [];
         $windowWindWaveHeights = [];
         $windowOceanCurrents = [];
@@ -1339,6 +1356,8 @@ class WeatherForecastService
             $wavePeriod = isset($marineData['wave_period'][$idx]) ? (float)$marineData['wave_period'][$idx] : 6.10;
             $swellHeight = isset($marineData['swell_wave_height'][$idx]) ? (float)$marineData['swell_wave_height'][$idx] : 0.60;
             $windWaveHeight = isset($marineData['wind_wave_height'][$idx]) ? (float)$marineData['wind_wave_height'][$idx] : 0.35;
+            $windWavePeriod = isset($marineData['wind_wave_period'][$idx]) ? (float)$marineData['wind_wave_period'][$idx] : null;
+            $swellPeriod = isset($marineData['swell_wave_period'][$idx]) ? (float)$marineData['swell_wave_period'][$idx] : null;
             
             // Open-Meteo gives current in km/h, convert to m/s
             $rawCurrent = isset($marineData['ocean_current_velocity'][$idx]) ? (float)$marineData['ocean_current_velocity'][$idx] : 1.1;
@@ -1358,6 +1377,8 @@ class WeatherForecastService
             $windowWindGusts[] = $windGusts;
             $windowWaveHeights[] = $waveHeight;
             $windowWavePeriods[] = $wavePeriod;
+            $windowWindWavePeriods[] = $windWavePeriod;
+            $windowSwellPeriods[] = $swellPeriod;
             $windowSwellHeights[] = $swellHeight;
             $windowWindWaveHeights[] = $windWaveHeight;
             $windowOceanCurrents[] = $oceanCurrent;
@@ -1371,14 +1392,14 @@ class WeatherForecastService
                 'wind_speed' => $this->scoreWindSpeed($rawWindSpeed, $windGusts),
                 'ocean_current' => $this->scoreOceanCurrent($oceanCurrent),
                 'swell_height' => $this->scoreSwellHeight($swellHeight),
-                'wave_period' => $this->scoreWavePeriod($wavePeriod),
+                'wave_period' => $this->scoreWavePeriods($wavePeriod, $windWavePeriod, $windWaveHeight, $swellPeriod, $swellHeight),
                 'wind_wave_height' => $this->scoreWindWaveHeight($windWaveHeight),
                 'rain' => $this->scoreRain($rain),
                 'sea_level_pressure' => $this->scoreSeaLevelPressure($pressure),
                 'wind_direction' => $this->scoreWindDirection($windDir),
             ];
             $hourWeightedPct = $this->computeWeightedScore($hourScores);
-            $hourClass = $this->classifyScore($hourWeightedPct);
+            $hourClass = $this->raiseToFloor($this->classifyScores($hourScores, $hourWeightedPct), $overrideFloor);
 
             $hourlyList[] = [
                 'forecast_time' => Carbon::parse($timeStr),
@@ -1436,7 +1457,7 @@ class WeatherForecastService
             'wind_speed' => $this->scoreWindSpeed($meanWindSpeed, $maxWindGust),
             'ocean_current' => $this->scoreOceanCurrent($meanOceanCurrent),
             'swell_height' => $this->scoreSwellHeight($meanSwellHeight),
-            'wave_period' => $this->scoreWavePeriod($meanWavePeriod),
+            'wave_period' => $this->scoreWavePeriods($meanWavePeriod, $this->meanOrNull($windowWindWavePeriods), $meanWindWaveHeight, $this->meanOrNull($windowSwellPeriods), $meanSwellHeight),
             'wind_wave_height' => $this->scoreWindWaveHeight($meanWindWaveHeight),
             'rain' => $this->scoreRain($maxRainRate),
             'sea_level_pressure' => $this->scoreSeaLevelPressure($meanPressure),
@@ -1444,7 +1465,9 @@ class WeatherForecastService
         ];
 
         $windowWeightedScorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($windowScores);
-        $windowClass = ($overrideTriggered || $isPhysicalBreach) ? 'Critical Risk' : $this->classifyScore($windowWeightedScorePct);
+        $windowClass = ($overrideTriggered || $isPhysicalBreach)
+            ? 'Critical Risk'
+            : $this->raiseToFloor($this->classifyScores($windowScores, $windowWeightedScorePct), $overrideFloor);
 
         // Find the worst hour in the window
         $worstScore = -1;
@@ -1495,7 +1518,7 @@ class WeatherForecastService
                     'longitude' => config('forecast.site_lon', self::LONGITUDE),
                     'timezone' => self::TIMEZONE,
                     'forecast_days' => $forecastDays,
-                    'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity',
+                    'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity,swell_wave_period,wind_wave_period',
                 ],
                 'timeout' => 10,
                 'without_verifying' => true,
@@ -1552,6 +1575,8 @@ class WeatherForecastService
                         'time' => [],
                         'wave_height' => [],
                         'wave_period' => [],
+                        'swell_wave_period' => [],
+                        'wind_wave_period' => [],
                         'swell_wave_height' => [],
                         'wind_wave_height' => [],
                         'ocean_current_velocity' => [],
@@ -1575,9 +1600,13 @@ class WeatherForecastService
             $sHeight = (float) ($marineHourly['swell_wave_height'][$index] ?? 0.6);
             $wwHeight = (float) ($marineHourly['wind_wave_height'][$index] ?? 0.35);
             $rawCurrent = (float) ($marineHourly['ocean_current_velocity'][$index] ?? 1.1);
+            $swPeriod = isset($marineHourly['swell_wave_period'][$index]) ? (float) $marineHourly['swell_wave_period'][$index] : null;
+            $wwPeriod = isset($marineHourly['wind_wave_period'][$index]) ? (float) $marineHourly['wind_wave_period'][$index] : null;
 
             $dayBuckets[$dateKey]['marine']['wave_height'][] = $wHeight;
             $dayBuckets[$dateKey]['marine']['wave_period'][] = $wPeriod;
+            $dayBuckets[$dateKey]['marine']['swell_wave_period'][] = $swPeriod;
+            $dayBuckets[$dateKey]['marine']['wind_wave_period'][] = $wwPeriod;
             $dayBuckets[$dateKey]['marine']['swell_wave_height'][] = $sHeight;
             $dayBuckets[$dateKey]['marine']['wind_wave_height'][] = $wwHeight;
             $dayBuckets[$dateKey]['marine']['ocean_current_velocity'][] = $rawCurrent;
@@ -1618,7 +1647,7 @@ class WeatherForecastService
                 'wind_speed' => $this->scoreWindSpeed($rawWindSpd, $windGustsVal),
                 'ocean_current' => $this->scoreOceanCurrent($oceanCurrent),
                 'swell_height' => $this->scoreSwellHeight($sHeight),
-                'wave_period' => $this->scoreWavePeriod($wPeriod),
+                'wave_period' => $this->scoreWavePeriods($wPeriod, $wwPeriod, $wwHeight, $swPeriod, $sHeight),
                 'wind_wave_height' => $this->scoreWindWaveHeight($wwHeight),
                 'rain' => $this->scoreRain($rainVal),
                 'sea_level_pressure' => $this->scoreSeaLevelPressure($pressVal),
@@ -1627,7 +1656,7 @@ class WeatherForecastService
             ];
 
             $weightedScorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($scores);
-            $hourClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScore($weightedScorePct);
+            $hourClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScores($scores, $weightedScorePct);
 
             $dayBuckets[$dateKey]['hourly_scores'][$hour] = [
                 'hour' => $hour,
@@ -1664,6 +1693,8 @@ class WeatherForecastService
             $daytimeRains = [];
             $daytimePressures = [];
             $daytimePeriods = [];
+            $daytimeWindWavePeriods = [];
+            $daytimeSwellPeriods = [];
             $daytimeWindWaves = [];
             $daytimeWindDirs = [];
 
@@ -1677,6 +1708,8 @@ class WeatherForecastService
                     $daytimeRains[] = $bucket['weather']['rain'][$dh] ?? 0.0;
                     $daytimePressures[] = $bucket['weather']['pressure_msl'][$dh] ?? 1010.5;
                     $daytimePeriods[] = $bucket['marine']['wave_period'][$dh] ?? 6.0;
+                    $daytimeWindWavePeriods[] = $bucket['marine']['wind_wave_period'][$dh] ?? null;
+                    $daytimeSwellPeriods[] = $bucket['marine']['swell_wave_period'][$dh] ?? null;
                     $daytimeWindWaves[] = $bucket['marine']['wind_wave_height'][$dh] ?? 0.35;
                     $daytimeWindDirs[] = $bucket['weather']['wind_direction_10m'][$dh] ?? 245.0;
                 }
@@ -1729,7 +1762,7 @@ class WeatherForecastService
                 'wind_speed' => $this->scoreWindSpeed($meanDaytimeWind, $maxDaytimeGust),
                 'ocean_current' => $this->scoreOceanCurrent($meanDaytimeCurrent),
                 'swell_height' => $this->scoreSwellHeight($meanDaytimeSwell),
-                'wave_period' => $this->scoreWavePeriod($meanDaytimePeriod),
+                'wave_period' => $this->scoreWavePeriods($meanDaytimePeriod, $this->meanOrNull($daytimeWindWavePeriods), $meanDaytimeWindWave, $this->meanOrNull($daytimeSwellPeriods), $meanDaytimeSwell),
                 'wind_wave_height' => $this->scoreWindWaveHeight($meanDaytimeWindWave),
                 'rain' => $this->scoreRain($daytimeMaxRainRate),
                 'sea_level_pressure' => $this->scoreSeaLevelPressure($meanDaytimePressure),
@@ -1737,15 +1770,13 @@ class WeatherForecastService
             ];
 
             $daytimeScorePct = $isDaytimePhysicalBreach ? 100.0 : $this->computeWeightedScore($daytimeScores);
-            $daytimeClass = $isDaytimePhysicalBreach ? 'Critical Risk' : $this->classifyScore($daytimeScorePct);
+            $daytimeClass = $isDaytimePhysicalBreach ? 'Critical Risk' : $this->classifyScores($daytimeScores, $daytimeScorePct);
 
             $amScores = array_filter($bucket['hourly_scores'], fn($i) => in_array($i['hour'], [10, 11, 12]));
-            $amMax = !empty($amScores) ? max(array_column($amScores, 'weighted_score_pct')) : 0.0;
-            $amClass = $this->classifyScore($amMax);
+            $amClass = $this->worstClass(array_column($amScores, 'classification'));
 
             $pmScores = array_filter($bucket['hourly_scores'], fn($i) => in_array($i['hour'], [16, 17]));
-            $pmMax = !empty($pmScores) ? max(array_column($pmScores, 'weighted_score_pct')) : 0.0;
-            $pmClass = $this->classifyScore($pmMax);
+            $pmClass = $this->worstClass(array_column($pmScores, 'classification'));
 
             $summary = [
                 'date' => $dateKey,
@@ -1911,7 +1942,7 @@ class WeatherForecastService
                     'timezone' => self::TIMEZONE,
                     'start_date' => $date,
                     'end_date' => $date,
-                    'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity',
+                    'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity,swell_wave_period,wind_wave_period',
                 ],
                 'timeout' => 8,
                 'without_verifying' => true,
@@ -1983,6 +2014,43 @@ class WeatherForecastService
     protected function scoreSwellHeight(float $v): int
     {
         return $this->scoreWaveHeight($v);
+    }
+
+    /**
+     * Wave period has two different hazards (expert survey):
+     * - short-period chop from local wind: Coach LC, "< 3 s feels rough even on low waves" -> wind_wave_period,
+     *   counted once the wind waves reach 0.2 m (the first wind-wave band). Open-Meteo's wind-wave
+     *   period at the site is ~1.5-2 s even on flat days, so without this every day scored as chop.
+     * - long-period swell carries more energy: coastal engineer, "> 10 s critical" -> swell_wave_period,
+     *   counted only once the swell is big enough to feel (>= 0.3 m, the first wave band)
+     * The worse of the two is used, keeping the single wave_period weight. If Open-Meteo has no
+     * wind-wave period, the combined wave_period is used for the chop.
+     */
+    protected function scoreWavePeriods(float $wavePeriod, ?float $windWavePeriod, float $windWaveHeight, ?float $swellPeriod, float $swellHeight): int
+    {
+        $chop = $windWavePeriod === null
+            ? $this->scoreWavePeriod($wavePeriod)
+            : ($windWaveHeight >= 0.20 ? $this->scoreWavePeriod($windWavePeriod) : 0);
+
+        return max($chop, $this->scoreSwellPeriod($swellPeriod, $swellHeight));
+    }
+
+    /** Coastal engineer bands: < 2 s, 2-4 s, 4-7 s, 7-10 s, > 10 s. */
+    protected function scoreSwellPeriod(?float $period, float $swellHeight): int
+    {
+        if ($period === null || $swellHeight < 0.30) return 0;
+        if ($period < 2.0) return 0;
+        if ($period < 4.0) return 1;
+        if ($period < 7.0) return 2;
+        if ($period <= 10.0) return 3;
+        return 4;
+    }
+
+    private function meanOrNull(array $values): ?float
+    {
+        $values = array_filter($values, fn ($v) => $v !== null);
+
+        return $values ? array_sum($values) / count($values) : null;
     }
 
     protected function scoreWindWaveHeight(float $v): int
@@ -2146,7 +2214,7 @@ class WeatherForecastService
         ];
 
         $scorePct = $isPhysicalBreach ? 100.0 : $this->computeScoreFromWeights($scores);
-        $classification = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScore($scorePct);
+        $classification = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScores($scores, $scorePct);
 
         return [
             'weighted_score_pct' => $scorePct,
@@ -2185,6 +2253,38 @@ class WeatherForecastService
         }
 
         return min(100.0, round($rawScorePct * $synergyMultiplier, 1));
+    }
+
+    /**
+     * Wave height, swell height and current were rated the most important by both experts
+     * (average 4.5-5 out of 5), so one of them alone can raise the rating. Without this the
+     * weighted average hides a single dangerous reading behind calm ones.
+     */
+    public const FLOOR_PARAMETERS = ['wave_height', 'swell_height', 'ocean_current'];
+
+    /** Score of a floor parameter -> lowest allowed rating. Critical stays with the hard limits. */
+    private const FLOOR_BY_SCORE = ['Very Safe', 'Safe', 'Moderate', 'High Risk'];
+
+    /**
+     * Rating = the worse of the weighted average and the worst floor parameter.
+     */
+    public function classifyScores(array $scores, float $weightedPct): string
+    {
+        $worst = max(array_map(fn ($key) => (int) ($scores[$key] ?? 0), self::FLOOR_PARAMETERS));
+
+        return $this->raiseToFloor($this->classifyScore($weightedPct), self::FLOOR_BY_SCORE[min($worst, 3)]);
+    }
+
+    /** The worse of two ratings. */
+    public function raiseToFloor(string $class, ?string $floor): string
+    {
+        return $floor && (self::RISK_RANK[$floor] ?? 0) > (self::RISK_RANK[$class] ?? 0) ? $floor : $class;
+    }
+
+    /** The worst rating in a list (e.g. the hours of a dive window). */
+    protected function worstClass(array $classes): string
+    {
+        return array_reduce($classes, fn ($worst, $class) => $this->raiseToFloor($worst, $class), 'Very Safe');
     }
 
     public function classifyScore(float $weightedPct): string
@@ -2262,7 +2362,7 @@ class WeatherForecastService
                     'timezone' => self::TIMEZONE,
                     'start_date' => $date,
                     'end_date' => $date,
-                    'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity',
+                    'hourly' => 'wave_height,wave_period,swell_wave_height,wind_wave_height,ocean_current_velocity,swell_wave_period,wind_wave_period',
                 ],
                 'timeout' => 8,
                 'without_verifying' => true,
@@ -2328,11 +2428,15 @@ class WeatherForecastService
         $daytimeRains = [];
         $daytimePressures = [];
         $daytimePeriods = [];
+        $daytimeWindWavePeriods = [];
+        $daytimeSwellPeriods = [];
         $daytimeWindWaves = [];
         $daytimeWindDirs = [];
 
         foreach ($daytimeHours as $dh) {
             if (isset($marineData['wave_height'][$dh])) {
+                $daytimeWindWavePeriods[] = $marineData['wind_wave_period'][$dh] ?? null;
+                $daytimeSwellPeriods[] = $marineData['swell_wave_period'][$dh] ?? null;
                 $daytimeWaves[] = (float) $marineData['wave_height'][$dh];
                 $daytimeSwells[] = (float) ($marineData['swell_wave_height'][$dh] ?? 0.60);
                 $daytimePeriods[] = (float) ($marineData['wave_period'][$dh] ?? 6.0);
@@ -2412,7 +2516,7 @@ class WeatherForecastService
             'wind_speed' => $this->scoreWindSpeed($meanWind, $maxGust),
             'ocean_current' => $this->scoreOceanCurrent($meanCurrent),
             'swell_height' => $this->scoreSwellHeight($meanSwell),
-            'wave_period' => $this->scoreWavePeriod($meanPeriod),
+            'wave_period' => $this->scoreWavePeriods($meanPeriod, $this->meanOrNull($daytimeWindWavePeriods), $meanWindWave, $this->meanOrNull($daytimeSwellPeriods), $meanSwell),
             'wind_wave_height' => $this->scoreWindWaveHeight($meanWindWave),
             'rain' => $this->scoreRain($maxRainRate),
             'sea_level_pressure' => $this->scoreSeaLevelPressure($meanPressure),
@@ -2420,7 +2524,7 @@ class WeatherForecastService
         ];
 
         $scorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($scores);
-        $actualClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScore($scorePct);
+        $actualClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScores($scores, $scorePct);
 
         return [
             'date' => $date,

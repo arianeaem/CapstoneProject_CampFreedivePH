@@ -30,11 +30,12 @@ class ForecastAccuracyArchiveTest extends TestCase
         Http::fake([
             'marine-api.open-meteo.com/*' => Http::response([
                 'hourly' => [
-                    'wave_height' => array_fill(0, 24, 0.50),
-                    'swell_wave_height' => array_fill(0, 24, 0.40),
+                    // Calm: under the first wave band (0.3 m), so the worst-of floor stays Very Safe
+                    'wave_height' => array_fill(0, 24, 0.25),
+                    'swell_wave_height' => array_fill(0, 24, 0.20),
                     'wave_period' => array_fill(0, 24, 7.0),
                     'wind_wave_height' => array_fill(0, 24, 0.20),
-                    'ocean_current_velocity' => array_fill(0, 24, 0.90), // ~0.25 m/s
+                    'ocean_current_velocity' => array_fill(0, 24, 0.29), // ~0.08 m/s (engineer: < 0.1 = Very Safe)
                 ],
             ], 200),
             'archive-api.open-meteo.com/*' => Http::response([
@@ -105,9 +106,9 @@ class ForecastAccuracyArchiveTest extends TestCase
             'lead_time_label' => '24h (1 Day)',
             'predicted_classification' => 'Very Safe',
             'predicted_score_pct' => 18.0,
-            'predicted_wave_height' => 0.52,
+            'predicted_wave_height' => 0.27,
             'predicted_wind_speed' => 10.5,
-            'predicted_ocean_current' => 0.26,
+            'predicted_ocean_current' => 0.09,
             'predicted_rain' => 0.0,
             'predicted_pressure' => 1012.0,
             'ml_predicted_classification' => 'Very Safe',
@@ -134,9 +135,9 @@ class ForecastAccuracyArchiveTest extends TestCase
 
         $this->assertEquals($dateStr, $result['target_date']);
         $this->assertEquals('Very Safe', $result['actual_classification']);
-        $this->assertEquals(0.50, $result['actual_metrics']['wave_height']);
+        $this->assertEquals(0.25, $result['actual_metrics']['wave_height']);
         $this->assertEquals(10.0, $result['actual_metrics']['wind_speed']);
-        $this->assertEquals(0.25, $result['actual_metrics']['ocean_current']);
+        $this->assertEquals(0.08, $result['actual_metrics']['ocean_current']);
         $this->assertEquals(2, $result['verified_count']);
 
         // Verify 24h Horizon log
@@ -145,9 +146,9 @@ class ForecastAccuracyArchiveTest extends TestCase
             'predicted_classification' => 'Very Safe',
             'actual_classification' => 'Very Safe',
             'classification_matched' => true,
-            'wave_height_error' => 0.02, // |0.52 - 0.50|
+            'wave_height_error' => 0.02, // |0.27 - 0.25|
             'wind_speed_error' => 0.50, // |10.5 - 10.0|
-            'current_error' => 0.01, // |0.26 - 0.25|
+            'current_error' => 0.01, // |0.09 - 0.08|
             'ml_classification_matched' => true,
         ]);
 
@@ -157,9 +158,9 @@ class ForecastAccuracyArchiveTest extends TestCase
             'predicted_classification' => 'Moderate',
             'actual_classification' => 'Very Safe',
             'classification_matched' => false,
-            'wave_height_error' => 0.40, // |0.90 - 0.50|
+            'wave_height_error' => 0.65, // |0.90 - 0.25|
             'wind_speed_error' => 8.00, // |18.0 - 10.0|
-            'current_error' => 0.15, // |0.40 - 0.25|
+            'current_error' => 0.32, // |0.40 - 0.08|
             'ml_classification_matched' => true,
         ]);
 

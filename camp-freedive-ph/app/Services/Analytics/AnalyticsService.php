@@ -681,7 +681,11 @@ class AnalyticsService
         ];
 
         foreach ($batches as $b) {
-            $rating = strtolower(str_replace([' ', '-'], '_', $b->risk_classification ?? $b->riskAssessment?->overall_risk_rating ?? 'safe'));
+            $raw = $b->risk_classification ?? $b->riskAssessment?->overall_risk_rating;
+            if (!$raw || $raw === 'Not Available') {
+                continue; // not assessed yet
+            }
+            $rating = strtolower(str_replace([' ', '-'], '_', $raw));
             $rating = match (true) {
                 str_contains($rating, 'critical') => 'critical_risk',
                 str_contains($rating, 'high') => 'high_risk',
