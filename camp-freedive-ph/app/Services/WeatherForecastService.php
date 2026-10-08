@@ -1091,38 +1091,45 @@ class WeatherForecastService
                 return null;
             }
 
-            // Step 1: model input is the Open-Meteo forecast (cache first)
+            // Step 1: model input is the Open-Meteo forecast (cache first). Only hours where
+            // Open-Meteo has the weather AND the current are sent, so the model service never
+            // has to fill a missing current from CMEMS or climatology.
             $hourlyReadings = [];
             $weather = $this->fetchOpenMeteoWeather($date);
             $marine = $this->fetchOpenMeteoMarine($date);
             $times = $weather['time'] ?? $marine['time'] ?? [];
 
             foreach ($times as $idx => $isoTime) {
-                $windSpeed = (float) ($weather['wind_speed_10m'][$idx] ?? 12.0);
+                if (!isset($weather['wind_speed_10m'][$idx], $weather['pressure_msl'][$idx], $marine['ocean_current_velocity'][$idx])) {
+                    continue;
+                }
+                $windSpeed = (float) $weather['wind_speed_10m'][$idx];
                 $hourlyReadings[] = [
                     'timestamp' => $isoTime,
                     'wind_speed' => $windSpeed,
-                    'wind_gust' => (float) ($weather['wind_gusts_10m'][$idx] ?? $windSpeed * 1.25),
-                    'wind_dir' => (float) ($weather['wind_direction_10m'][$idx] ?? 245.0),
-                    'slp' => (float) ($weather['pressure_msl'][$idx] ?? 1010.5),
+                    'wind_gust' => (float) ($weather['wind_gusts_10m'][$idx] ?? $windSpeed),
+                    'wind_dir' => (float) ($weather['wind_direction_10m'][$idx] ?? 0.0),
+                    'slp' => (float) $weather['pressure_msl'][$idx],
                     'rain_rate_mm_hr' => (float) ($weather['rain'][$idx] ?? $weather['precipitation'][$idx] ?? 0.0),
-                    'ocean_current_velocity' => isset($marine['ocean_current_velocity'][$idx]) ? (float) $marine['ocean_current_velocity'][$idx] * 0.27778 : null,
+                    'ocean_current_velocity' => (float) $marine['ocean_current_velocity'][$idx] * 0.27778,
                 ];
             }
 
-            // If the API is down, use the cached day forecast instead (m/s -> km/h)
+            // If the API is down, use the cached Open-Meteo day forecast (real values only)
             if (empty($hourlyReadings)) {
                 $dayForecast = $this->getCachedDayForecast($date);
                 foreach ($dayForecast['hourly'] ?? [] as $h) {
-                    $windSpeed = (float) ($h['wind_speed'] ?? (isset($h['wind_speed_p50']) ? $h['wind_speed_p50'] * 3.6 : 12.0));
+                    if (!isset($h['wind_speed'], $h['sea_level_pressure'], $h['ocean_current'])) {
+                        continue;
+                    }
                     $hourlyReadings[] = [
                         'timestamp' => $h['iso_time'] ?? sprintf('%sT%02d:00:00+08:00', $date, $h['hour'] ?? 12),
-                        'wind_speed' => $windSpeed,
-                        'wind_gust' => (float) ($h['wind_gusts'] ?? (isset($h['wind_gust_p50']) ? $h['wind_gust_p50'] * 3.6 : $windSpeed * 1.25)),
-                        'wind_dir' => (float) ($h['wind_direction'] ?? $h['wind_dir_circ_mean_deg'] ?? 245.0),
-                        'slp' => (float) ($h['sea_level_pressure'] ?? $h['slp_p50'] ?? 1010.5),
+                        'wind_speed' => (float) $h['wind_speed'],
+                        'wind_gust' => (float) ($h['wind_gusts'] ?? $h['wind_speed']),
+                        'wind_dir' => (float) ($h['wind_direction'] ?? 0.0),
+                        'slp' => (float) $h['sea_level_pressure'],
                         'rain_rate_mm_hr' => (float) ($h['rain'] ?? 0.0),
-                        'ocean_current_velocity' => (float) ($h['ocean_current'] ?? $h['current_speed_p50'] ?? 0.3),
+                        'ocean_current_velocity' => (float) $h['ocean_current'],
                     ];
                 }
             }

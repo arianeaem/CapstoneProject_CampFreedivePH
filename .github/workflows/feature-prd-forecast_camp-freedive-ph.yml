@@ -80,6 +80,8 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B790FB2DFCE64151B5FA9AE0CE98283E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9B0A35A5E607454B867935AF9FB005C9 }}
 
+      # The startup command also starts Laravel's scheduler (routes/console.php: forecast refresh,
+      # hourly batch safety checks, nightly accuracy archive). Needs "Always On" in Azure.
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
@@ -87,5 +89,5 @@ jobs:
           app-name: 'camp-freedive-ph'
           slot-name: 'Production'
           package: .
-          startup-command: 'cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && service nginx reload && (php /home/site/wwwroot/artisan optimize || true)'
+          startup-command: 'cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && service nginx reload && (php /home/site/wwwroot/artisan optimize || true); (nohup php /home/site/wwwroot/artisan schedule:work >> /home/LogFiles/laravel-scheduler.log 2>&1 &)'
           
