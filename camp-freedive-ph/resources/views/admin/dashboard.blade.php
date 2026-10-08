@@ -34,9 +34,14 @@
 
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Welcome back, {{ $user->name }}</h1>
-            <p class="text-sm text-[#6E6E73] mt-1">It's {{ now('Asia/Manila')->format('l, F d, Y') }}. Here's how the camp is doing.</p>
+        <div class="flex items-center gap-3.5 min-w-0">
+            <a href="{{ route('profile.show') }}" data-native title="Change your profile photo">
+                <x-user-avatar :user="$user" class="w-14 h-14 text-lg" />
+            </a>
+            <div class="min-w-0">
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Welcome back, {{ $user->name }}</h1>
+                <p class="text-sm text-[#6E6E73] mt-1">It's {{ now('Asia/Manila')->format('l, F d, Y') }}. Here's how the camp is doing.</p>
+            </div>
         </div>
         <a href="{{ $isOwner ? route('owner.bookings.create') : route('admin.bookings.create') }}"
            class="btn-primary min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2 self-start sm:self-auto shadow-2xs">

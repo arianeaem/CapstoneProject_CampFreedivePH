@@ -29,15 +29,6 @@
       @close-mobile-menu.window="mobileMenuOpen = false">
 
 @php
-    $userName = auth()->user()->name ?? 'User';
-    $nameParts = array_values(array_filter(explode(' ', trim($userName))));
-    $userInitials = '';
-    if (count($nameParts) >= 2) {
-        $userInitials = strtoupper(substr($nameParts[0], 0, 1) . substr(end($nameParts), 0, 1));
-    } else {
-        $userInitials = strtoupper(substr($nameParts[0] ?? 'U', 0, 2));
-    }
-
     $routeName = request()->route() ? request()->route()->getName() : '';
     $pageBreadcrumbTitle = match(true) {
         str_starts_with($routeName, 'admin.dashboard') || str_starts_with($routeName, 'owner.dashboard') => 'Dashboard',
@@ -56,6 +47,7 @@
         str_starts_with($routeName, 'coach.availability') => 'Availability Calendar',
         str_starts_with($routeName, 'coach.schedule') => 'My Schedule & History',
         str_starts_with($routeName, 'coach.requests') => 'Open Slot Requests',
+        str_starts_with($routeName, 'profile.') => 'My Profile',
         default => 'Dashboard',
     };
 @endphp
@@ -368,10 +360,8 @@
                             class="flex items-center gap-2 cursor-pointer focus:outline-none group"
                             aria-label="User account settings and menu">
                         
-                        <!-- User Avatar -->
-                        <div class="w-9 h-9 rounded-full bg-[#F8EAEA] border-2 border-[#780000] text-[#780000] flex items-center justify-center font-bold text-sm shrink-0 transition-all">
-                            {{ $userInitials }}
-                        </div>
+                        <!-- User Avatar (photo, or initials) -->
+                        <x-user-avatar :user="auth()->user()" class="transition-all" />
                     </button>
 
                     <!-- User Profile Dropdown -->
@@ -387,6 +377,7 @@
                         
                         <!-- User Information -->
                         <div class="flex items-center gap-3 pb-3 border-b border-[#E5E5EA]">
+                            <x-user-avatar :user="auth()->user()" class="w-11 h-11" />
                             <div class="min-w-0 flex-1">
                                 <span class="inline-block mt-1 px-2.5 py-0.5 rounded-md text-sm font-bold bg-[#F8EAEA] text-[#780000]">
                                     {{ auth()->user()->role_label ?? ucfirst(auth()->user()->role) }}
@@ -395,6 +386,12 @@
                                 <div class="text-sm text-[#6E6E73] truncate mt-0.5">{{ auth()->user()->email }}</div>
                             </div>
                         </div>
+
+                        <!-- My Profile -->
+                        <a href="{{ route('profile.show') }}" data-native class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[#1D1D1F] hover:bg-[#F8EAEA] font-bold text-sm transition-colors">
+                            <svg class="w-5 h-5 shrink-0 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                            <span>My Profile &amp; Photo</span>
+                        </a>
 
                         <!-- Logout -->
                         <div>

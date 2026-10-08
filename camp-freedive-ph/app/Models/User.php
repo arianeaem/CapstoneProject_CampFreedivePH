@@ -21,12 +21,14 @@ class User extends Authenticatable
         'status',
         'must_change_password',
         'phone',
+        'avatar',
         'last_login_at',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'avatar', // can be large; shown through avatar_url in views only
     ];
 
     protected function casts(): array
@@ -94,6 +96,27 @@ class User extends Authenticatable
     public function isCoach(): bool
     {
         return $this->role === 'coach';
+    }
+
+    /**
+     * Profile photo as a data URL, or null (then the initials are shown).
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatar ?: null;
+    }
+
+    /**
+     * First letter of the first and last name ("Maria Santos" -> "MS").
+     */
+    public function getInitialsAttribute(): string
+    {
+        $parts = array_values(array_filter(explode(' ', trim((string) $this->name))));
+        if (count($parts) >= 2) {
+            return mb_strtoupper(mb_substr($parts[0], 0, 1) . mb_substr(end($parts), 0, 1));
+        }
+
+        return mb_strtoupper(mb_substr($parts[0] ?? 'U', 0, 2));
     }
 
     public function isActive(): bool
