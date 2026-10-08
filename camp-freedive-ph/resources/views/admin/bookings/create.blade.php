@@ -323,6 +323,45 @@
                     </div>
                 </div>
 
+                <!-- Primary contact must be 18+; participants under 18 need guardian consent -->
+                <input type="hidden" name="selected_lead_participant" :value="selectedLeadIndex">
+                <div x-show="selectedLeadIndex === 'custom'" x-cloak class="sm:w-1/2">
+                    <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Primary Contact Birthdate <span class="text-[#780000]">*</span></label>
+                    <x-date-picker name="contact_birthdate" model="contactBirthdate" :max="now()->toDateString()" year-select placeholder="Select birthdate" />
+                </div>
+                <div x-show="contactIsMinor()" x-cloak class="banner banner-error text-sm" role="alert">
+                    The primary contact must be 18 or older. Choose an adult participant, or pick "Other" and enter a parent or guardian.
+                </div>
+
+                <div x-show="hasMinor()" x-cloak class="space-y-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4">
+                    <div>
+                        <h4 class="text-sm font-bold text-[#1D1D1F]">Parent or Guardian Consent</h4>
+                        <p class="text-xs text-[#6E6E73] mt-0.5">At least one participant is under 18. Record the parent or legal guardian who gave consent.</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Parent / Guardian Full Name <span class="text-[#780000]">*</span></label>
+                            <input type="text" name="guardian_name" x-model="guardianName" :disabled="!hasMinor()" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Relationship <span class="text-[#780000]">*</span></label>
+                            <select name="guardian_relationship" x-model="guardianRelationship" :disabled="!hasMinor()" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
+                                <option value="">Select relationship</option>
+                                <option value="parent">Parent</option>
+                                <option value="legal_guardian">Legal guardian</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Parent / Guardian Mobile <span class="text-[#780000]">*</span></label>
+                            <input type="tel" name="guardian_phone" x-model="guardianPhone" :disabled="!hasMinor()" placeholder="0917 123 4567" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
+                        </div>
+                    </div>
+                    <label class="flex items-start gap-2.5 text-sm text-[#1D1D1F] cursor-pointer">
+                        <input type="checkbox" name="guardian_consent" value="1" x-model="guardianConsent" :disabled="!hasMinor()" class="mt-0.5 rounded border-[#D1D1D6] text-[#780000] focus:ring-[#780000]">
+                        <span>The parent or legal guardian named above gave consent for the participant(s) under 18 to join and accepts the Terms &amp; Conditions on their behalf.</span>
+                    </label>
+                </div>
+
                 <!-- Transportation Choice -->
                 <div class="space-y-3 pt-1">
                     <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm">Transportation Option <span class="text-[#780000]">*</span></label>
@@ -554,6 +593,35 @@ function adminBookingCreate(config) {
         ],
 
         formErrors: [],
+        contactBirthdate: '',
+        guardianName: '',
+        guardianRelationship: '',
+        guardianPhone: '',
+        guardianConsent: false,
+
+        ageFromBirthdate(birthdate) {
+            if (!birthdate) return null;
+            const b = new Date(birthdate + 'T00:00:00');
+            const today = new Date();
+            let age = today.getFullYear() - b.getFullYear();
+            if (today < new Date(today.getFullYear(), b.getMonth(), b.getDate())) age--;
+            return age;
+        },
+
+        hasMinor() {
+            return this.participants.some(p => {
+                const age = this.ageFromBirthdate(p.birthdate);
+                return age !== null && age < 18;
+            });
+        },
+
+        contactIsMinor() {
+            const birthdate = this.selectedLeadIndex === 'custom'
+                ? this.contactBirthdate
+                : this.participants[parseInt(this.selectedLeadIndex, 10)]?.birthdate;
+            const age = this.ageFromBirthdate(birthdate);
+            return age !== null && age < 18;
+        },
 
         initForm() {
             this.syncLeadContactFromParticipant();
@@ -569,6 +637,15 @@ function adminBookingCreate(config) {
                     this.formErrors.push('Select a birthdate for participant #' + (i + 1) + '.');
                 }
             });
+            if (this.selectedLeadIndex === 'custom' && !this.contactBirthdate) {
+                this.formErrors.push("Select the primary contact's birthdate.");
+            }
+            if (this.contactIsMinor()) {
+                this.formErrors.push('The primary contact must be 18 or older.');
+            }
+            if (this.hasMinor() && (!this.guardianName.trim() || !this.guardianRelationship || !this.guardianPhone.trim() || !this.guardianConsent)) {
+                this.formErrors.push('Complete the parent or guardian consent for the participant(s) under 18.');
+            }
             if (this.formErrors.length) {
                 event.preventDefault();
                 this.$el.scrollIntoView({ behavior: 'smooth', block: 'start' });

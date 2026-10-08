@@ -410,7 +410,7 @@ class BookingController extends Controller
                         'contact_phone' => $validated['contact_phone'],
                         'contact_facebook' => $validated['contact_facebook'] ?? null,
                         'status' => 'pending_downpayment',
-                    ]);
+                    ] + $request->guardianFields());
 
                     // Save each participant's health info
                     foreach ($validated['participants'] as $pData) {

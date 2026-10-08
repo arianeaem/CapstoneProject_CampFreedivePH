@@ -111,6 +111,15 @@
                         <span class="text-xs font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Mobile Phone</span>
                         <span class="text-[#1D1D1F] font-medium">{{ $booking->contact_phone }}</span>
                     </div>
+                    @if($booking->guardian_consent_at)
+                        <div class="sm:col-span-2 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] px-3.5 py-2.5">
+                            <span class="text-xs font-bold text-[#92400E] uppercase tracking-wider block mb-0.5">Guardian Consent (participant under 18)</span>
+                            <span class="text-[#1D1D1F] font-medium">
+                                {{ $booking->guardian_name }} &middot; {{ $booking->guardian_relationship === 'legal_guardian' ? 'Legal guardian' : 'Parent' }} &middot; {{ $booking->guardian_phone }}
+                            </span>
+                            <span class="block text-xs text-[#6E6E73] mt-0.5">Consent given {{ $booking->guardian_consent_at->format('M d, Y g:i A') }}</span>
+                        </div>
+                    @endif
                     <div>
                         <span class="text-xs font-bold text-[#8E8E93] uppercase tracking-wider block mb-0.5">Transportation</span>
                         <strong class="text-[#1D1D1F]">{{ $booking->pickup_option === 'carpool' ? 'Manila Carpool Van' : 'Own Transportation' }}</strong>

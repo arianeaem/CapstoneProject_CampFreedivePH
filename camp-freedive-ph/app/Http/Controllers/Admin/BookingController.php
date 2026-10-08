@@ -266,7 +266,7 @@ class BookingController extends Controller
                 'contact_facebook' => $validated['contact_facebook'] ?? null,
                 'status' => 'confirmed',
                 'created_by' => $currentUser->id,
-            ]);
+            ] + $request->guardianFields());
 
             foreach ($validated['participants'] as $p) {
                 BookingParticipant::create([

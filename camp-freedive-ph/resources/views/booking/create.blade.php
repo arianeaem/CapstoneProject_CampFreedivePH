@@ -1186,6 +1186,49 @@
                         </div>
                     </div>
 
+                    <!-- Primary contact age + guardian consent for participants under 18 -->
+                    <div class="space-y-4" x-show="form.selected_lead_participant === 'custom' || contactIsMinor() || hasMinor()" x-cloak>
+                        <!-- Contact who is not one of the participants: own birthdate (must be 18+) -->
+                        <div x-show="form.selected_lead_participant === 'custom'" class="sm:w-1/2">
+                            <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Primary Contact Birthdate <span class="text-[#780000]">*</span></label>
+                            <x-date-picker model="form.contact_birthdate" :max="now()->toDateString()" year-select placeholder="Select birthdate" invalid="touchedStep3 && contactIsMinor()" />
+                        </div>
+
+                        <div x-show="contactIsMinor()" class="banner banner-error text-sm" role="alert">
+                            The primary contact must be 18 or older. Choose an adult participant, or pick "Other" and enter a parent or guardian.
+                        </div>
+
+                        <!-- Parent / guardian consent -->
+                        <div x-show="hasMinor()" class="space-y-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4">
+                            <div>
+                                <h4 class="text-base font-bold text-[#1D1D1F]">Parent or Guardian Consent</h4>
+                                <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">At least one participant is under 18. A parent or legal guardian must give consent for them to join.</p>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div class="sm:col-span-2">
+                                    <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Parent / Guardian Full Name <span class="text-[#780000]">*</span></label>
+                                    <input type="text" x-model="form.guardian_name" autocomplete="name" placeholder="e.g. Maria Dela Cruz" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Relationship <span class="text-[#780000]">*</span></label>
+                                    <select x-model="form.guardian_relationship" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white font-medium">
+                                        <option value="">Select relationship</option>
+                                        <option value="parent">Parent</option>
+                                        <option value="legal_guardian">Legal guardian</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block font-bold text-[#1D1D1F] text-xs sm:text-sm mb-1.5">Parent / Guardian Mobile Number <span class="text-[#780000]">*</span></label>
+                                    <input type="tel" x-model="form.guardian_phone" @input="form.guardian_phone = formatPhoneInput($event.target.value)" inputmode="tel" maxlength="16" placeholder="+63 917-123-4567" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                                </div>
+                            </div>
+                            <label class="flex items-start gap-2.5 text-sm text-[#1D1D1F] cursor-pointer">
+                                <input type="checkbox" x-model="form.guardian_consent" class="mt-0.5 rounded border-[#D1D1D6] text-[#780000] focus:ring-[#780000]">
+                                <span>I am the parent or legal guardian named above (or the primary contact acting with their permission). I give consent for the participant(s) under 18 to join this freediving activity and accept the Terms &amp; Conditions on their behalf.</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Transportation and Add-ons -->
                     <div class="space-y-4 pt-1">
                         <h4 class="text-base sm:text-lg font-bold text-[#1D1D1F] pb-1">3. Transportation & Add-ons</h4>
@@ -1808,6 +1851,11 @@ function bookingForm(config) {
             contact_email: '',
             contact_phone: '',
             contact_facebook: '',
+            contact_birthdate: '',
+            guardian_name: '',
+            guardian_relationship: '',
+            guardian_phone: '',
+            guardian_consent: false,
             pickup_option: 'carpool',
             pickup_location: '',
             boat_dive: false,
@@ -2160,6 +2208,11 @@ function bookingForm(config) {
                 contact_email: '',
                 contact_phone: '',
                 contact_facebook: '',
+                contact_birthdate: '',
+                guardian_name: '',
+                guardian_relationship: '',
+                guardian_phone: '',
+                guardian_consent: false,
                 pickup_option: 'carpool',
                 pickup_location: '',
                 boat_dive: false,
@@ -2499,6 +2552,33 @@ function bookingForm(config) {
             return !isNaN(a) && a >= 8 && a <= 85;
         },
 
+        ageFromBirthdate(birthdate) {
+            if (!birthdate) return null;
+            const b = new Date(birthdate + 'T00:00:00');
+            const today = new Date();
+            let age = today.getFullYear() - b.getFullYear();
+            if (today < new Date(today.getFullYear(), b.getMonth(), b.getDate())) age--;
+            return age;
+        },
+
+        // Any participant under 18 needs a parent or guardian's consent
+        hasMinor() {
+            return this.form.participants.some(p => {
+                const age = this.ageFromBirthdate(p.birthdate);
+                return age !== null && age < 18;
+            });
+        },
+
+        // The primary contact (a participant or "Other") must be 18 or older
+        contactIsMinor() {
+            const lead = this.form.selected_lead_participant;
+            const birthdate = lead === 'custom'
+                ? this.form.contact_birthdate
+                : this.form.participants[parseInt(lead, 10)]?.birthdate;
+            const age = this.ageFromBirthdate(birthdate);
+            return age !== null && age < 18;
+        },
+
         calculateAge(participant) {
             if (!participant.birthdate) return '';
             const birthdate = new Date(participant.birthdate + 'T00:00:00');
@@ -2639,6 +2719,38 @@ function bookingForm(config) {
                     this.errorMessage = "Please enter a valid 11-digit Philippine Mobile Number (e.g. 09171234567 or +639171234567).";
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                     return;
+                }
+                if (this.form.selected_lead_participant === 'custom' && !this.form.contact_birthdate) {
+                    this.errorMessage = "Please enter the Primary Contact's birthdate.";
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+                if (this.contactIsMinor()) {
+                    this.errorMessage = "The primary contact must be 18 or older. Choose an adult participant, or pick \"Other\" and enter a parent or guardian.";
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+                if (this.hasMinor()) {
+                    if (!this.form.guardian_name || this.form.guardian_name.trim().length < 2) {
+                        this.errorMessage = "Please enter the parent or guardian's full name for the participant(s) under 18.";
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
+                    if (!this.form.guardian_relationship) {
+                        this.errorMessage = "Please select whether the guardian is a parent or legal guardian.";
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
+                    if (!this.validatePhone(this.form.guardian_phone)) {
+                        this.errorMessage = "Please enter a valid mobile number for the parent or guardian.";
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
+                    if (!this.form.guardian_consent) {
+                        this.errorMessage = "Parent or guardian consent is required for participants under 18.";
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        return;
+                    }
                 }
                 if (this.form.pickup_option === 'carpool' && !this.form.pickup_location) {
                     this.errorMessage = "Please select your preferred Carpool Pickup Hub & Schedule to continue.";

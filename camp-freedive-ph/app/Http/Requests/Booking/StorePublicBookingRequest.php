@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Booking;
 
+use App\Http\Requests\Concerns\ChecksMinorsAndContact;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -9,6 +10,8 @@ use Illuminate\Validation\Rule;
 /** Validation for BookingController::store(). */
 class StorePublicBookingRequest extends FormRequest
 {
+    use ChecksMinorsAndContact;
+
     public function authorize(): bool
     {
         return true; // access is checked by route middleware
@@ -89,7 +92,13 @@ class StorePublicBookingRequest extends FormRequest
             'confirmation_ack' => 'required|accepted',
             'has_agreed_to_terms' => 'required|accepted',
             'payment_method' => ['nullable', 'string', 'in:paymongo'],
-        ];
+        ] + $this->minorConsentRules();
+    }
+
+    /** Primary contact 18+, participants 8-85, guardian consent for under-18s. */
+    public function withValidator($validator): void
+    {
+        $this->checkMinorsAndContact($validator);
     }
 
     public function messages(): array

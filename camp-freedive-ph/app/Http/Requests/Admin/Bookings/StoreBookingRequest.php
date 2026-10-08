@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Admin\Bookings;
 
+use App\Http\Requests\Concerns\ChecksMinorsAndContact;
 use Illuminate\Foundation\Http\FormRequest;
 
 /** Validation for Admin/BookingController::store(). */
 class StoreBookingRequest extends FormRequest
 {
+    use ChecksMinorsAndContact;
+
     public function authorize(): bool
     {
         return true; // access is checked by route middleware
@@ -83,7 +86,13 @@ class StoreBookingRequest extends FormRequest
             'payment_stage' => 'required|in:downpayment,full',
             'payment_reference' => 'nullable|string|max:100',
             'admin_notes' => 'nullable|string|max:1000',
-        ];
+        ] + $this->minorConsentRules();
+    }
+
+    /** Primary contact 18+, participants 8-85, guardian consent for under-18s. */
+    public function withValidator($validator): void
+    {
+        $this->checkMinorsAndContact($validator);
     }
 
     public function messages(): array
