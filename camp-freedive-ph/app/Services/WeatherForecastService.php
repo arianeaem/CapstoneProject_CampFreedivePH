@@ -464,12 +464,14 @@ class WeatherForecastService
         // PM window (15:30 - 17:30)
         $pmData = $this->assessWindow($date->format('Y-m-d'), '15:30', '17:30', 'pm', $overrides);
 
-        // Whole daytime (06:00 - 18:00)
-        $cachedDay = $this->getCachedDayForecast($date->format('Y-m-d'));
+        // Whole daytime (06:00 - 18:00) from the Open-Meteo summary, like the booking preview.
+        // Not getCachedDayForecast(): with FORECAST_SOURCE=prd it returns the site model's rows,
+        // which have no daytime_classification, so every day would end up "Not Available".
+        $dateKey = $date->format('Y-m-d');
+        $cachedDay = Cache::get("forecast:date:{$dateKey}");
         if (!$cachedDay && !$overrideTriggered) {
             try {
-                $this->updateAllForecasts(16);
-                $cachedDay = $this->getCachedDayForecast($date->format('Y-m-d'));
+                $cachedDay = $this->updateAllForecasts(self::MAX_FORECAST_DAYS)['daily_summaries'][$dateKey] ?? null;
             } catch (\Throwable $e) {}
         }
 
