@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * The pressure-drop rule only makes a day Critical when the strong gust (or heavy rain)
- * happens in the same 3-hour window as the drop.
+ * The pressure-drop (squall) rule only makes a day Critical when pressure falls >= 3 hPa in
+ * 3 hours AND, in the same hours, gusts >= 38 km/h last 2+ hours (or heavy rain falls).
  */
 class CompoundPressureBreachTest extends TestCase
 {
@@ -22,7 +22,7 @@ class CompoundPressureBreachTest extends TestCase
     private const WIND = [16.4, 15.4, 16.3, 16.1, 17.5, 21.5, 22.8, 22.8, 21.4, 20.7, 28.6, 28.2, 18.4];
     private const GUSTS = [25.6, 23.8, 23.4, 23.4, 24.1, 28.8, 31.0, 32.0, 31.0, 29.5, 42.8, 39.2, 38.2];
 
-    private function classify(array $gusts): string
+    private function classify(array $gusts, array $pressure = self::PRESSURE): string
     {
         Cache::flush();
         $date = Carbon::now(WeatherForecastService::TIMEZONE)->addDays(2)->format('Y-m-d');
@@ -43,7 +43,7 @@ class CompoundPressureBreachTest extends TestCase
                 'precipitation' => array_fill(0, 24, 0.0),
                 'rain' => array_fill(0, 24, 0.0),
                 'showers' => array_fill(0, 24, 0.0),
-                'pressure_msl' => $day(self::PRESSURE, 1012.0),
+                'pressure_msl' => $day($pressure, 1012.0),
                 'wind_speed_10m' => $day(self::WIND, 15.0),
                 'wind_gusts_10m' => $day($gusts, 20.0),
                 'wind_direction_10m' => array_fill(0, 24, 110.0),
@@ -61,11 +61,33 @@ class CompoundPressureBreachTest extends TestCase
         $this->assertNotSame('Critical Risk', $this->classify(self::GUSTS));
     }
 
-    public function test_pressure_drop_with_gust_in_same_window_is_critical(): void
+    public function test_normal_midday_dip_with_one_gusty_hour_is_not_critical(): void
     {
+        // 11:00-14:00 drop is 2.8 hPa (normal dip) and only 12:00 is gusty
         $gusts = self::GUSTS;
-        $gusts[6] = 40.0; // 12:00, inside the 11:00-14:00 drop window
+        $gusts[6] = 40.0;
 
-        $this->assertSame('Critical Risk', $this->classify($gusts));
+        $this->assertNotSame('Critical Risk', $this->classify($gusts));
+    }
+
+    public function test_squall_drop_with_two_gusty_hours_in_same_window_is_critical(): void
+    {
+        $pressure = self::PRESSURE;
+        $pressure[8] = 1010.2; // 11:00 -> 14:00 drops 3.3 hPa
+        $gusts = self::GUSTS;
+        $gusts[6] = 40.0; // 12:00
+        $gusts[7] = 41.0; // 13:00
+
+        $this->assertSame('Critical Risk', $this->classify($gusts, $pressure));
+    }
+
+    public function test_squall_drop_with_only_one_gusty_hour_is_not_critical(): void
+    {
+        $pressure = self::PRESSURE;
+        $pressure[8] = 1010.2; // 3.3 hPa drop, but only 12:00 is gusty
+        $gusts = self::GUSTS;
+        $gusts[6] = 40.0;
+
+        $this->assertNotSame('Critical Risk', $this->classify($gusts, $pressure));
     }
 }

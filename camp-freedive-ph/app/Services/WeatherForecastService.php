@@ -997,7 +997,7 @@ class WeatherForecastService
         // 4. Swell >= 1.8 m (30-min average)
         // 5. Current >= 0.8 m/s (10-min average)
         // 6. Rain >= 25 mm total or >= 25 mm/hr
-        // 7. Pressure <= 998 hPa or drops 2 hPa or more in 3 hours
+        // 7. Pressure <= 998 hPa (squall pressure drops are checked on the whole day, see hasSquallPressureDrop)
         $isPhysicalBreach = (
             $meanWindSpeed >= 42.0 ||
             $maxWindGust >= 48.0 ||
@@ -1096,7 +1096,7 @@ class WeatherForecastService
                     // Use forecast_days, not start/end dates. Open-Meteo checks dates in UTC,
                     // so a Manila end_date gets a 400 error between 12 AM and 8 AM PH time.
                     'forecast_days' => $forecastDays,
-                    'hourly' => 'precipitation,rain,showers,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m',
+                    'hourly' => 'precipitation,rain,showers,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code',
                 ],
                 'timeout' => 10,
                 'without_verifying' => true,
@@ -1243,6 +1243,8 @@ class WeatherForecastService
                 'wind_speed' => $rawWindSpd,
                 'wind_gusts' => $windGustsVal,
                 'wind_direction' => $windDir,
+                // WMO code: 95, 96, 99 = thunderstorm
+                'weather_code' => ($code = $num($weatherHourly, 'weather_code')) === null ? null : (int) $code,
                 'tide_height' => 0.0,
                 'sea_data_available' => $hasMarine,
             ];
@@ -1306,30 +1308,20 @@ class WeatherForecastService
             $meanDaytimeWindWave = array_sum($daytimeWindWaves) / $seaCount;
             $meanDaytimeWindDir = array_sum($daytimeWindDirs) / $dayCount;
 
-            // A fast pressure drop (>= 2.5 hPa in 3h) only counts if strong gusts (>= 38 km/h)
-            // or heavy rain (>= 15 mm/hr) happen in the SAME 3-hour window. The normal midday
-            // pressure dip (~2.5-3 hPa) plus a breezy hour at another time is not a squall.
-            $hasCompoundPressureBreach = false;
-            for ($i = 0; $i < count($daytimePressures) - 3; $i++) {
-                if ($daytimePressures[$i] - $daytimePressures[$i + 3] < 2.5) {
-                    continue;
-                }
-                $windowGust = max(array_slice($daytimeGusts, $i, 4));
-                $windowRain = max(array_slice($daytimeRains, $i, 4));
-                if ($windowGust >= 38.0 || $windowRain >= 15.0) {
-                    $hasCompoundPressureBreach = true;
-                    break;
-                }
-            }
+            // Gusts by hour (06:00-18:00) for the gust hard limit
+            $gustsByHour = array_filter(
+                array_intersect_key($bucket['weather']['wind_gusts_10m'], array_flip($daytimeHours)),
+                fn ($g) => $g !== null
+            );
 
             // Hard limits (Coast Guard small boat limits). The weather ones still count without sea data.
             $isDaytimePhysicalBreach = ($weatherAvailable && (
                 $meanDaytimeWind >= 42.0 ||
-                $maxDaytimeGust >= 48.0 ||
+                $this->hasGustBreach($gustsByHour) ||
                 $daytimeRainTotal >= 25.0 ||
                 $daytimeMaxRainRate >= 25.0 ||
                 $meanDaytimePressure <= 998.0 ||
-                $hasCompoundPressureBreach
+                $this->hasSquallPressureDrop($daytimePressures, $daytimeGusts, $daytimeRains)
             )) || ($seaAvailable && (
                 $meanDaytimeWave >= 1.80 ||
                 $meanDaytimeSwell >= 1.80 ||
@@ -1360,9 +1352,28 @@ class WeatherForecastService
                 $daytimeClass = $this->classifyScores($daytimeScores, $daytimeScorePct);
             }
 
+            // A 48+ km/h gust only at 18:00 (after the dives) is not Critical, but the day is at least High Risk
+            if (!$isDaytimePhysicalBreach && ($gustsByHour[18] ?? 0) >= self::GUST_LIMIT_KMH) {
+                $daytimeClass = $this->raiseToFloor($daytimeClass, 'High Risk');
+            }
+
             // B: 2+ hours in a row at Moderate or worse lift the whole day to at least that level
             // A: the roughest single hour, shown next to the rating when it is rougher than the day
             [$daytimeClass, $sustained, $peak] = $this->applySustainedAndPeak($bucket['hourly_scores'], $daytimeClass);
+
+            // Thunderstorm forecast while people are in the water: at least High Risk (lightning).
+            // Not Critical: thunderstorm forecasts are unreliable more than a day ahead.
+            $thunderHour = $this->thunderstormHour($bucket['hourly_scores']);
+            if ($thunderHour !== null && $daytimeClass !== 'Critical Risk') {
+                $daytimeClass = $this->raiseToFloor($daytimeClass, 'High Risk');
+                if ((self::RISK_RANK[$peak['classification'] ?? 'Not Available'] ?? 0) <= self::RISK_RANK['High Risk']) {
+                    $peak = [
+                        'classification' => 'High Risk',
+                        'time' => Carbon::createFromTime($thunderHour)->format('g A'),
+                        'reason' => 'thunderstorm forecast',
+                    ];
+                }
+            }
 
             $amScores = array_filter($bucket['hourly_scores'], fn($i) => in_array($i['hour'], [10, 11, 12]));
             $amClass = $this->worstClass(array_column($amScores, 'classification'), 'Not Available');
@@ -1682,6 +1693,83 @@ class WeatherForecastService
         return $this->raiseToFloor($this->classifyScore($weightedPct), self::FLOOR_BY_SCORE[min($worst, 3)]);
     }
 
+    /** Gust hard limit (Coast Guard small boats). */
+    public const GUST_LIMIT_KMH = 48.0;
+
+    /** Last hour the gust hard limit counts for: the dives and the boat ride back end by then. */
+    public const GUST_LIMIT_LAST_HOUR = 17;
+
+    /** Squall check: pressure drop within 3 hours, with strong gusts or heavy rain in the same hours. */
+    public const SQUALL_PRESSURE_DROP_HPA = 3.0;
+    public const SQUALL_GUST_KMH = 38.0;
+    public const SQUALL_GUST_HOURS = 2;
+    public const SQUALL_RAIN_MM_HR = 15.0;
+
+    /** WMO weather codes for thunderstorms (95 = thunderstorm, 96/99 = with hail). */
+    public const THUNDERSTORM_CODES = [95, 96, 99];
+
+    /** Hours people are in the water: AM 09:30-12:00 and PM 15:30-17:30. */
+    public const IN_WATER_HOURS = [10, 11, 12, 16, 17];
+
+    /**
+     * Gust hard limit: a gust >= 48 km/h in any hour from 06:00 to 17:00.
+     * 18:00 alone does not count (see the High Risk floor in updateAllForecasts).
+     *
+     * @param array<int, float> $gustsByHour hour => gust (km/h)
+     */
+    public function hasGustBreach(array $gustsByHour): bool
+    {
+        foreach ($gustsByHour as $hour => $gust) {
+            if ($hour >= 6 && $hour <= self::GUST_LIMIT_LAST_HOUR && $gust >= self::GUST_LIMIT_KMH) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Squall: pressure falls >= 3 hPa within 3 hours AND, in those same hours, gusts >= 38 km/h
+     * last 2+ hours or rain reaches 15 mm/hr. Pressure here normally dips ~2-3 hPa from late
+     * morning to afternoon, so that dip plus a single gusty hour is not a squall.
+     *
+     * @param array<int, float> $pressures hourly, in order
+     * @param array<int, float> $gusts same hours
+     * @param array<int, float> $rains same hours
+     */
+    public function hasSquallPressureDrop(array $pressures, array $gusts, array $rains): bool
+    {
+        $pressures = array_values($pressures);
+        $gusts = array_values($gusts);
+        $rains = array_values($rains);
+
+        for ($i = 0; $i + 3 < count($pressures); $i++) {
+            if ($pressures[$i] - $pressures[$i + 3] < self::SQUALL_PRESSURE_DROP_HPA) {
+                continue;
+            }
+            $gustyHours = count(array_filter(array_slice($gusts, $i, 4), fn ($g) => $g >= self::SQUALL_GUST_KMH));
+            $windowRain = max(array_slice($rains, $i, 4) ?: [0.0]);
+            if ($gustyHours >= self::SQUALL_GUST_HOURS || $windowRain >= self::SQUALL_RAIN_MM_HR) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** First in-water hour with a thunderstorm forecast, or null. */
+    public function thunderstormHour(array $hourly): ?int
+    {
+        foreach ($hourly as $h) {
+            if (in_array($h['hour'] ?? null, self::IN_WATER_HOURS, true)
+                && in_array($h['weather_code'] ?? null, self::THUNDERSTORM_CODES, true)) {
+                return (int) $h['hour'];
+            }
+        }
+
+        return null;
+    }
+
     /** Hours in a row at Moderate or worse that lift a day's rating (sustained-hours rule). */
     public const SUSTAINED_HOURS = 2;
 
@@ -1928,6 +2016,7 @@ class WeatherForecastService
         $daytimeSwells = [];
         $daytimeWinds = [];
         $daytimeGusts = [];
+        $gustsByHour = [];
         $daytimeCurrents = [];
         $daytimeRains = [];
         $daytimePressures = [];
@@ -1949,7 +2038,7 @@ class WeatherForecastService
             }
             if (isset($weatherData['wind_speed_10m'][$dh])) {
                 $daytimeWinds[] = (float) $weatherData['wind_speed_10m'][$dh];
-                $daytimeGusts[] = (float) ($weatherData['wind_gusts_10m'][$dh] ?? $weatherData['wind_speed_10m'][$dh]);
+                $daytimeGusts[] = $gustsByHour[$dh] = (float) ($weatherData['wind_gusts_10m'][$dh] ?? $weatherData['wind_speed_10m'][$dh]);
                 $daytimeRains[] = (float) ($weatherData['rain'][$dh] ?? $weatherData['precipitation'][$dh] ?? 0.0);
                 $daytimePressures[] = (float) ($weatherData['pressure_msl'][$dh] ?? 1010.5);
                 $daytimeWindDirs[] = (float) ($weatherData['wind_direction_10m'][$dh] ?? 245.0);
@@ -1997,7 +2086,7 @@ class WeatherForecastService
         // Check the hard limits
         $isPhysicalBreach = (
             $meanWind >= 42.0 ||
-            $maxGust >= 48.0 ||
+            ($gustsByHour ? $this->hasGustBreach($gustsByHour) : $maxGust >= self::GUST_LIMIT_KMH) ||
             $meanWave >= 1.80 ||
             $meanSwell >= 1.80 ||
             $meanCurrent >= 0.80 ||
