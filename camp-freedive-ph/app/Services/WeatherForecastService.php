@@ -328,7 +328,7 @@ class WeatherForecastService
     }
 
     /**
-     * Open-Meteo whole-day summary for a date (cache first, refreshed when missing), or null.
+     * Open-Meteo day summary for a date (cache first, refreshed when missing), or null.
      */
     public function getOpenMeteoDay(string $dateKey): ?array
     {
@@ -346,7 +346,8 @@ class WeatherForecastService
     }
 
     /**
-     * Check one day: the whole-day (06:00-18:00) rating, with the AM/PM windows as hourly detail.
+     * Check one day: the day rating from the Open-Meteo summary (hard limits on 06:00-18:00,
+     * everything else on the in-water hours), with the AM/PM windows as hourly detail.
      */
     public function assessDay(Batch $batch, int $dayNumber, Carbon $date, ?array $overrides, ?User $assessedBy, ?Carbon $assessedAt = null): array
     {
@@ -450,10 +451,10 @@ class WeatherForecastService
         // PM window (15:30 - 17:30)
         $pmData = $this->assessWindow($date->format('Y-m-d'), '15:30', '17:30', 'pm', $overrides);
 
-        // Whole daytime (06:00 - 18:00) from the Open-Meteo summary
+        // Day rating from the Open-Meteo summary
         $cachedDay = $this->getOpenMeteoDay($date->format('Y-m-d'));
 
-        // The day's rating is the whole day (06:00-18:00); missing data counts as "Not Available".
+        // Hard limits use 06:00-18:00, the rest the in-water hours; missing data counts as "Not Available".
         // The AM/PM open-water windows are kept as hourly detail and do not change the rating.
         $amRank = self::RISK_RANK[$amData['classification']] ?? 0;
         $pmRank = self::RISK_RANK[$pmData['classification']] ?? 0;
@@ -594,7 +595,7 @@ class WeatherForecastService
     }
 
     /**
-     * Booking preview from the Open-Meteo forecast, rated with our rules (whole day 06:00-18:00).
+     * Booking preview from the Open-Meteo forecast, rated with our rules (same day rating as a batch).
      * Returns null when a day has no Open-Meteo sea data yet.
      */
     protected function previewFromOpenMeteo(Carbon $startDate, Carbon $endDate, int $daysOut): ?array
@@ -938,7 +939,7 @@ class WeatherForecastService
                 'wind_direction' => $this->scoreWindDirection($windDir),
             ];
             $hourWeightedPct = $this->computeWeightedScore($hourScores);
-            $hourClass = $this->raiseToFloor($this->classifyScores($hourScores, $hourWeightedPct), $overrideFloor);
+            $hourClass = $this->raiseToFloor($this->classifyScores($hourScores, $hourWeightedPct, $oceanCurrent), $overrideFloor);
 
             $hourlyList[] = [
                 'forecast_time' => Carbon::parse($timeStr),
@@ -1024,7 +1025,7 @@ class WeatherForecastService
         $windowWeightedScorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($windowScores);
         $windowClass = ($overrideTriggered || $isPhysicalBreach)
             ? 'Critical Risk'
-            : $this->raiseToFloor($this->classifyScores($windowScores, $windowWeightedScorePct), $overrideFloor);
+            : $this->raiseToFloor($this->classifyScores($windowScores, $windowWeightedScorePct, $meanOceanCurrent), $overrideFloor);
 
         // Find the worst hour in the window
         $worstScore = -1;
@@ -1225,7 +1226,7 @@ class WeatherForecastService
                 $hourClass = 'Not Available';
             } else {
                 $weightedScorePct = $this->computeWeightedScore($scores);
-                $hourClass = $this->classifyScores($scores, $weightedScorePct);
+                $hourClass = $this->classifyScores($scores, $weightedScorePct, $oceanCurrent);
             }
 
             $dayBuckets[$dateKey]['hourly_scores'][$hour] = [
@@ -1256,41 +1257,14 @@ class WeatherForecastService
             Cache::put("forecast:marine_cache:{$dateKey}", $bucket['marine'], now()->addMinutes(60));
             Cache::put("forecast:weather_cache:{$dateKey}", $bucket['weather'], now()->addMinutes(60));
 
-            // Daytime values (06:00 - 18:00)
+            // Daytime values (06:00 - 18:00): hard limits and the day's summary numbers
             $daytimeHours = range(6, 18);
-            $daytimeWinds = [];
-            $daytimeGusts = [];
-            $daytimeWaves = [];
-            $daytimeSwells = [];
-            $daytimeCurrents = [];
-            $daytimeRains = [];
-            $daytimePressures = [];
-            $daytimePeriods = [];
-            $daytimeWindWavePeriods = [];
-            $daytimeSwellPeriods = [];
-            $daytimeWindWaves = [];
-            $daytimeWindDirs = [];
-
-            // Only hours Open-Meteo really has: weather and sea values are collected separately
-            foreach ($daytimeHours as $dh) {
-                if (isset($bucket['weather']['wind_speed_10m'][$dh], $bucket['weather']['pressure_msl'][$dh])) {
-                    $daytimeWinds[] = $bucket['weather']['wind_speed_10m'][$dh];
-                    $daytimeGusts[] = $bucket['weather']['wind_gusts_10m'][$dh] ?? $bucket['weather']['wind_speed_10m'][$dh];
-                    $daytimeRains[] = $bucket['weather']['rain'][$dh] ?? 0.0;
-                    $daytimePressures[] = $bucket['weather']['pressure_msl'][$dh];
-                    $daytimeWindDirs[] = $bucket['weather']['wind_direction_10m'][$dh] ?? 0.0;
-                }
-                $m = $bucket['marine'];
-                if (isset($m['wave_height'][$dh], $m['swell_wave_height'][$dh], $m['ocean_current_velocity'][$dh], $m['wave_period'][$dh], $m['wind_wave_height'][$dh])) {
-                    $daytimeWaves[] = $m['wave_height'][$dh];
-                    $daytimeSwells[] = $m['swell_wave_height'][$dh];
-                    $daytimeCurrents[] = $m['ocean_current_velocity'][$dh] * 0.27778;
-                    $daytimePeriods[] = $m['wave_period'][$dh];
-                    $daytimeWindWavePeriods[] = $m['wind_wave_period'][$dh] ?? null;
-                    $daytimeSwellPeriods[] = $m['swell_wave_period'][$dh] ?? null;
-                    $daytimeWindWaves[] = $m['wind_wave_height'][$dh];
-                }
-            }
+            $daytime = $this->collectHours($bucket, $daytimeHours);
+            $daytimeWinds = $daytime['winds'];
+            $daytimeGusts = $daytime['gusts'];
+            $daytimeWaves = $daytime['waves'];
+            $daytimeRains = $daytime['rains'];
+            $daytimePressures = $daytime['pressures'];
 
             $weatherAvailable = !empty($daytimeWinds);
             $seaAvailable = !empty($daytimeWaves);
@@ -1299,14 +1273,11 @@ class WeatherForecastService
             $meanDaytimeWind = array_sum($daytimeWinds) / $dayCount;
             $maxDaytimeGust = !empty($daytimeGusts) ? max($daytimeGusts) : 0.0;
             $meanDaytimeWave = array_sum($daytimeWaves) / $seaCount;
-            $meanDaytimeSwell = array_sum($daytimeSwells) / $seaCount;
-            $meanDaytimeCurrent = array_sum($daytimeCurrents) / $seaCount;
+            $meanDaytimeSwell = array_sum($daytime['swells']) / $seaCount;
+            $meanDaytimeCurrent = array_sum($daytime['currents']) / $seaCount;
             $daytimeRainTotal = array_sum($daytimeRains);
             $daytimeMaxRainRate = !empty($daytimeRains) ? max($daytimeRains) : 0.0;
             $meanDaytimePressure = $weatherAvailable ? array_sum($daytimePressures) / $dayCount : null;
-            $meanDaytimePeriod = array_sum($daytimePeriods) / $seaCount;
-            $meanDaytimeWindWave = array_sum($daytimeWindWaves) / $seaCount;
-            $meanDaytimeWindDir = array_sum($daytimeWindDirs) / $dayCount;
 
             // Gusts by hour (06:00-18:00) for the gust hard limit
             $gustsByHour = array_filter(
@@ -1328,28 +1299,20 @@ class WeatherForecastService
                 $meanDaytimeCurrent >= 0.80
             ));
 
-            $daytimeScores = [
-                'wave_height' => $this->scoreWaveHeight($meanDaytimeWave),
-                'wind_speed' => $this->scoreWindSpeed($meanDaytimeWind, $maxDaytimeGust),
-                'ocean_current' => $this->scoreOceanCurrent($meanDaytimeCurrent),
-                'swell_height' => $this->scoreSwellHeight($meanDaytimeSwell),
-                'wave_period' => $this->scoreWavePeriods($meanDaytimePeriod, $this->meanOrNull($daytimeWindWavePeriods), $meanDaytimeWindWave, $this->meanOrNull($daytimeSwellPeriods), $meanDaytimeSwell),
-                'wind_wave_height' => $this->scoreWindWaveHeight($meanDaytimeWindWave),
-                'rain' => $this->scoreRain($daytimeMaxRainRate),
-                'sea_level_pressure' => $this->scoreSeaLevelPressure($meanDaytimePressure ?? 1013.0),
-                'wind_direction' => $this->scoreWindDirection($meanDaytimeWindDir),
-            ];
+            // Below the hard limits the day is rated on the in-water hours only (AM 10-12, PM 16-17):
+            // a rough stretch in the midday break shows as the "Roughest" note, not in the rating.
+            $water = $this->scoresForHours($bucket, self::IN_WATER_HOURS);
 
             if ($isDaytimePhysicalBreach) {
                 $daytimeScorePct = 100.0;
                 $daytimeClass = 'Critical Risk';
-            } elseif (!$seaAvailable || !$weatherAvailable) {
-                // No real sea (or weather) data from Open-Meteo for this day: no rating
+            } elseif ($water === null) {
+                // No real sea (or weather) data from Open-Meteo for the dive hours: no rating
                 $daytimeScorePct = null;
                 $daytimeClass = 'Not Available';
             } else {
-                $daytimeScorePct = $this->computeWeightedScore($daytimeScores);
-                $daytimeClass = $this->classifyScores($daytimeScores, $daytimeScorePct);
+                $daytimeScorePct = $this->computeWeightedScore($water['scores']);
+                $daytimeClass = $this->classifyScores($water['scores'], $daytimeScorePct, $water['current_ms']);
             }
 
             // A 48+ km/h gust only at 18:00 (after the dives) is not Critical, but the day is at least High Risk
@@ -1357,9 +1320,9 @@ class WeatherForecastService
                 $daytimeClass = $this->raiseToFloor($daytimeClass, 'High Risk');
             }
 
-            // B: 2+ hours in a row at Moderate or worse lift the whole day to at least that level
-            // A: the roughest single hour, shown next to the rating when it is rougher than the day
-            [$daytimeClass, $sustained, $peak] = $this->applySustainedAndPeak($bucket['hourly_scores'], $daytimeClass);
+            // B: 2+ in-water hours in a row (inside one dive window) at Moderate or worse lift the day
+            // A: the roughest hour of the whole day (06:00-18:00), shown when it is rougher than the day
+            [$daytimeClass, $sustained, $peak] = $this->applySustainedAndPeak($bucket['hourly_scores'], $daytimeClass, self::IN_WATER_HOURS);
 
             // Thunderstorm forecast while people are in the water: at least High Risk (lightning).
             // Not Critical: thunderstorm forecasts are unreliable more than a day ahead.
@@ -1684,13 +1647,100 @@ class WeatherForecastService
     private const FLOOR_BY_SCORE = ['Very Safe', 'Safe', 'Moderate', 'High Risk'];
 
     /**
-     * Rating = the worse of the weighted average and the worst floor parameter.
+     * Current (m/s) at which the current alone makes it High Risk. 0.50-0.65 m/s is Moderate:
+     * 0.50 was too strict for Anilao, and Open-Meteo's current is a coarse model value.
      */
-    public function classifyScores(array $scores, float $weightedPct): string
-    {
-        $worst = max(array_map(fn ($key) => (int) ($scores[$key] ?? 0), self::FLOOR_PARAMETERS));
+    public const CURRENT_HIGH_RISK_MS = 0.65;
 
-        return $this->raiseToFloor($this->classifyScore($weightedPct), self::FLOOR_BY_SCORE[min($worst, 3)]);
+    /**
+     * Rating = the worse of the weighted average and the worst floor parameter.
+     * With $currentMs, the current's floor uses CURRENT_HIGH_RISK_MS instead of its 0-4 score.
+     */
+    public function classifyScores(array $scores, float $weightedPct, ?float $currentMs = null): string
+    {
+        $floorParams = $currentMs === null ? self::FLOOR_PARAMETERS : array_diff(self::FLOOR_PARAMETERS, ['ocean_current']);
+        $worst = max(array_map(fn ($key) => (int) ($scores[$key] ?? 0), $floorParams));
+        $class = $this->raiseToFloor($this->classifyScore($weightedPct), self::FLOOR_BY_SCORE[min($worst, 3)]);
+
+        return $currentMs === null ? $class : $this->raiseToFloor($class, $this->currentFloor($currentMs));
+    }
+
+    /** Lowest rating the current alone allows: <0.10 Very Safe, <0.30 Safe, <0.65 Moderate, else High Risk. */
+    public function currentFloor(float $currentMs): string
+    {
+        return $currentMs >= self::CURRENT_HIGH_RISK_MS
+            ? 'High Risk'
+            : self::FLOOR_BY_SCORE[min($this->scoreOceanCurrent($currentMs), 2)];
+    }
+
+    /**
+     * Open-Meteo values for some hours of one day bucket. Only hours Open-Meteo really has:
+     * weather and sea values are collected separately. Currents are in m/s.
+     *
+     * @param int[] $hours
+     */
+    private function collectHours(array $bucket, array $hours): array
+    {
+        $v = array_fill_keys(['winds', 'gusts', 'rains', 'pressures', 'windDirs', 'waves', 'swells', 'currents', 'periods', 'windWavePeriods', 'swellPeriods', 'windWaves'], []);
+        $w = $bucket['weather'];
+        $m = $bucket['marine'];
+
+        foreach ($hours as $h) {
+            if (isset($w['wind_speed_10m'][$h], $w['pressure_msl'][$h])) {
+                $v['winds'][] = $w['wind_speed_10m'][$h];
+                $v['gusts'][] = $w['wind_gusts_10m'][$h] ?? $w['wind_speed_10m'][$h];
+                $v['rains'][] = $w['rain'][$h] ?? 0.0;
+                $v['pressures'][] = $w['pressure_msl'][$h];
+                $v['windDirs'][] = $w['wind_direction_10m'][$h] ?? 0.0;
+            }
+            if (isset($m['wave_height'][$h], $m['swell_wave_height'][$h], $m['ocean_current_velocity'][$h], $m['wave_period'][$h], $m['wind_wave_height'][$h])) {
+                $v['waves'][] = $m['wave_height'][$h];
+                $v['swells'][] = $m['swell_wave_height'][$h];
+                $v['currents'][] = $m['ocean_current_velocity'][$h] * 0.27778;
+                $v['periods'][] = $m['wave_period'][$h];
+                $v['windWavePeriods'][] = $m['wind_wave_period'][$h] ?? null;
+                $v['swellPeriods'][] = $m['swell_wave_period'][$h] ?? null;
+                $v['windWaves'][] = $m['wind_wave_height'][$h];
+            }
+        }
+
+        return $v;
+    }
+
+    /**
+     * The 9 scores (0-4) from the mean values of some hours, plus their mean current (m/s).
+     * Null when Open-Meteo has no sea or no weather data for those hours.
+     *
+     * @param int[] $hours
+     * @return array{scores: array<string, int>, current_ms: float}|null
+     */
+    private function scoresForHours(array $bucket, array $hours): ?array
+    {
+        $v = $this->collectHours($bucket, $hours);
+        if (empty($v['waves']) || empty($v['winds'])) {
+            return null;
+        }
+
+        $mean = fn (array $values) => array_sum($values) / count($values);
+        $wave = $mean($v['waves']);
+        $swell = $mean($v['swells']);
+        $windWave = $mean($v['windWaves']);
+        $current = $mean($v['currents']);
+
+        return [
+            'scores' => [
+                'wave_height' => $this->scoreWaveHeight($wave),
+                'wind_speed' => $this->scoreWindSpeed($mean($v['winds']), max($v['gusts'])),
+                'ocean_current' => $this->scoreOceanCurrent($current),
+                'swell_height' => $this->scoreSwellHeight($swell),
+                'wave_period' => $this->scoreWavePeriods($mean($v['periods']), $this->meanOrNull($v['windWavePeriods']), $windWave, $this->meanOrNull($v['swellPeriods']), $swell),
+                'wind_wave_height' => $this->scoreWindWaveHeight($windWave),
+                'rain' => $this->scoreRain(max($v['rains'])),
+                'sea_level_pressure' => $this->scoreSeaLevelPressure($mean($v['pressures'])),
+                'wind_direction' => $this->scoreWindDirection($mean($v['windDirs'])),
+            ],
+            'current_ms' => $current,
+        ];
     }
 
     /** Gust hard limit (Coast Guard small boats). */
@@ -1774,14 +1824,16 @@ class WeatherForecastService
     public const SUSTAINED_HOURS = 2;
 
     /**
-     * Whole-day rating with two refinements, using the day's hourly ratings (06:00-18:00):
+     * Day rating with two refinements, using the day's hourly ratings (06:00-18:00):
      * - sustained: SUSTAINED_HOURS in a row at Moderate or worse lift the day to at least the
-     *   mildest level of that stretch (one rough hour alone does not)
-     * - peak: the roughest hour, returned only when it is rougher than the final day rating
+     *   mildest level of that stretch (one rough hour alone does not). With $sustainedHours,
+     *   only those hours count (e.g. the in-water hours; a gap like 12 -> 16 breaks a run)
+     * - peak: the roughest hour of 06:00-18:00, returned only when rougher than the final day rating
      *
+     * @param int[]|null $sustainedHours hours the sustained rule looks at (null = 06:00-18:00)
      * @return array{0: string, 1: ?array, 2: ?array} [day rating, sustained stretch, peak hour]
      */
-    public function applySustainedAndPeak(array $hourly, string $dayClass): array
+    public function applySustainedAndPeak(array $hourly, string $dayClass, ?array $sustainedHours = null): array
     {
         if (in_array($dayClass, ['Critical Risk', 'Not Available'], true)) {
             return [$dayClass, null, null];
@@ -1791,11 +1843,14 @@ class WeatherForecastService
             ->filter(fn ($h) => isset($h['hour']) && $h['hour'] >= 6 && $h['hour'] <= 18
                 && ($h['classification'] ?? 'Not Available') !== 'Not Available')
             ->sortBy('hour')->values();
+        $runHours = $sustainedHours === null
+            ? $hours
+            : $hours->filter(fn ($h) => in_array($h['hour'], $sustainedHours, true))->values();
 
         // Strongest run of consecutive hours at Moderate or worse
         $sustained = null;
-        for ($i = 0; $i + self::SUSTAINED_HOURS - 1 < $hours->count(); $i++) {
-            $run = $hours->slice($i, self::SUSTAINED_HOURS)->values();
+        for ($i = 0; $i + self::SUSTAINED_HOURS - 1 < $runHours->count(); $i++) {
+            $run = $runHours->slice($i, self::SUSTAINED_HOURS)->values();
             if ($run->last()['hour'] - $run->first()['hour'] !== self::SUSTAINED_HOURS - 1) {
                 continue; // a gap in the hours
             }
@@ -2108,7 +2163,7 @@ class WeatherForecastService
         ];
 
         $scorePct = $isPhysicalBreach ? 100.0 : $this->computeWeightedScore($scores);
-        $actualClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScores($scores, $scorePct);
+        $actualClass = $isPhysicalBreach ? 'Critical Risk' : $this->classifyScores($scores, $scorePct, $meanCurrent);
 
         return [
             'date' => $date,

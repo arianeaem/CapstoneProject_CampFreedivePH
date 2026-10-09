@@ -125,4 +125,50 @@ class WorstOfScoringTest extends TestCase
 
         $this->assertSame('Very Safe', $class);
     }
+
+    public function test_in_water_rule_ignores_a_rough_stretch_in_the_midday_break(): void
+    {
+        // Oct 11/13 shape: rough 12:00-15:00, but only 12:00 is in the water
+        [$class, $sustained, $peak] = $this->service->applySustainedAndPeak($this->day([
+            12 => ['classification' => 'High Risk', 'ocean_current' => 0.7],
+            13 => ['classification' => 'High Risk', 'ocean_current' => 0.7],
+            14 => ['classification' => 'High Risk', 'ocean_current' => 0.7],
+        ]), 'Safe', \App\Services\WeatherForecastService::IN_WATER_HOURS);
+
+        $this->assertSame('Safe', $class);
+        $this->assertNull($sustained);
+        $this->assertSame('Roughest: High Risk at 12 PM · current 0.70 m/s', \App\Services\WeatherForecastService::peakLabel($peak));
+    }
+
+    public function test_in_water_run_does_not_span_the_break(): void
+    {
+        [$class] = $this->service->applySustainedAndPeak($this->day([
+            12 => ['classification' => 'Moderate', 'ocean_current' => 0.4],
+            16 => ['classification' => 'Moderate', 'ocean_current' => 0.4],
+        ]), 'Safe', \App\Services\WeatherForecastService::IN_WATER_HOURS);
+
+        $this->assertSame('Safe', $class);
+    }
+
+    public function test_in_water_run_inside_a_dive_window_lifts_the_day(): void
+    {
+        [$class, $sustained] = $this->service->applySustainedAndPeak($this->day([
+            16 => ['classification' => 'Moderate', 'ocean_current' => 0.4],
+            17 => ['classification' => 'Moderate', 'ocean_current' => 0.4],
+        ]), 'Safe', \App\Services\WeatherForecastService::IN_WATER_HOURS);
+
+        $this->assertSame('Moderate', $class);
+        $this->assertSame(['16:00', '18:00'], [$sustained['from'], $sustained['to']]);
+    }
+
+    public function test_current_floor_is_moderate_below_0_65_and_high_risk_from_0_65(): void
+    {
+        $this->assertSame('Safe', $this->service->currentFloor(0.20));
+        $this->assertSame('Moderate', $this->service->currentFloor(0.35));
+        $this->assertSame('Moderate', $this->service->currentFloor(0.56));
+        $this->assertSame('High Risk', $this->service->currentFloor(0.65));
+        // With the raw current, 0.56 m/s (score 3) is no longer floored at High Risk
+        $this->assertSame('Moderate', $this->service->classifyScores(['ocean_current' => 3], 14.0, 0.56));
+        $this->assertSame('High Risk', $this->service->classifyScores(['ocean_current' => 3], 14.0, 0.70));
+    }
 }

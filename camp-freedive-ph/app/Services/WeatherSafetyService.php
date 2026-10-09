@@ -98,7 +98,7 @@ class WeatherSafetyService
                 'text_color' => $riskConfig['text_color'],
                 'icon' => $riskConfig['icon'],
                 'description' => $riskConfig['description'],
-                // Roughest hour, shown when rougher than the whole-day rating
+                // Roughest hour of the day, shown when rougher than the day rating
                 'peak_label' => $assessment['peak_label'] ?? null,
                 'is_bookable' => $riskLevel !== 'critical_risk',
                 'has_storm_signal' => $riskLevel === 'critical_risk',

@@ -85,9 +85,8 @@ class HardLimitEdgeCasesTest extends TestCase
     {
         $summary = $this->summary(self::OCT_12);
 
-        $this->assertNotSame('Critical Risk', $summary['overall_classification']);
-        // Still High Risk from the current (0.50-0.56 m/s from 12:00 to 15:00)
-        $this->assertSame('High Risk', $summary['overall_classification']);
+        // Not a squall. The current in the dive hours tops out at 0.53 m/s at 12:00: Moderate
+        $this->assertSame('Moderate', $summary['overall_classification']);
     }
 
     public function test_oct_12_is_critical_when_the_drop_is_a_real_squall(): void
@@ -142,6 +141,28 @@ class HardLimitEdgeCasesTest extends TestCase
             'Roughest: Critical Risk at 6 PM · gusts 49 km/h',
             WeatherForecastService::peakLabel($summary['peak'])
         );
+    }
+
+    public function test_strong_current_in_the_midday_break_only_shows_as_the_roughest_note(): void
+    {
+        // Oct 11/13 pattern: 0.70 m/s from 13:00 to 15:00, between the AM and PM dives
+        $day = self::OCT_12;
+        $day['current_ms'] = [0.22, 0.17, 0.17, 0.22, 0.31, 0.42, 0.45, 0.70, 0.70, 0.70, 0.39, 0.28, 0.22];
+
+        $summary = $this->summary($day);
+
+        $this->assertSame('Moderate', $summary['overall_classification']);
+        $this->assertSame('High Risk', $summary['peak']['classification']);
+        $this->assertSame('1 PM', $summary['peak']['time']);
+    }
+
+    public function test_strong_current_during_a_dive_makes_the_day_high_risk(): void
+    {
+        // Same current, but during the AM dive (10:00-11:00)
+        $day = self::OCT_12;
+        $day['current_ms'] = [0.22, 0.17, 0.17, 0.22, 0.70, 0.70, 0.45, 0.42, 0.40, 0.40, 0.39, 0.28, 0.22];
+
+        $this->assertSame('High Risk', $this->summary($day)['overall_classification']);
     }
 
     public function test_thunderstorm_outside_dive_hours_does_not_raise_the_day(): void

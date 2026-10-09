@@ -97,13 +97,23 @@ class RuleBasedSafetyPipelineTest extends TestCase
 
     public function test_strong_current_alone_makes_the_day_high_risk(): void
     {
-        // 2.0 km/h = 0.56 m/s: current score 3, which floors the day at High Risk
-        $this->fakeOpenMeteo(currentKmh: 2.0);
+        // 2.5 km/h = 0.69 m/s: at or above 0.65 m/s the current alone floors the day at High Risk
+        $this->fakeOpenMeteo(currentKmh: 2.5);
 
         $result = app(WeatherForecastService::class)->assessBatch($this->batchStartingIn(3));
 
         $this->assertSame('High Risk', $result['day1']['classification']);
         $this->assertSame('High Risk', $result['overall_classification']);
+    }
+
+    public function test_current_between_0_50_and_0_65_is_moderate(): void
+    {
+        // 2.0 km/h = 0.56 m/s
+        $this->fakeOpenMeteo(currentKmh: 2.0);
+
+        $result = app(WeatherForecastService::class)->assessBatch($this->batchStartingIn(3));
+
+        $this->assertSame('Moderate', $result['day1']['classification']);
     }
 
     public function test_days_beyond_open_meteo_sea_data_are_not_rated(): void
