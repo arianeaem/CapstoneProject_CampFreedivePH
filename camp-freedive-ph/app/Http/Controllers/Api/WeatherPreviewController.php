@@ -22,10 +22,7 @@ class WeatherPreviewController extends Controller
     {
         try {
             $startDate = Carbon::parse($request->input('start_date'));
-            $preview = $this->forecastService->previewDateAssessment(
-                $startDate,
-                $request->boolean('replay')
-            );
+            $preview = $this->forecastService->previewDateAssessment($startDate);
 
             return response()->json($preview);
         } catch (Exception $e) {

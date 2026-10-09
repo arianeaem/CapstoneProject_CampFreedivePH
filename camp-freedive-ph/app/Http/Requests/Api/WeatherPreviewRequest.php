@@ -16,7 +16,6 @@ class WeatherPreviewRequest extends FormRequest
     {
         return [
             'start_date' => 'required|date',
-            'replay' => 'sometimes|boolean',
         ];
     }
 }

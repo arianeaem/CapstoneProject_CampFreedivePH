@@ -7,13 +7,11 @@ use App\Models\Batch;
 use App\Services\Weather\BatchSafetyReportService;
 use App\Services\WeatherForecastService;
 use App\ViewModels\BatchSafetyViewModel;
-use App\Services\WeatherSafetyMLService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use Illuminate\View\View;
 use App\Http\Requests\Admin\Weather\ApplyOverrideRequest;
 use App\Http\Requests\Admin\Weather\CancelBatchRequest;
@@ -22,7 +20,7 @@ use App\Http\Requests\Admin\Weather\CancelBatchRequest;
  * Admin pages for weather and sea safety.
  *
  * - page 1: list of batches in the next 16 days and their risk
- * - page 2: hourly weather for one batch, rule-based vs ML model
+ * - page 2: hourly weather for one batch, rated with our rules
  * - admin overrides (storm signal, gale warning, squall) that make a batch Critical Risk
  * - cancel a whole batch (full refund, emails go out through the queue)
  */
@@ -40,8 +38,7 @@ class WeatherSafetyController extends Controller
     ];
 
     public function __construct(
-        protected WeatherForecastService $forecastService,
-        protected WeatherSafetyMLService $mlService
+        protected WeatherForecastService $forecastService
     ) {}
 
     /**
@@ -96,138 +93,16 @@ class WeatherSafetyController extends Controller
         $perPage = max(4, min(100, (int) $request->input('per_page', 12)));
         $batches = $query->orderBy('start_date', 'desc')->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
 
-        // Forecast cache info
-        $lastUpdatedAt = Cache::get('forecast:last_updated_at');
-        $masterForecast = Cache::get('forecast:continuous_16d');
-        if (!$masterForecast) {
+        // Keep the 16-day Open-Meteo cache warm
+        if (!Cache::get('forecast:continuous_16d')) {
             try {
-                $masterForecast = $this->forecastService->updateAllForecasts(16);
-                $lastUpdatedAt = Cache::get('forecast:last_updated_at');
+                $this->forecastService->updateAllForecasts(WeatherForecastService::MAX_FORECAST_DAYS);
             } catch (\Throwable $e) {
                 // Ignore API errors
             }
         }
 
-        // ML service and circuit breaker status
-        $mlSafetyUrl = config('services.ml_safety.url', 'http://127.0.0.1:8001');
-        $circuitStatus = $this->mlService->getCircuitStatus();
-        $isMLReachable = false;
-        try {
-            $res = Http::timeout(1)->get("{$mlSafetyUrl}/health");
-            $isMLReachable = $res->successful();
-        } catch (\Throwable $e) {
-            $isMLReachable = false;
-        }
-
-        // Get the ML and risk results for each batch
-        $batchMLAssessments = [];
-        foreach ($batches as $b) {
-            $d1Date = $b->start_date->format('Y-m-d');
-            $d2Date = $b->end_date ? $b->end_date->format('Y-m-d') : $b->start_date->copy()->addDay()->format('Y-m-d');
-            $horizonInfo = WeatherForecastService::getOperationalHorizon($b);
-            $isConcluded = ($horizonInfo['status'] === 'CONCLUDED') || ($b->end_date && $b->end_date->isPast()) || in_array($b->status, ['completed', 'cancelled_by_camp']);
-
-            $d1ML = ($isMLReachable && $circuitStatus['is_available'] && !$isConcluded) 
-                ? $this->forecastService->assessMLSafetyForDate($d1Date, '08:00', '18:00') 
-                : null;
-            $d2ML = ($isMLReachable && $circuitStatus['is_available'] && !$isConcluded) 
-                ? $this->forecastService->assessMLSafetyForDate($d2Date, '08:00', '18:00') 
-                : null;
-
-            if ($d1ML || $d2ML) {
-                $rec1 = $d1ML['overall_recommendation'] ?? 'Safe';
-                $rec2 = $d2ML['overall_recommendation'] ?? 'Safe';
-                $wRank = max(WeatherForecastService::RISK_RANK[$rec1] ?? 1, WeatherForecastService::RISK_RANK[$rec2] ?? 1);
-                $wRec = array_search($wRank, WeatherForecastService::RISK_RANK) ?: 'Safe';
-                $daysOut = $horizonInfo['days_out'] ?? max(0, Carbon::now(WeatherForecastService::TIMEZONE)->startOfDay()->diffInDays($b->start_date->copy()->startOfDay(), false));
-                $leadTimeHours = $horizonInfo['lead_time_hours'] ?? max(1, Carbon::now(WeatherForecastService::TIMEZONE)->diffInHours($b->start_date->copy()->setTime(9, 30), false));
-                $routedBucket = $d1ML['routed_horizon_bucket'] ?? WeatherSafetyMLService::snapToClosestHorizon((int) $leadTimeHours);
-                $isBeyond7d = $daysOut > 7 || ($leadTimeHours > 168);
-
-                $d1Conf = ($isBeyond7d || ($d1ML['confidence'] ?? 'high') === 'low') ? 'low' : 'high';
-                $d2Conf = (($daysOut + 1) > 7 || ($d2ML['confidence'] ?? 'high') === 'low') ? 'low' : 'high';
-                $batchConfidence = ($d1Conf === 'low' || $d2Conf === 'low' || $isBeyond7d) ? 'low' : 'high';
-
-                $confidenceTier = match(true) {
-                    $isBeyond7d => 'LOW_CONFIDENCE_CLIMATOLOGY_BOUND',
-                    $batchConfidence === 'low' => 'LOW_CONFIDENCE_ML_UNCERTAIN',
-                    $daysOut > 3 => 'MEDIUM_CONFIDENCE_MULTI_HORIZON',
-                    $daysOut > 1 => 'MODERATE_HIGH_CONFIDENCE',
-                    default => 'HIGH_CONFIDENCE',
-                };
-
-                $servingSource = match(true) {
-                    $isBeyond7d => 'Batangas Seasonal Climatology (> 168h)',
-                    default => "Multi-Horizon ML Regressors (H = {$routedBucket}h)",
-                };
-
-                $opStatus = ($horizonInfo['status'] === 'CONCLUDED') ? 'CONCLUDED' : ($d1ML['operational_status'] ?? $d2ML['operational_status'] ?? $horizonInfo['status']);
-                $opLabel = ($horizonInfo['status'] === 'CONCLUDED') ? ($horizonInfo['label'] ?? 'Concluded Session') : ($d1ML['operational_status_label'] ?? $d2ML['operational_status_label'] ?? $horizonInfo['label']);
-
-                $batchMLAssessments[$b->id] = [
-                    'batch' => $b,
-                    'overall_recommendation' => $wRec,
-                    'operational_status' => $opStatus,
-                    'operational_status_label' => $opLabel,
-                    'confidence' => $batchConfidence,
-                    'confidence_tier' => $confidenceTier,
-                    'serving_source' => $servingSource,
-                    'confidence_advisory' => ($batchConfidence === 'low') ? "{$wRec}. Lead time is beyond the 7-day multi-horizon ML boundary (168h)." : null,
-                    'day1' => $d1ML,
-                    'day2' => $d2ML,
-                    'lead_time_hours' => $leadTimeHours,
-                    'routed_horizon_bucket' => $routedBucket,
-                    'is_beyond_7d' => $isBeyond7d,
-                    'safety_threshold_triggered' => ($d1ML['safety_threshold_triggered'] ?? $d1ML['hard_gate_triggered'] ?? false) || ($d2ML['safety_threshold_triggered'] ?? $d2ML['hard_gate_triggered'] ?? false),
-                    'hard_gate_triggered' => ($d1ML['safety_threshold_triggered'] ?? $d1ML['hard_gate_triggered'] ?? false) || ($d2ML['safety_threshold_triggered'] ?? $d2ML['hard_gate_triggered'] ?? false),
-                ];
-            } else {
-                // Past batch or fallback: use the saved assessment
-                $existingD1 = $b->riskAssessments->where('day_number', 1)->first() ?? $b->riskAssessments->filter(fn($a) => $a->dive_date?->toDateString() === $b->start_date?->toDateString())->first();
-                $existingD2 = $b->riskAssessments->where('day_number', 2)->first() ?? $b->riskAssessments->filter(fn($a) => $a->dive_date?->toDateString() === $b->end_date?->toDateString())->first();
-                
-                $overallRec = $b->risk_classification ? ucfirst(str_replace('_', ' ', $b->risk_classification)) : ($existingD1?->overall_classification ?? 'Safe');
-                if ($existingD1 && $existingD2) {
-                    $r1 = WeatherForecastService::RISK_RANK[$existingD1->overall_classification] ?? 1;
-                    $r2 = WeatherForecastService::RISK_RANK[$existingD2->overall_classification] ?? 1;
-                    $overallRec = array_search(max($r1, $r2), WeatherForecastService::RISK_RANK) ?: $overallRec;
-                }
-
-                $batchMLAssessments[$b->id] = [
-                    'batch' => $b,
-                    'overall_recommendation' => $overallRec,
-                    'operational_status' => $isConcluded ? 'CONCLUDED' : ($horizonInfo['status'] ?? 'EXTENDED_TREND_OUTLOOK'),
-                    'operational_status_label' => $isConcluded ? 'Concluded Session' : ($horizonInfo['label'] ?? 'Operational Monitoring'),
-                    'confidence' => 'high',
-                    'confidence_tier' => $isConcluded ? 'ARCHIVED_RECORD' : 'PHYSICS_BACKUP',
-                    'serving_source' => $isConcluded ? 'Archived Operational Telemetry' : 'Open-Meteo Marine Physics',
-                    'confidence_advisory' => null,
-                    'day1' => $existingD1 ? [
-                        'overall_recommendation' => $existingD1->overall_classification,
-                        'worst_hour' => $existingD1->worst_hour ? $existingD1->worst_hour->format('g:i A') : 'N/A',
-                        'worst_window' => $existingD1->worst_window ?? 'N/A',
-                    ] : null,
-                    'day2' => $existingD2 ? [
-                        'overall_recommendation' => $existingD2->overall_classification,
-                        'worst_hour' => $existingD2->worst_hour ? $existingD2->worst_hour->format('g:i A') : 'N/A',
-                        'worst_window' => $existingD2->worst_window ?? 'N/A',
-                    ] : null,
-                    'safety_threshold_triggered' => false,
-                    'hard_gate_triggered' => false,
-                ];
-            }
-        }
-
-        return view('admin.weather.index', compact(
-            'batches',
-            'criticalCount',
-            'lastUpdatedAt',
-            'masterForecast',
-            'isMLReachable',
-            'circuitStatus',
-            'mlSafetyUrl',
-            'batchMLAssessments'
-        ));
+        return view('admin.weather.index', compact('batches', 'criticalCount'));
     }
 
     /**

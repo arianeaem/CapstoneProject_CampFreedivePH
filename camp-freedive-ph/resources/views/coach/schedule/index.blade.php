@@ -174,8 +174,7 @@
                     <div class="p-4 sm:p-5 border-t border-[#E5E5EA] bg-[#FAFAFA]">
                         <x-dive-safety.status :classification="$item['weather_class']"
                                               :peak="$item['weather_peak'] ?? null"
-                                              :description="\App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($item['assessment']?->recommended_action ?? null)"
-                                              :engines="$item['model_comparison'] ?? null" />
+                                              :description="\App\Services\WeatherForecastService::MEANING_MAP[$item['weather_class']] ?? ($item['assessment']?->recommended_action ?? null)" />
                     </div>
                 </div>
             </div>

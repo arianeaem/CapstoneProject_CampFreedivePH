@@ -7,7 +7,7 @@ use App\Enums\RiskClassification;
 /**
  * Ready-to-show values for the Safety Monitoring batch page (admin.weather.show).
  * Moved here from the @php blocks in the view: which result to show, badge colors,
- * model comparison notes, the Day 1 / Day 2 panels, the history and the cancel panel numbers.
+ * the Day 1 / Day 2 panels, the history and the cancel panel numbers.
  */
 class BatchSafetyViewModel
 {
@@ -21,25 +21,16 @@ class BatchSafetyViewModel
         'Oil spill or water contamination',
     ];
 
-    public readonly bool $isCbOpen;
-    public readonly bool $isCbHalfOpen;
-    public readonly bool $isPrimaryActive;
     public readonly bool $isConcluded;
     public readonly string $verdict;
 
     public function __construct(protected array $data)
     {
         $batch = $data['batch'];
-        $cbState = $data['circuitStatus']['state'] ?? 'CLOSED';
 
-        $this->isCbOpen = $cbState === 'OPEN';
-        $this->isCbHalfOpen = $cbState === 'HALF_OPEN';
-        $this->isPrimaryActive = ($data['isMLReachable'] ?? false) && !$this->isCbOpen;
         $this->isConcluded = ($batch->end_date && $batch->end_date->isPast())
             || in_array($batch->status, ['completed', 'cancelled_by_camp'], true);
-
-        $mlRec = $data['batchMLAssessment']['overall_recommendation'] ?? ($data['overallClassification'] ?? 'Not Available');
-        $this->verdict = ($this->isPrimaryActive || $this->isConcluded) ? $mlRec : ($data['overallClassification'] ?? 'Not Available');
+        $this->verdict = $data['overallClassification'] ?? 'Not Available';
     }
 
     // --- styling
@@ -114,82 +105,15 @@ class BatchSafetyViewModel
         return \App\Services\WeatherForecastService::MEANING_MAP[$this->verdict] ?? 'Proceed with standard camp freediving protocols.';
     }
 
-    public function checkedWithLabel(): string
-    {
-        return match (true) {
-            $this->isPrimaryActive => 'Live forecast + safety model',
-            $this->isCbOpen => 'Standard safety rules (safety model offline)',
-            $this->isCbHalfOpen => 'Standard safety rules (safety model reconnecting)',
-            default => 'Standard safety rules',
-        };
-    }
-
-    // --- model comparison
-
-    /** @return array<int, array{name: string, about: string, available: bool, seasonal: bool, overall: ?string, score: int, days: array, note: ?string}> */
-    public function models(): array
-    {
-        $engines = $this->data['modelComparison'] ?? [];
-        $defs = [
-            ['historical', 'Historical Model', 'Estimates conditions from past years of weather at the dive site.'],
-            ['legacy', 'Legacy Model', "Uses this week's live weather forecast, then checks it with our safety model."],
-        ];
-
-        return array_map(function ($def) use ($engines) {
-            [$key, $name, $about] = $def;
-            $m = $engines[$key] ?? null;
-            $seasonal = !empty($m['is_seasonal_estimate']);
-            $overall = $m['overall_classification'] ?? null;
-
-            return [
-                'name' => $name,
-                'about' => $about,
-                'available' => !empty($m['available']),
-                'seasonal' => $seasonal,
-                'overall' => $overall,
-                'tone' => self::toneText($overall, $seasonal),
-                'score' => self::score($overall),
-                'days' => [
-                    ['label' => 'Day 1', 'date' => $m['day1']['date'] ?? '', 'classification' => $m['day1']['classification'] ?? 'N/A', 'tone' => self::toneText($m['day1']['classification'] ?? null, $seasonal), 'peak' => $seasonal ? null : ($m['day1']['peak_label'] ?? null)],
-                    ['label' => 'Day 2', 'date' => $m['day2']['date'] ?? '', 'classification' => $m['day2']['classification'] ?? 'N/A', 'tone' => self::toneText($m['day2']['classification'] ?? null, $seasonal), 'peak' => $seasonal ? null : ($m['day2']['peak_label'] ?? null)],
-                ],
-                'note' => match (true) {
-                    empty($m['available']) => 'No result for these dates yet.',
-                    $seasonal => 'Showing typical conditions for this time of year — live data is not available yet.',
-                    str_contains($m['data_source'] ?? '', 'safety model unavailable') => 'Safety model is offline, so the live forecast was checked with standard safety rules instead.',
-                    default => null,
-                },
-            ];
-        }, $defs);
-    }
-
-    public function bothModelsAvailable(): bool
-    {
-        $e = $this->data['modelComparison'] ?? [];
-
-        return !empty($e['historical']['available']) && !empty($e['legacy']['available']);
-    }
-
-    public function modelsAgree(): bool
-    {
-        $e = $this->data['modelComparison'] ?? [];
-
-        return $this->bothModelsAvailable()
-            && ($e['historical']['day1']['classification'] ?? null) === ($e['legacy']['day1']['classification'] ?? null)
-            && ($e['historical']['day2']['classification'] ?? null) === ($e['legacy']['day2']['classification'] ?? null);
-    }
-
     // --- Day 1 / Day 2 panels
 
     public function day(int $number): array
     {
         $assessment = $this->data["day{$number}Assessment"];
-        $ml = $this->data["day{$number}MLAssessment"] ?? null;
         $continuous = $this->data["day{$number}Continuous24h"] ?? null;
 
-        $hourly = !empty($ml['hourly_assessments']) ? $ml['hourly_assessments'] : ($continuous['hourly'] ?? []);
-        $fallback = $assessment->overall_classification ?? 'Not Available';
-        $rec = ($this->isPrimaryActive || $this->isConcluded) ? ($ml['overall_recommendation'] ?? $fallback) : $fallback;
+        $hourly = $continuous['hourly'] ?? [];
+        $rec = $assessment->overall_classification ?? 'Not Available';
         $leadH = (int) round($assessment->lead_time_hours ?? 0);
 
         return [

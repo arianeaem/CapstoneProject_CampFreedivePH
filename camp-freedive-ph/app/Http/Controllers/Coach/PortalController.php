@@ -8,17 +8,12 @@ use App\Models\CoachAvailability;
 use App\Models\CoachOpening;
 use App\Models\CoachRequest;
 use App\Models\ParticipantAssignment;
-use App\Services\WeatherForecastService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
 class PortalController extends Controller
 {
-    public function __construct(
-        protected WeatherForecastService $forecastService
-    ) {}
-
     /**
      * Page 1: coach dashboard.
      */
@@ -77,7 +72,6 @@ class PortalController extends Controller
                 'weather_class' => $weatherClass,
                 'weather_badge' => $weatherBadge,
                 'weather_peak' => $d1Assessment?->peak_label,
-                'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                 'hours_until_dive' => $hoursUntilDive,
                 'can_request_release' => $canRequestRelease,
                 'is_shared_pool' => false,
@@ -127,7 +121,6 @@ class PortalController extends Controller
                     'weather_class' => $weatherClass,
                     'weather_badge' => $weatherBadge,
                 'weather_peak' => $d1Assessment?->peak_label,
-                    'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                     'hours_until_dive' => $hoursUntilDive,
                     'can_request_release' => $canRequestRelease,
                     'is_shared_pool' => true,

@@ -57,7 +57,7 @@
                                 <span x-text="' · Day ' + (idx + 1) + ($safety.dayParts(day.date).weekday ? ' · ' + $safety.dayParts(day.date).weekday : '')"></span>
                             </div>
                             <div class="text-sm font-extrabold truncate" :class="$safety.text(day.classification, {{ $seasonal }})"
-                                 x-text="{{ $seasonal }} ? 'Seasonal outlook' : day.classification"></div>
+                                 x-text="{{ $seasonal }} ? 'Not rated yet' : day.classification"></div>
                             <div class="text-xs font-semibold text-[#B45309]" x-show="day.peak_label" x-text="day.peak_label"></div>
                         </div>
                         <!-- Roughest hour (worst_hour: when wind and waves are highest) -->
@@ -110,12 +110,6 @@
                         <dd class="text-[#1D1D1F] break-words" x-text="{{ $f }}.data_source"></dd>
                     </div>
                 </template>
-                <template x-if="{{ $f }}.historical_replay_label">
-                    <div class="contents">
-                        <dt>Mode</dt>
-                        <dd class="text-[#1D1D1F]" x-text="{{ $f }}.historical_replay_label"></dd>
-                    </div>
-                </template>
             </dl>
 
             <!-- Day notes -->
@@ -125,38 +119,6 @@
                         <p class="text-[#48484A] leading-relaxed" x-show="day.recommended_action">
                             <span class="font-semibold text-[#1D1D1F]" x-text="'Day ' + (idx + 1) + ': '"></span><span x-text="day.recommended_action"></span>
                         </p>
-                    </template>
-                </div>
-            </template>
-
-            <!-- Model comparison: Historical Model vs Legacy Forecast -->
-            <template x-if="{{ $f }}.engines">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
-                    <template x-for="engine in $safety.engines({{ $f }})" :key="engine.title">
-                        <div class="rounded-lg border border-[#E5E5EA] p-2.5 space-y-1.5 min-w-0">
-                            <div>
-                                <div class="font-bold text-[#1D1D1F]" x-text="engine.title"></div>
-                                <div class="text-[#8E8E93]" x-text="engine.subtitle"></div>
-                            </div>
-                            <template x-if="engine.available">
-                                <div class="space-y-1">
-                                    <template x-for="(day, idx) in [engine.day1, engine.day2]" :key="engine.title + '-' + idx">
-                                        <div>
-                                            <div class="flex items-center justify-between gap-2 text-[#6E6E73]">
-                                                <span x-text="'Day ' + (idx + 1)"></span>
-                                                <span class="font-semibold" :class="$safety.text(day.classification, engine.is_seasonal_estimate)"
-                                                      x-text="engine.is_seasonal_estimate ? 'Seasonal (' + day.classification + ')' : day.classification"></span>
-                                            </div>
-                                            <div class="text-right text-[#B45309]" x-show="!engine.is_seasonal_estimate && day.peak_label" x-text="day.peak_label"></div>
-                                        </div>
-                                    </template>
-                                    <p class="text-[#8E8E93] leading-snug break-words pt-0.5" x-show="engine.data_source" x-text="engine.data_source"></p>
-                                </div>
-                            </template>
-                            <template x-if="!engine.available">
-                                <p class="text-[#8E8E93]">Not available for these dates.</p>
-                            </template>
-                        </div>
                     </template>
                 </div>
             </template>

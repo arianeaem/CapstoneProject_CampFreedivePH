@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Coach;
 use App\Http\Controllers\Controller;
 use App\Models\AssignmentReleaseRequest;
 use App\Models\ParticipantAssignment;
-use App\Services\WeatherForecastService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,10 +12,6 @@ use Illuminate\View\View;
 
 class ScheduleController extends Controller
 {
-    public function __construct(
-        protected WeatherForecastService $forecastService
-    ) {}
-
     /**
      * Page 3: my schedule (upcoming and past).
      */
@@ -89,7 +84,6 @@ class ScheduleController extends Controller
                 'weather_badge' => $weatherBadge,
                 'weather_peak' => $d1?->peak_label,
                 'assessment' => $d1,
-                'model_comparison' => $this->forecastService->modelComparisonForBatch($batch),
                 'hours_until_dive' => max(0, $hoursUntilDive),
                 'can_request_release' => $canRequestRelease,
                 'release_request' => $releaseRequest,

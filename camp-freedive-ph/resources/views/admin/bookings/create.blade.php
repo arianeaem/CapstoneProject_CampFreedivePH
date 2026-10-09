@@ -110,10 +110,10 @@
                         <x-dive-safety.live-evaluation forecast="forecast" class="pt-2" />
                     </template>
 
-                    <!-- Empty / Beyond 16 days state -->
+                    <!-- Empty / not rated yet (beyond Open-Meteo's sea data) state -->
                     <template x-if="startDate && !weatherLoading && (!forecast || forecast.is_benchmark)">
                         <div class="p-3.5 rounded-xl border border-[#E5E5EA] bg-[#FAFAFA] text-xs text-[#6E6E73]">
-                            Marine condition evaluations are unavailable for dates beyond 16 days. Reservation may proceed; conditions will be verified prior to camp.
+                            Marine conditions are not rated yet for these dates (about 9-10 days ahead is the limit). Reservation may proceed; conditions will be verified prior to camp.
                         </div>
                     </template>
                 </div>

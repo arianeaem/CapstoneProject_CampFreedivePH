@@ -54,19 +54,6 @@ Schedule::command('forecast:archive-accuracy')
  */
 
 /**
- * Re-check the ML models every 3 months (Jan 1, Apr 1, Jul 1, Oct 1)
- * because the weather changes between dry and wet season.
- */
-Schedule::command('ml:rebenchmark')
-    ->quarterly()
-    ->withoutOverlapping()
-    ->runInBackground()
-    ->appendOutputTo(storage_path('logs/ml_rebenchmark.log'));
-
-
-
-
-/**
  * Participant data retention, on the 1st of each month: health notes cleared 12 months
  * after the last dive, records anonymised 3 years after it (see the Participants page).
  */

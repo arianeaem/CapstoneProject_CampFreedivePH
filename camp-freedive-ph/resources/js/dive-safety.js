@@ -12,7 +12,7 @@ const TONE_STYLES = {
 const BAR_SEGMENTS = ['bg-[#EF4444]', 'bg-[#F97316]', 'bg-[#F59E0B]', 'bg-[#84CC16]', 'bg-[#10B981]'];
 
 export const DiveSafety = {
-    // 'safe' | 'caution' | 'unsafe' | 'neutral' (seasonal estimate / no live rating)
+    // 'safe' | 'caution' | 'unsafe' | 'neutral' (dates not rated yet)
     tone(classification, seasonal = false) {
         if (!classification || seasonal) return 'neutral';
         switch (classification) {
@@ -26,7 +26,7 @@ export const DiveSafety = {
     },
 
     headline(classification, seasonal = false) {
-        if (this.tone(classification, seasonal) === 'neutral') return 'Typical season conditions';
+        if (this.tone(classification, seasonal) === 'neutral') return 'Forecast not available yet';
         switch (classification) {
             case 'Moderate': return 'Some caution recommended';
             case 'High Risk': return 'Rough conditions expected';
@@ -83,14 +83,5 @@ export const DiveSafety = {
             items.push({ ok: rain < 10, text: rain < 2.5 ? 'Little to no rain expected' : rain < 10 ? 'Some rain possible' : 'Heavy rain likely' });
         }
         return items.slice(0, 4);
-    },
-
-    // The two forecast models in display order, with simple names
-    engines(f) {
-        if (!f || !f.engines) return [];
-        return [
-            Object.assign({ title: 'Historical Model', subtitle: 'Seasonal baseline' }, f.engines.historical || {}),
-            Object.assign({ title: 'Legacy Forecast', subtitle: 'Open-Meteo + ONNX' }, f.engines.legacy || {}),
-        ];
     },
 };

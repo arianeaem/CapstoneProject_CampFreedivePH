@@ -49,23 +49,4 @@ return [
         'timeout_seconds' => (int) env('OPEN_METEO_TIMEOUT_SECONDS', 10),
     ],
 
-    'ml_service' => [
-        'name' => 'Safety Monitoring ML Microservice',
-        'url' => env('ML_SAFETY_SERVICE_URL', 'http://127.0.0.1:8001'),
-        'rate_limit' => [
-            'max_requests_per_minute' => (int) env('ML_SERVICE_MAX_REQ_PER_MIN', 120),
-            'max_requests_per_hour' => (int) env('ML_SERVICE_MAX_REQ_PER_HOUR', 2000),
-            'max_requests_per_day' => (int) env('ML_SERVICE_MAX_REQ_PER_DAY', 10000),
-            'max_requests_per_month' => (int) env('ML_SERVICE_MAX_REQ_PER_MONTH', 250000),
-            'warning_threshold_pct' => (int) env('ML_SERVICE_WARNING_THRESHOLD_PCT', 80),
-            'critical_threshold_pct' => (int) env('ML_SERVICE_CRITICAL_THRESHOLD_PCT', 90),
-            'decay_seconds' => 60,
-        ],
-        'timeout_seconds' => (int) env('ML_SERVICE_TIMEOUT_SECONDS', 2),
-        'circuit_breaker' => [
-            'failure_threshold' => 3,
-            'cooldown_seconds' => 60,
-        ],
-    ],
-
 ];

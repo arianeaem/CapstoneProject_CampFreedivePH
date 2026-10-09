@@ -21,7 +21,7 @@ class ExternalApiClient
     /**
      * Send an HTTP request with limits, retries and logging.
      *
-     * @param string $provider 'paymongo', 'open_meteo' or 'ml_service'
+     * @param string $provider 'paymongo' or 'open_meteo'
      * @param string $method 'GET', 'POST', 'PUT', etc.
      * @param string $url full URL
      * @param array $options query, headers, payload, auth, timeout

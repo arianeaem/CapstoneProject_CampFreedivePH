@@ -43,14 +43,6 @@ return [
         'token' => env('ML_API_TOKEN', ''),
     ],
 
-    'ml_safety' => [
-        'url' => env('ML_SAFETY_SERVICE_URL', 'http://127.0.0.1:8001'),
-        'timeout' => (int) env('ML_SAFETY_TIMEOUT', 4),
-        'enabled' => (bool) env('ML_SAFETY_ENABLED', true),
-        'python_path' => env('PYTHON_PATH', 'python'),
-        'benchmark_script' => env('ML_BENCHMARK_SCRIPT', base_path('../safety-forecast/src/models/benchmark_autogluon_timeseries.py')),
-    ],
-
     'ml_demand' => [
         'enabled_schedule' => (bool) env('ML_DEMAND_SCHEDULE_ENABLED', true),
         'retrain_script' => env('ML_DEMAND_RETRAIN_SCRIPT', base_path('../demand-forecast/retrain_pipeline.py')),

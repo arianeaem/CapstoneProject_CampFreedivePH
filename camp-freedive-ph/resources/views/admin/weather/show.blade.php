@@ -163,78 +163,6 @@
 
     </div>
 
-    <!-- Model Comparison: Historical Model vs Legacy Model -->
-    @if(!$vm->isConcluded)
-    <div class="bg-white rounded-xl border border-[#E5E5EA] p-5 sm:p-6 space-y-4 shadow-2xs">
-        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-            <div>
-                <h2 class="text-base font-extrabold text-[#1D1D1F]">Model Comparison</h2>
-                <p class="text-xs text-[#6E6E73] mt-0.5">Two forecasts checked the same dates. Use them together to judge the trip.</p>
-            </div>
-            @if($modelComparison)
-                <span class="inline-flex items-center gap-1.5 self-start px-3 py-1 rounded-full text-xs font-bold {{ $vm->modelsAgree() ? 'bg-[#ECFDF5] text-[#065F46]' : ($vm->bothModelsAvailable() ? 'bg-[#FFFBEB] text-[#92400E]' : 'bg-[#F2F2F7] text-[#6E6E73]') }}">
-                    <span class="w-1.5 h-1.5 rounded-full {{ $vm->modelsAgree() ? 'bg-[#10B981]' : ($vm->bothModelsAvailable() ? 'bg-[#F59E0B]' : 'bg-[#AEAEB2]') }}"></span>
-                    {{ $vm->modelsAgree() ? 'Both models agree' : ($vm->bothModelsAvailable() ? 'Models give different ratings' : 'Only one model available') }}
-                </span>
-            @endif
-        </div>
-
-        @if($modelComparison)
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                @foreach($vm->models() as $model)
-                    <div class="rounded-xl border border-[#E5E5EA] p-4 space-y-3">
-                        <div>
-                            <div class="text-sm font-extrabold text-[#1D1D1F]">{{ $model['name'] }}</div>
-                            <p class="text-xs text-[#6E6E73] leading-snug mt-0.5">{{ $model['about'] }}</p>
-                        </div>
-
-                        @if($model['available'])
-                            <div class="flex items-center justify-between gap-3 flex-wrap">
-                                <span class="text-lg font-black {{ $model['tone'] }}">
-                                    {{ $model['overall'] }}@if($model['seasonal'])<span class="text-xs font-semibold text-[#6E6E73]"> · typical season</span>@endif
-                                </span>
-                                @unless($model['seasonal'])
-                                    <div class="flex items-center gap-1" role="img" aria-label="Safety score {{ $model['score'] }} out of 5">
-                                        @for($i = 1; $i <= 5; $i++)
-                                            <div class="h-1.5 w-5 rounded-full {{ $i <= $model['score'] ? \App\ViewModels\BatchSafetyViewModel::SEGMENT_COLORS[$i - 1] : 'bg-[#E5E5EA]' }}"></div>
-                                        @endfor
-                                    </div>
-                                @endunless
-                            </div>
-
-                            <div class="rounded-lg bg-[#F8F9FA] divide-y divide-[#E5E5EA] text-xs">
-                                @foreach($model['days'] as $d)
-                                    <div class="flex items-center justify-between gap-2 px-3 py-2">
-                                        <span class="text-[#6E6E73]">
-                                            <strong class="text-[#1D1D1F]">{{ $d['label'] }}</strong> · {{ $d['date'] }}
-                                        </span>
-                                        <span class="font-bold {{ $d['tone'] }}">{{ $d['classification'] }}</span>
-                                    </div>
-                                    @if(!empty($d['peak']))
-                                        <div class="px-3 pb-2 -mt-1 text-right text-xs font-semibold text-[#B45309]">{{ $d['peak'] }}</div>
-                                    @endif
-                                @endforeach
-                            </div>
-                        @endif
-
-                        @if($model['note'])
-                            <p class="text-xs text-[#6E6E73] leading-snug">{{ $model['note'] }}</p>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
-
-            @if($vm->bothModelsAvailable() && !$vm->modelsAgree())
-                <p class="text-xs text-[#92400E] bg-[#FFFBEB] border border-[#FDE68A] rounded-lg px-3 py-2">
-                    The two models don't fully agree. Check the hourly conditions below before confirming or cancelling this trip.
-                </p>
-            @endif
-        @else
-            <p class="text-xs text-[#6E6E73]">The model comparison isn't available right now. Try “Run Live Assessment” again in a few minutes.</p>
-        @endif
-    </div>
-    @endif
-
     <!-- Day 1 & Day 2 Comparative Marine Condition Panels -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
@@ -263,9 +191,9 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-[#6E6E73] pt-4 pb-2 border-b border-[#E5E5EA] gap-2">
                 <div class="flex items-center gap-2">
                     <span class="font-bold text-[#1D1D1F]">Checked with:</span>
-                    <span class="inline-flex items-center gap-1.5 font-medium {{ $vm->isPrimaryActive ? 'text-emerald-700' : 'text-blue-700' }}">
-                        <span class="w-1.5 h-1.5 rounded-full {{ $vm->isPrimaryActive ? 'bg-emerald-500' : 'bg-blue-500' }}"></span>
-                        <span>{{ $vm->checkedWithLabel() }}</span>
+                    <span class="inline-flex items-center gap-1.5 font-medium text-blue-700">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                        <span>Open-Meteo forecast + safety rules</span>
                     </span>
                 </div>
                 <span>Chronological assessment history</span>

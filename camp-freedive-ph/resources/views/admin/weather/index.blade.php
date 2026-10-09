@@ -127,23 +127,18 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
             @forelse($batches as $batch)
             @php
-                $mlData = $batchMLAssessments[$batch->id] ?? null;
                 $day1 = $batch->riskAssessments->where('day_number', 1)->first() ?? $batch->riskAssessments->filter(fn($a) => $a->dive_date?->toDateString() === $batch->start_date?->toDateString())->first();
                 $day2 = $batch->riskAssessments->where('day_number', 2)->first() ?? $batch->riskAssessments->filter(fn($a) => $a->dive_date?->toDateString() === $batch->end_date?->toDateString())->first();
                 $override = $batch->manualOverrides->first();
                 $isConcluded = ($batch->end_date && $batch->end_date->isPast()) || in_array($batch->status, ['completed', 'cancelled_by_camp']);
-                $hasML = isset($batchMLAssessments[$batch->id]) && !$isConcluded && $isMLReachable;
 
-                // Overall result (same as show.blade.php)
-                $cardRec = $mlData['overall_recommendation'] ?? null;
-                if (!$cardRec) {
-                    if ($day1 && $day2) {
-                        $r1 = \App\Services\WeatherForecastService::RISK_RANK[$day1->overall_classification] ?? 1;
-                        $r2 = \App\Services\WeatherForecastService::RISK_RANK[$day2->overall_classification] ?? 1;
-                        $cardRec = array_search(max($r1, $r2), \App\Services\WeatherForecastService::RISK_RANK) ?: 'Safe';
-                    } else {
-                        $cardRec = $batch->risk_badge['label'] ?? 'Safe';
-                    }
+                // Overall result (same as show.blade.php): the worse of Day 1 and Day 2
+                if ($day1 && $day2) {
+                    $r1 = \App\Services\WeatherForecastService::RISK_RANK[$day1->overall_classification] ?? 1;
+                    $r2 = \App\Services\WeatherForecastService::RISK_RANK[$day2->overall_classification] ?? 1;
+                    $cardRec = array_search(max($r1, $r2), \App\Services\WeatherForecastService::RISK_RANK) ?: 'Safe';
+                } else {
+                    $cardRec = $batch->risk_badge['label'] ?? 'Safe';
                 }
 
                 $cardBadgeClass = match($cardRec) {
@@ -154,8 +149,8 @@
                     default => 'bg-gray-600 text-white',
                 };
 
-                $day1Rec = $mlData['day1']['overall_recommendation'] ?? ($day1->overall_classification ?? null);
-                $day2Rec = $mlData['day2']['overall_recommendation'] ?? ($day2->overall_classification ?? null);
+                $day1Rec = $day1->overall_classification ?? null;
+                $day2Rec = $day2->overall_classification ?? null;
                 $day1LineColor = match($day1Rec) {
                     'Very Safe', 'Safe' => 'bg-emerald-500',
                     'Moderate' => 'bg-amber-500',
@@ -188,18 +183,6 @@
                             <div class="text-xs text-[#6E6E73] mt-0.5 font-medium">
                                 {{ $batch->formatted_date_range }}
                             </div>
-                            @if(!$isConcluded && isset($mlData['routed_horizon_bucket']))
-                                <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F2F2F7] text-[#1D1D1F] border border-[#E5E5EA]">
-                                        <svg class="w-2.5 h-2.5 text-[#780000]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                        @if(!empty($mlData['is_beyond_7d']))
-                                            <span>Climatology (&gt;168h)</span>
-                                        @else
-                                            <span>ML Model: H = {{ $mlData['routed_horizon_bucket'] }}h</span>
-                                        @endif
-                                    </span>
-                                </div>
-                            @endif
                         </div>
                         <div class="text-right shrink-0 space-y-0.5">
                             <span class="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide inline-block {{ $cardBadgeClass }}">

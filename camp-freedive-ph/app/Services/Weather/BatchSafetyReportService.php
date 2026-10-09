@@ -5,21 +5,17 @@ namespace App\Services\Weather;
 use App\Models\Batch;
 use App\Models\User;
 use App\Services\WeatherForecastService;
-use App\Services\WeatherSafetyMLService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
 /**
  * Gets all the data for the Safety Monitoring batch page: Day 1 / Day 2 results
- * (runs them again if the forecast is newer), the 24-hour data, the ML model summary,
- * the model comparison and the history.
+ * (runs them again if the forecast is newer), the 24-hour data and the history.
  */
 class BatchSafetyReportService
 {
     public function __construct(
-        protected WeatherForecastService $forecastService,
-        protected WeatherSafetyMLService $mlService
+        protected WeatherForecastService $forecastService
     ) {}
 
     /**
@@ -168,121 +164,6 @@ class BatchSafetyReportService
             ];
         }
 
-        // ML model results
-        $overridesData = $latestOverride ? [
-            'tcws_signal' => $latestOverride->tcws_signal,
-            'gale_warning' => $latestOverride->gale_warning,
-            'tsunami_warning' => $latestOverride->tsunami_warning,
-        ] : null;
-
-        $day1MLAssessment = $this->forecastService->assessMLSafetyForDate($day1Date, '00:00', '23:00', $overridesData);
-        $day2MLAssessment = $this->forecastService->assessMLSafetyForDate($day2Date, '00:00', '23:00', $overridesData);
-
-        $batchMLAssessment = null;
-        if ($day1MLAssessment || $day2MLAssessment) {
-            $mlRec1 = $day1MLAssessment['overall_recommendation'] ?? 'Safe';
-            $mlRec2 = $day2MLAssessment['overall_recommendation'] ?? 'Safe';
-            $worseMLRank = max(WeatherForecastService::RISK_RANK[$mlRec1] ?? 1, WeatherForecastService::RISK_RANK[$mlRec2] ?? 1);
-            $worseMLRec = array_search($worseMLRank, WeatherForecastService::RISK_RANK) ?: 'Safe';
-
-            $horizonInfo = WeatherForecastService::getOperationalHorizon($batch);
-            $daysOut = $horizonInfo['days_out'] ?? max(0, Carbon::now(WeatherForecastService::TIMEZONE)->startOfDay()->diffInDays($batch->start_date->copy()->startOfDay(), false));
-            $leadTimeHours = $horizonInfo['lead_time_hours'] ?? max(1, Carbon::now(WeatherForecastService::TIMEZONE)->diffInHours($batch->start_date->copy()->setTime(9, 30), false));
-            $d1RoutedBucket = $day1MLAssessment['routed_horizon_bucket'] ?? WeatherSafetyMLService::snapToClosestHorizon((int) $leadTimeHours);
-            $d2LeadTimeHours = max(1, $leadTimeHours + 24);
-            $d2RoutedBucket = $day2MLAssessment['routed_horizon_bucket'] ?? WeatherSafetyMLService::snapToClosestHorizon((int) $d2LeadTimeHours);
-            $isBeyond7d = $daysOut > 7 || ($leadTimeHours > 168);
-
-            $d1Conf = ($isBeyond7d || ($day1MLAssessment['confidence'] ?? 'high') === 'low') ? 'low' : 'high';
-            $d2Conf = (($daysOut + 1) > 7 || ($day2MLAssessment['confidence'] ?? 'high') === 'low') ? 'low' : 'high';
-            $batchConfidence = ($d1Conf === 'low' || $d2Conf === 'low' || $isBeyond7d) ? 'low' : 'high';
-
-            $confidenceTier = match(true) {
-                $isBeyond7d => 'LOW_CONFIDENCE_CLIMATOLOGY_BOUND',
-                $batchConfidence === 'low' => 'LOW_CONFIDENCE_ML_UNCERTAIN',
-                $daysOut > 3 => 'MEDIUM_CONFIDENCE_MULTI_HORIZON',
-                $daysOut > 1 => 'MODERATE_HIGH_CONFIDENCE',
-                default => 'HIGH_CONFIDENCE',
-            };
-
-            $servingSource = match(true) {
-                $isBeyond7d => 'Batangas Seasonal Climatology (> 168h)',
-                default => "Multi-Horizon ML Regressors (H = {$d1RoutedBucket}h)",
-            };
-
-            $opStatus = ($horizonInfo['status'] === 'CONCLUDED') ? 'CONCLUDED' : ($day1MLAssessment['operational_status'] ?? $day2MLAssessment['operational_status'] ?? $horizonInfo['status']);
-            $opLabel = ($horizonInfo['status'] === 'CONCLUDED') ? ($horizonInfo['label'] ?? 'Concluded Session') : ($day1MLAssessment['operational_status_label'] ?? $day2MLAssessment['operational_status_label'] ?? $horizonInfo['label']);
-
-            $batchMLAssessment = [
-                'overall_recommendation' => $worseMLRec,
-                'ml_recommendation' => $worseMLRec,
-                'ml_classification' => $worseMLRec,
-                'operational_status' => $opStatus,
-                'operational_status_label' => $opLabel,
-                'confidence' => $batchConfidence,
-                'confidence_tier' => $confidenceTier,
-                'serving_source' => $servingSource,
-                'confidence_advisory' => ($batchConfidence === 'low') ? "{$worseMLRec}. Lead time is beyond the 7-day multi-horizon ML boundary (168h)." : null,
-                'day1' => $day1MLAssessment,
-                'day2' => $day2MLAssessment,
-                'lead_time_hours' => $leadTimeHours,
-                'day1_routed_bucket' => $d1RoutedBucket,
-                'day2_routed_bucket' => $d2RoutedBucket,
-                'is_beyond_7d' => $isBeyond7d,
-                'is_authoritative_go' => ($day1MLAssessment['is_authoritative_go'] ?? false) && ($day2MLAssessment['is_authoritative_go'] ?? false),
-                'safety_threshold_triggered' => ($day1MLAssessment['safety_threshold_triggered'] ?? $day1MLAssessment['hard_gate_triggered'] ?? false) || ($day2MLAssessment['safety_threshold_triggered'] ?? $day2MLAssessment['hard_gate_triggered'] ?? false),
-                'hard_gate_triggered' => ($day1MLAssessment['safety_threshold_triggered'] ?? $day1MLAssessment['hard_gate_triggered'] ?? false) || ($day2MLAssessment['safety_threshold_triggered'] ?? $day2MLAssessment['hard_gate_triggered'] ?? false),
-            ];
-        } else {
-            $isConcluded = ($batch->end_date && $batch->end_date->isPast()) || in_array($batch->status, ['completed', 'cancelled_by_camp']);
-            $batchMLAssessment = [
-                'overall_recommendation' => $overallClassification,
-                'ml_recommendation' => $overallClassification,
-                'ml_classification' => $overallClassification,
-                'operational_status' => $isConcluded ? 'CONCLUDED' : 'PHYSICS_FALLBACK',
-                'operational_status_label' => $isConcluded ? 'Concluded Session' : 'Operational Monitoring',
-                'confidence' => 'high',
-                'confidence_tier' => $isConcluded ? 'ARCHIVED_RECORD' : 'PHYSICS_BACKUP',
-                'serving_source' => $isConcluded ? 'Archived Operational Telemetry' : 'Open-Meteo Marine Physics Backup',
-                'confidence_advisory' => null,
-                'day1' => $day1Assessment ? [
-                    'overall_recommendation' => $day1Assessment->overall_classification,
-                    'worst_hour' => $day1Assessment->worst_hour ? $day1Assessment->worst_hour->format('g:i A') : 'N/A',
-                    'worst_window' => $day1Assessment->worst_window ?? 'N/A',
-                    'hourly_assessments' => $day1Continuous24h['hourly'] ?? [],
-                ] : null,
-                'day2' => $day2Assessment ? [
-                    'overall_recommendation' => $day2Assessment->overall_classification,
-                    'worst_hour' => $day2Assessment->worst_hour ? $day2Assessment->worst_hour->format('g:i A') : 'N/A',
-                    'worst_window' => $day2Assessment->worst_window ?? 'N/A',
-                    'hourly_assessments' => $day2Continuous24h['hourly'] ?? [],
-                ] : null,
-                'is_authoritative_go' => true,
-                'safety_threshold_triggered' => false,
-                'hard_gate_triggered' => false,
-            ];
-        }
-
-        // Model comparison (same as the booking page)
-        $modelComparison = null;
-        if (!$isConcluded) {
-            try {
-                $modelComparison = $this->forecastService->previewDateAssessment($batch->start_date->copy())['engines'] ?? null;
-            } catch (\Throwable $e) {
-                $modelComparison = null;
-            }
-        }
-
-        $mlSafetyUrl = config('services.ml_safety.url', 'http://127.0.0.1:8001');
-        $circuitStatus = $this->mlService->getCircuitStatus();
-        $isMLReachable = false;
-        try {
-            $res = Http::timeout(1)->get("{$mlSafetyUrl}/health");
-            $isMLReachable = $res->successful();
-        } catch (\Throwable $e) {
-            $isMLReachable = false;
-        }
-
         return compact(
             'batch',
             'day1Assessment',
@@ -292,12 +173,6 @@ class BatchSafetyReportService
             'assessmentRuns',
             'day1Continuous24h',
             'day2Continuous24h',
-            'day1MLAssessment',
-            'day2MLAssessment',
-            'batchMLAssessment',
-            'circuitStatus',
-            'isMLReachable',
-            'modelComparison',
             'isConcluded'
         );
     }

@@ -13,8 +13,8 @@ use Carbon\Carbon;
  * - High Risk: rough sea, extra safety divers
  * - Critical Risk: no diving, reschedule/refund
  *
- * Up to 16 days ahead we use the Open-Meteo forecast. After that we use
- * the usual weather for that season (Amihan / Habagat).
+ * Dates are rated from the Open-Meteo forecast with our safety rules. Its sea data reaches
+ * about 9-10 days ahead; later dates are shown as not rated yet and stay bookable.
  */
 class WeatherSafetyService
 {
@@ -40,12 +40,14 @@ class WeatherSafetyService
         $today = Carbon::today(WeatherForecastService::TIMEZONE);
         $daysOut = (int) $today->diffInDays($start->copy()->startOfDay(), false);
 
-        if ($daysOut >= 0 && $daysOut <= WeatherForecastService::MAX_FORECAST_DAYS) {
-            $assessment = $this->forecastService->previewDateAssessment($start);
-            if (!empty($assessment['available'])) {
-                $overallClass = $assessment['overall_classification'] ?? 'Safe';
-                $day1 = $assessment['day1'] ?? [];
-                $day2 = $assessment['day2'] ?? [];
+        $assessment = ($daysOut >= 0 && $daysOut <= WeatherForecastService::MAX_FORECAST_DAYS)
+            ? $this->forecastService->previewDateAssessment($start)
+            : null;
+
+        if (!empty($assessment['available'])) {
+            $overallClass = $assessment['overall_classification'] ?? 'Safe';
+            $day1 = $assessment['day1'] ?? [];
+            $day2 = $assessment['day2'] ?? [];
 
             $riskLevel = match ($overallClass) {
                 'Very Safe' => 'very_safe',
@@ -80,34 +82,25 @@ class WeatherSafetyService
             $confidence = $assessment['confidence'] ?? ($daysOut >= 4 ? 'low' : 'high');
             $rawAdvisory = $assessment['confidence_advisory'] ?? ($confidence === 'low' ? "Confidence is low this far out, recheck in 2 days." : null);
             $confidenceAdvisory = $rawAdvisory ? preg_replace('/^(Very Safe|Safe|Moderate|High Risk|Critical Risk)[\.\:\-]\s*/i', '', $rawAdvisory) : null;
-            $seasonalEstimate = ($day1['seasonal_estimate'] ?? false)
-                && ($day2['seasonal_estimate'] ?? false);
-
-            $formattedDescription = $riskConfig['description'];
 
             return [
                 'is_benchmark' => false,
-                'risk_level' => $seasonalEstimate ? 'seasonal' : $riskLevel,
-                'overall_classification' => $seasonalEstimate ? null : $overallClass,
-                'confidence' => $seasonalEstimate ? 'seasonal' : $confidence,
-                'reliability' => $seasonalEstimate ? 'Seasonal estimate' : ($assessment['reliability'] ?? null),
+                'risk_level' => $riskLevel,
+                'overall_classification' => $overallClass,
+                'confidence' => $confidence,
                 'confidence_advisory' => $confidenceAdvisory,
-                'is_seasonal_estimate' => $seasonalEstimate,
-                'historical_replay' => $assessment['historical_replay'] ?? false,
-                'historical_replay_label' => $assessment['historical_replay_label'] ?? null,
-                'evaluating_engine' => $assessment['evaluating_engine'] ?? 'prd_site_forecast',
+                'is_seasonal_estimate' => false,
                 'data_source' => $assessment['data_source'] ?? null,
-                'engines' => $assessment['engines'] ?? null,
                 'title' => $riskConfig['title'],
                 'badge_color' => $riskConfig['badge_color'],
                 'border_color' => $riskConfig['border_color'],
                 'bg_color' => $riskConfig['bg_color'],
                 'text_color' => $riskConfig['text_color'],
                 'icon' => $riskConfig['icon'],
-                'description' => $formattedDescription,
+                'description' => $riskConfig['description'],
                 // Roughest hour, shown when rougher than the whole-day rating
-                'peak_label' => $seasonalEstimate ? null : ($assessment['peak_label'] ?? null),
-                'is_bookable' => $seasonalEstimate || $riskLevel !== 'critical_risk',
+                'peak_label' => $assessment['peak_label'] ?? null,
+                'is_bookable' => $riskLevel !== 'critical_risk',
                 'has_storm_signal' => $riskLevel === 'critical_risk',
                 'days_out' => $daysOut,
                 'reliability' => $reliability,
@@ -118,7 +111,7 @@ class WeatherSafetyService
                     'confidence_advisory' => $day1['confidence_advisory'] ?? $confidenceAdvisory,
                     'recommended_action' => $day1['recommended_action'] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $day1['worst_hour'] ?? '11:00 AM',
-                    'peak_label' => $seasonalEstimate ? null : \App\Services\WeatherForecastService::peakLabel($day1['peak'] ?? null),
+                    'peak_label' => WeatherForecastService::peakLabel($day1['peak'] ?? null),
                 ]),
                 'day2' => array_merge($day2, [
                     'date' => $end->format('M d, Y'),
@@ -127,70 +120,44 @@ class WeatherSafetyService
                     'confidence_advisory' => $day2['confidence_advisory'] ?? $confidenceAdvisory,
                     'recommended_action' => $day2['recommended_action'] ?? 'Conditions are generally safe, but normal safety protocols should still be followed.',
                     'worst_hour' => $day2['worst_hour'] ?? '11:00 AM',
-                    'peak_label' => $seasonalEstimate ? null : \App\Services\WeatherForecastService::peakLabel($day2['peak'] ?? null),
+                    'peak_label' => WeatherForecastService::peakLabel($day2['peak'] ?? null),
                 ]),
                 'suggested_dates' => $suggestedDates,
                 'location' => 'Mabini / Anilao, Batangas',
             ];
-            }
         }
 
-        // More than 16 days away:
-        $riskConfig = $this->getRiskConfig('safe');
+        // No Open-Meteo sea data for these dates yet (about 9-10+ days away): not rated, still bookable
+        $riskConfig = $this->getRiskConfig('not_available');
+        $notRatedDay = fn (Carbon $date) => [
+            'date' => $date->format('M d, Y'),
+            'classification' => 'Not Available',
+            'confidence' => 'low',
+            'confidence_advisory' => null,
+            'recommended_action' => 'This day will be rated automatically about 9-10 days before the dive.',
+            'worst_hour' => 'N/A',
+        ];
+
         return [
             'is_benchmark' => true,
             'is_seasonal_estimate' => true,
-            'risk_level' => 'safe',
-            'overall_classification' => 'Safe',
+            'risk_level' => 'not_available',
+            'overall_classification' => 'Not Available',
             'confidence' => 'low',
-            'confidence_advisory' => 'Seasonal climatological baseline for advance planning. Operational models update as trip approaches.',
-            'title' => 'Booking Open (Standard Season Benchmark)',
+            'confidence_advisory' => null,
+            'title' => $riskConfig['title'],
             'badge_color' => $riskConfig['badge_color'],
             'border_color' => $riskConfig['border_color'],
             'bg_color' => $riskConfig['bg_color'],
             'text_color' => $riskConfig['text_color'],
             'icon' => $riskConfig['icon'],
-            'description' => 'Seasonal estimate: typical conditions for this time of year. Historical climatological baseline active; live models evaluate 16 days prior to departure.',
+            'description' => $riskConfig['description'],
             'is_bookable' => true,
             'has_storm_signal' => false,
             'days_out' => $daysOut,
-            'reliability' => 'Seasonal Baseline',
-            'day1' => [
-                'date' => $start->format('M d, Y'),
-                'classification' => 'Safe',
-                'confidence' => 'low',
-                'confidence_advisory' => 'Advance seasonal baseline',
-                'recommended_action' => 'Conditions are generally safe, but normal safety protocols should still be followed.',
-                'worst_hour' => 'Daylight Baseline',
-                'wave_height_m' => 0.35,
-                'current_speed_ms' => 0.30,
-                'wind_speed_kmh' => 15.0,
-                'wind_speed_ms' => 4.2,
-                'wind_gust_kmh' => 22.0,
-                'wind_gust_ms' => 6.1,
-                'rain_daily_mm' => 3.5,
-                'rain_label' => 'Light Rain',
-                'p_wet' => 0.45,
-                'p_high_gust' => 0.05,
-            ],
-            'day2' => [
-                'date' => $end->format('M d, Y'),
-                'classification' => 'Safe',
-                'confidence' => 'low',
-                'confidence_advisory' => 'Advance seasonal baseline',
-                'recommended_action' => 'Conditions are generally safe, but normal safety protocols should still be followed.',
-                'worst_hour' => 'Daylight Baseline',
-                'wave_height_m' => 0.35,
-                'current_speed_ms' => 0.30,
-                'wind_speed_kmh' => 15.0,
-                'wind_speed_ms' => 4.2,
-                'wind_gust_kmh' => 22.0,
-                'wind_gust_ms' => 6.1,
-                'rain_daily_mm' => 3.5,
-                'rain_label' => 'Light Rain',
-                'p_wet' => 0.45,
-                'p_high_gust' => 0.05,
-            ],
+            'reliability' => 'Not rated yet',
+            'day1' => $notRatedDay($start),
+            'day2' => $notRatedDay($end),
             'suggested_dates' => [],
             'location' => 'Mabini / Anilao, Batangas',
         ];
@@ -249,6 +216,15 @@ class WeatherSafetyService
                 'text_color' => '#991B1B',
                 'icon' => 'x-circle',
                 'description' => 'Severe weather advisory, storm signal, or dangerous marine sea state in Batangas. Online bookings suspended for participant safety.',
+            ],
+            'not_available' => [
+                'title' => 'Forecast Not Available Yet',
+                'badge_color' => '#8E8E93',
+                'border_color' => '#E5E5EA',
+                'bg_color' => '#F5F5F7',
+                'text_color' => '#3A3A3C',
+                'icon' => 'clock',
+                'description' => "The sea forecast doesn't reach these dates yet. They will be rated automatically about 9-10 days before the dive.",
             ],
             default => [
                 'title' => 'Safe',

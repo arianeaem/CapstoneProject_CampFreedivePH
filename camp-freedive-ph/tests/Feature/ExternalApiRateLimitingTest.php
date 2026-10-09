@@ -22,7 +22,6 @@ class ExternalApiRateLimitingTest extends TestCase
         parent::setUp();
         RateLimiter::clear('ext_api_rate:paymongo:minute');
         RateLimiter::clear('ext_api_rate:open_meteo:minute');
-        RateLimiter::clear('ext_api_rate:ml_service:minute');
         Cache::flush();
     }
 

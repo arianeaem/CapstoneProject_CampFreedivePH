@@ -18,24 +18,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Primary Forecast Source & Microservice Router
-    |--------------------------------------------------------------------------
-    |
-    | 'prd': Production multi-source physics engine (POST /forecast/site)
-    | 'legacy': Heuristic 16-day Open-Meteo sliding cache
-    |
-    */
-    'forecast_source' => env('FORECAST_SOURCE', 'prd'),
-    'api_url' => env('SAFETY_FORECAST_API_URL', 'http://127.0.0.1:8001'),
-    'circuit_breaker' => [
-        'timeout_seconds' => 5.0,
-        'max_failures' => 5,
-        'decay_seconds' => 300,
-        'cache_ttl_seconds' => 3600,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | Verified Multi-Source Historical Training Window
     |--------------------------------------------------------------------------
     |
