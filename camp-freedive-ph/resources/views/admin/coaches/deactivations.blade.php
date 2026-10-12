@@ -154,28 +154,26 @@
     <!-- ========================================================================= -->
     <!-- Confirm deactivation modal (owner only) -->
     <!-- ========================================================================= -->
-    <div x-show="openConfirmModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openConfirmModal = false">
-            <h3 class="text-lg font-bold text-[#FF3B3C]">Confirm Coach Deactivation</h3>
-            <p class="text-sm text-[#6E6E73]">
-                Are you sure you want to deactivate <strong class="text-[#1D1D1F]" x-text="selectedRequest?.coach?.full_name"></strong>?
-            </p>
+    <x-side-panel show="openConfirmModal" role="alertdialog" eyebrow="Coach" title="Deactivate coach">
+        <x-slot:description><span x-text="selectedRequest?.coach?.full_name"></span></x-slot:description>
 
-            <div class="banner banner-warning">
-                <strong>Conflict Check:</strong> If this coach has any upcoming 2D1N batch assignments, the system will block deactivation until those sessions are reassigned.
-            </div>
+        <p class="text-[#3A3A3C]">
+            The coach can no longer sign in or be assigned to batches.
+        </p>
 
-            <form :action="'{{ url('/admin/coaches/deactivations') }}/' + selectedRequest?.id + '/confirm'" method="POST" class="pt-2">
-                @csrf
-                <div class="flex items-center justify-end gap-2">
-                    <button type="button" @click="openConfirmModal = false" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
-                    <button type="submit" class="btn-danger px-5 py-2 text-sm font-bold">
-                        Confirm & Deactivate
-                    </button>
-                </div>
-            </form>
+        <div class="banner banner-warning">
+            If the coach still has upcoming batches, deactivation is blocked until those batches get another coach.
         </div>
-    </div>
+
+        <form id="confirm-deactivation-form" :action="'{{ url('/admin/coaches/deactivations') }}/' + selectedRequest?.id + '/confirm'" method="POST">
+            @csrf
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openConfirmModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="confirm-deactivation-form" class="btn-danger">Deactivate coach</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

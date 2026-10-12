@@ -307,42 +307,36 @@
 
     </div>
 
-    <!-- Reassign Participant Modal -->
-    <div x-show="openReassignModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openReassignModal = false">
-            <h3 class="text-lg font-bold text-[#1D1D1F]">Reassign Participant Away</h3>
-            <p class="text-sm text-[#6E6E73]">
-                Reassign <strong class="text-[#1D1D1F]" x-text="selectedParticipantName"></strong> away from Coach {{ $coach->name }} to another coach.
-            </p>
+    <!-- Reassign Participant Panel -->
+    <x-side-panel show="openReassignModal" title="Move participant to another coach">
+        <x-slot:eyebrow>Participant</x-slot:eyebrow>
+        <x-slot:description><span x-text="selectedParticipantName"></span> · currently with Coach {{ $coach->name }}</x-slot:description>
 
-            <form action="{{ route('admin.coaches.reassign_student', $coach) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-                <input type="hidden" name="participant_id" :value="selectedParticipantId">
+        <form id="reassign-participant-form" action="{{ route('admin.coaches.reassign_student', $coach) }}" method="POST" class="space-y-4">
+            @csrf
+            <input type="hidden" name="participant_id" :value="selectedParticipantId">
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Select New Coach <span class="text-[#780000]">*</span></label>
-                    <select name="new_coach_id" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
-                        <option value="">-- Choose Active Coach --</option>
-                        @foreach($otherCoaches as $c)
-                            <option value="{{ $c->id }}">{{ $c->name }} ({{ $c->email }})</option>
-                        @endforeach
-                    </select>
-                </div>
+            <div>
+                <label for="reassign-new-coach" class="form-label form-label-required">New coach</label>
+                <select id="reassign-new-coach" name="new_coach_id" required class="form-select w-full">
+                    <option value="">Choose a coach</option>
+                    @foreach($otherCoaches as $c)
+                        <option value="{{ $c->id }}">{{ $c->name }} ({{ $c->email }})</option>
+                    @endforeach
+                </select>
+            </div>
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Reassignment Reason <span class="text-[#780000]">*</span></label>
-                    <textarea name="reason" required rows="3" placeholder="e.g. Original coach reported sick / Schedule balance adjustment" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium"></textarea>
-                </div>
+            <div>
+                <label for="reassign-reason" class="form-label form-label-required">Reason</label>
+                <textarea id="reassign-reason" name="reason" required rows="3" placeholder="e.g. Coach reported sick" class="form-textarea"></textarea>
+            </div>
+        </form>
 
-                <div class="flex items-center justify-end gap-2 pt-3">
-                    <button type="button" @click="openReassignModal = false" class="btn-secondary px-3.5 py-1.5 text-sm">Cancel</button>
-                    <button type="submit" class="btn-primary px-4 py-1.5 text-sm font-bold shadow-2xs">
-                        Confirm Reassignment
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <x-slot:footer>
+            <button type="button" @click="openReassignModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="reassign-participant-form" class="btn-primary">Move participant</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

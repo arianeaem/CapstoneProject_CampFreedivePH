@@ -221,33 +221,25 @@
             </button>
         </div>
 
-        <!-- Delete Modal inside Edit Page -->
-        <div x-show="openDeleteConfirm" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-            <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openDeleteConfirm = false">
-                <div class="flex items-start justify-between">
-                    <div class="flex items-center gap-3">
-                        <div>
-                            <h3 class="text-base font-extrabold text-[#780000]">Delete {{ $user->name }}</h3>
-                            <p class="text-sm text-[#6E6E73]">Irreversible permanent deletion.</p>
-                        </div>
-                    </div>
-                    <button type="button" @click="openDeleteConfirm = false" aria-label="Close delete modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
-                </div>
-
-                <p class="text-sm text-[#1D1D1F]">
-                    Are you sure you want to permanently delete the account for <strong>{{ $user->name }}</strong> (<span class="font-mono text-[#6E6E73]">{{ $user->email }}</span>)? This action cannot be undone.
-                </p>
-
-                <form action="{{ route('admin.users.destroy', $user) }}" method="POST" class="flex items-center justify-end gap-2">
-                    @csrf
-                    @method('DELETE')
-                    <button type="button" @click="openDeleteConfirm = false" class="btn-secondary px-3.5 py-1.5 text-sm font-semibold cursor-pointer">Cancel</button>
-                    <button type="submit" class="btn-danger px-4 py-1.5 text-sm font-bold shadow-2xs cursor-pointer">
-                        Permanently Delete
-                    </button>
-                </form>
+        <!-- Delete Account Panel -->
+        <x-side-panel show="openDeleteConfirm" role="alertdialog"
+                      eyebrow="Staff account"
+                      title="Delete account"
+                      :description="$user->name . ' · ' . $user->email">
+            <div class="banner banner-error">
+                This permanently deletes the account. It cannot be undone.
             </div>
-        </div>
+
+            <form id="delete-user-form" action="{{ route('admin.users.destroy', $user) }}" method="POST">
+                @csrf
+                @method('DELETE')
+            </form>
+
+            <x-slot:footer>
+                <button type="button" @click="openDeleteConfirm = false" class="btn-secondary">Cancel</button>
+                <button type="submit" form="delete-user-form" class="btn-danger">Delete account</button>
+            </x-slot:footer>
+        </x-side-panel>
     </div>
     @endif
 

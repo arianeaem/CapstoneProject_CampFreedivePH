@@ -324,62 +324,46 @@
     </div>
 
     <!-- Emergency Release Panel -->
-    <div x-show="releaseModalOpen"
-         x-cloak
-         role="dialog"
-         aria-modal="true"
-         aria-labelledby="schedule-release-modal-title"
-         @keydown.escape.window="releaseModalOpen = false"
-         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-6 shadow-2xl border-l border-[#E5E5EA] space-y-6 relative"
-             @click.outside="releaseModalOpen = false">
-
-            <div class="flex items-start justify-between border-b border-[#E5E5EA] pb-4">
-                <div>
-                    <h3 id="schedule-release-modal-title" class="text-lg font-black text-[#1D1D1F]">Request Assignment Release</h3>
-                    <p class="text-sm font-semibold text-rose-600 mt-0.5">Emergency staffing request</p>
+    <x-side-panel show="releaseModalOpen" size="lg"
+                  eyebrow="Emergency request"
+                  title="Ask to be released from a batch"
+                  description="The camp admin finds another coach for your participants.">
+        <template x-if="selectedBatch">
+            <div class="space-y-5">
+                <div class="panel-context">
+                    <dl class="panel-meta">
+                        <div>
+                            <dt>Batch</dt>
+                            <dd x-text="selectedBatch.batch?.name || selectedBatch.batch?.batch_number"></dd>
+                        </div>
+                        <div>
+                            <dt>Participants</dt>
+                            <dd x-text="selectedBatch.students_count"></dd>
+                        </div>
+                    </dl>
                 </div>
-                <button type="button" @click="releaseModalOpen = false" aria-label="Close release panel"
-                        class="w-11 h-11 -mr-2 -mt-1 rounded-full flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F2F2F7] transition-all cursor-pointer">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </button>
-            </div>
 
-            <template x-if="selectedBatch">
-                <form action="{{ route('coach.availability.release') }}" method="POST" @submit="submittingRelease = true" class="space-y-4">
+                <form id="schedule-release-form" action="{{ route('coach.availability.release') }}" method="POST" @submit="submittingRelease = true">
                     @csrf
                     <input type="hidden" name="batch_id" :value="selectedBatch.batch?.id">
                     <input type="hidden" name="dive_date" :value="selectedBatch.dive_date">
 
-                    <div class="p-3.5 rounded-xl bg-[#F2F2F7] text-sm space-y-1">
-                        <div class="font-bold text-[#1D1D1F]" x-text="selectedBatch.batch?.name || selectedBatch.batch?.batch_number"></div>
-                        <div class="text-[#6E6E73]">Participants assigned: <strong x-text="selectedBatch.students_count"></strong></div>
-                    </div>
-
-                    <div class="space-y-1.5">
-                        <label for="schedule-release-reason" class="block text-sm font-bold text-[#1D1D1F]">Reason for emergency release <span class="text-rose-500">*</span></label>
-                        <textarea id="schedule-release-reason" name="reason" rows="4" required
-                                  placeholder="Please explain the emergency or unavoidable circumstance..."
-                                  class="w-full text-sm rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:ring-[#780000] p-3"></textarea>
-                    </div>
-
-                    <div class="flex items-center justify-end gap-2.5 pt-2">
-                        <button type="button" @click="releaseModalOpen = false" class="btn-secondary px-4 py-2 text-sm font-semibold rounded-xl cursor-pointer">Cancel</button>
-                        <button type="submit" :disabled="submittingRelease"
-                                class="btn-danger px-5 py-2 text-sm font-bold rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                            <span x-show="!submittingRelease">Submit release request</span>
-                            <span x-show="submittingRelease" x-cloak>Submitting...</span>
-                        </button>
-                    </div>
+                    <label for="schedule-release-reason" class="form-label form-label-required">Reason</label>
+                    <textarea id="schedule-release-reason" name="reason" rows="4" required
+                              placeholder="e.g. Illness or a family emergency"
+                              class="form-textarea"></textarea>
+                    <span class="form-hint">The camp admin reviews it and moves your participants.</span>
                 </form>
-            </template>
-        </div>
-    </div>
+            </div>
+        </template>
+
+        <x-slot:footer>
+            <button type="button" @click="releaseModalOpen = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="schedule-release-form" :disabled="submittingRelease" class="btn-danger disabled:cursor-not-allowed disabled:opacity-50">
+                <span x-show="!submittingRelease">Send request</span>
+                <span x-show="submittingRelease" x-cloak>Sending...</span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
 </div>
 @endsection

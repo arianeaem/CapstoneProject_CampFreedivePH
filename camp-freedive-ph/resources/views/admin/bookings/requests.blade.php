@@ -287,44 +287,31 @@
         </div>
     </div>
 
-    <!-- Rejection Modal -->
-    <div x-show="rejectModalOpen" 
-         x-cloak 
-         class="fixed inset-0 z-50 flex justify-end bg-black/40">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" 
-             @click.outside="rejectModalOpen = false">
-            <div class="flex items-center justify-between">
-                <h3 class="font-bold text-base text-[#1D1D1F]">
-                    Reject <span x-text="rejectRequestType"></span> Request
-                </h3>
-                <button type="button" @click="rejectModalOpen = false" aria-label="Close reject request modal" class="text-base font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
+    <!-- Reject Request Panel -->
+    <x-side-panel show="rejectModalOpen" role="alertdialog">
+        <x-slot:eyebrow>Booking <span x-text="rejectBookingNumber"></span></x-slot:eyebrow>
+        <x-slot:title>Reject <span x-text="rejectRequestType"></span> request</x-slot:title>
+        <x-slot:description>The participant is emailed that their request was not approved.</x-slot:description>
+
+        <form id="reject-request-form" :action="rejectFormAction" method="POST" class="space-y-4">
+            @csrf
+            <div>
+                <label for="reject-admin-notes" class="form-label">Reason (optional)</label>
+                <textarea id="reject-admin-notes"
+                          name="admin_notes"
+                          x-model="rejectNotes"
+                          rows="3"
+                          placeholder="e.g. The requested date is already full."
+                          class="form-textarea"></textarea>
+                <span class="form-hint">Included in the email to the participant.</span>
             </div>
+        </form>
 
-            <form :action="rejectFormAction" method="POST" class="space-y-4">
-                @csrf
-                <p class="text-sm text-[#6E6E73]">
-                    Please provide an optional reason for rejecting the request for Booking #<strong class="text-[#1D1D1F]" x-text="rejectBookingNumber"></strong>:
-                </p>
-
-                <div>
-                    <textarea name="admin_notes" 
-                              x-model="rejectNotes" 
-                              rows="3" 
-                              placeholder="e.g. Requested batch date is at full capacity, or policy window has passed..." 
-                              class="w-full px-3 py-2 rounded-lg border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white"></textarea>
-                </div>
-
-                <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-[#E5E5EA]">
-                    <button type="button" @click="rejectModalOpen = false" class="btn-secondary px-3.5 py-1.5 text-sm font-semibold">
-                        Cancel
-                    </button>
-                    <button type="submit" class="btn-danger px-4 py-1.5 text-sm font-bold shadow-2xs">
-                        Confirm Rejection
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <x-slot:footer>
+            <button type="button" @click="rejectModalOpen = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="reject-request-form" class="btn-danger">Reject request</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

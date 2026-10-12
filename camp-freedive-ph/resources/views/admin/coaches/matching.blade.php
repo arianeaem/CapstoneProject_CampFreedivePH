@@ -229,60 +229,46 @@
         </div>
     @endif
 
-    <!-- Share to Coaches Modal -->
-    <div x-show="shareModalOpen" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="shareModalOpen = false">
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-bold text-[#1D1D1F]">Share to Coach Portal</h3>
-                <button type="button" @click="shareModalOpen = false" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F] cursor-pointer" aria-label="Close modal">✕</button>
-            </div>
-            <p class="text-sm text-[#6E6E73] leading-relaxed">
-                Broadcast an open coaching slot for <strong class="text-[#780000] font-bold" x-text="shareBatchNumber"></strong> to all certified coaches in the Coach Portal. Coaches will be notified and can volunteer directly from their dashboard.
-            </p>
+    <!-- Share to Coaches Panel -->
+    <x-side-panel show="shareModalOpen" title="Share to Coach Portal">
+        <x-slot:eyebrow>Batch <span x-text="shareBatchNumber"></span></x-slot:eyebrow>
+        <x-slot:description>Post an open coaching slot for this batch.</x-slot:description>
 
-            <form :action="shareActionUrl" method="POST" class="space-y-4 pt-1">
-                @csrf
-                <input type="hidden" name="batch_id" :value="shareBatchId">
+        <p class="text-[#3A3A3C]">
+            All certified coaches are notified and can volunteer from their dashboard.
+        </p>
 
-                <div class="flex items-center justify-end gap-2 pt-3">
-                    <button type="button" @click="shareModalOpen = false" class="btn-secondary px-4 py-2 text-sm font-semibold rounded-xl cursor-pointer">
-                        Cancel
-                    </button>
-                    <button type="submit" class="btn-primary px-5 py-2 text-sm font-bold rounded-xl shadow-2xs cursor-pointer">
-                        Confirm &amp; Share
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <form id="share-slot-form" :action="shareActionUrl" method="POST">
+            @csrf
+            <input type="hidden" name="batch_id" :value="shareBatchId">
+        </form>
 
-    <!-- Unassign Coach Modal -->
-    <div x-show="unassignModalOpen" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="unassignModalOpen = false">
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-bold text-[#1D1D1F]">Remove Coach Assignment</h3>
-                <button type="button" @click="unassignModalOpen = false" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F] cursor-pointer" aria-label="Close modal">✕</button>
-            </div>
-            <p class="text-sm text-[#6E6E73] leading-relaxed">
-                Are you sure you want to remove <strong class="text-[#1D1D1F]" x-text="'Coach ' + unassignCoachName"></strong> from <strong class="text-[#780000]" x-text="unassignBatchNumber"></strong>?
-            </p>
+        <x-slot:footer>
+            <button type="button" @click="shareModalOpen = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="share-slot-form" class="btn-primary">Share slot</button>
+        </x-slot:footer>
+    </x-side-panel>
 
-            <form :action="unassignActionUrl" method="POST" class="space-y-4 pt-1">
-                @csrf
-                <input type="hidden" name="batch_id" :value="unassignBatchId">
-                <input type="hidden" name="coach_id" :value="unassignCoachId">
+    <!-- Unassign Coach Panel -->
+    <x-side-panel show="unassignModalOpen" role="alertdialog" title="Remove coach from batch">
+        <x-slot:eyebrow>Batch <span x-text="unassignBatchNumber"></span></x-slot:eyebrow>
+        <x-slot:description><span x-text="'Coach ' + unassignCoachName"></span></x-slot:description>
 
-                <div class="flex items-center justify-end gap-2 pt-3">
-                    <button type="button" @click="unassignModalOpen = false" class="btn-secondary px-4 py-2 text-sm font-semibold rounded-xl cursor-pointer">
-                        Cancel
-                    </button>
-                    <button type="submit" class="px-5 py-2 text-sm font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-2xs cursor-pointer transition-colors">
-                        Remove Coach
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <p class="text-[#3A3A3C]">
+            The coach is taken off this batch. You may need to assign another coach.
+        </p>
+
+        <form id="unassign-coach-form" :action="unassignActionUrl" method="POST">
+            @csrf
+            <input type="hidden" name="batch_id" :value="unassignBatchId">
+            <input type="hidden" name="coach_id" :value="unassignCoachId">
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="unassignModalOpen = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="unassign-coach-form" class="btn-danger">Remove coach</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

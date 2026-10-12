@@ -417,186 +417,108 @@
         </div>
     </div>
 
-    <!-- Reschedule Modal -->
-    <div x-show="openRescheduleModal" 
-         x-cloak 
-         role="dialog" 
-         aria-modal="true" 
-         aria-labelledby="reschedule-modal-title" 
-         @keydown.escape.window="openRescheduleModal = false" 
-         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border-l border-[#E5E5EA]" 
-             @click.outside="openRescheduleModal = false"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-x-full"
-             x-transition:enter-end="opacity-100 translate-x-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-x-0"
-             x-transition:leave-end="opacity-0 translate-x-full">
-            <div class="flex items-center justify-between pb-4">
+    <!-- Reschedule Panel -->
+    <x-side-panel show="openRescheduleModal" size="lg"
+                  :eyebrow="'Booking ' . $booking->booking_number"
+                  title="Reschedule your dive"
+                  description="Pick a new 2D1N date. We check the sea conditions for you.">
+        <form id="reschedule-form" action="{{ route('manage.reschedule', $booking->booking_number) }}" method="POST" @submit="submittingReschedule = true" class="space-y-5">
+            @csrf
+            <input type="hidden" name="pin" value="{{ $booking->pin }}">
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                    <h3 id="reschedule-modal-title" class="text-lg font-bold text-[#1D1D1F]">Reschedule Dive Dates</h3>
-                    <p class="text-sm text-[#6E6E73]">Pick a new 2D1N date pair.</p>
+                    <label for="reschedule-start-date" class="form-label form-label-required">New start date</label>
+                    <x-date-picker id="reschedule-start-date" name="requested_start_date" model="rescheduleStartDate" x-on:change="onRescheduleDateChange()" :min="date('Y-m-d', strtotime('+3 days'))" required />
                 </div>
-                <button type="button" 
-                        @click="openRescheduleModal = false" 
-                        aria-label="Close reschedule modal" 
-                        class="w-11 h-11 min-h-[44px] min-w-[44px] -mr-2 rounded-full flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F2F2F7] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
+                <div>
+                    <label for="reschedule-end-date" class="form-label text-[#6E6E73]">New end date (set for you)</label>
+                    <x-date-picker id="reschedule-end-date" name="requested_end_date" model="rescheduleEndDate" readonly required />
+                </div>
             </div>
 
-            <form action="{{ route('manage.reschedule', $booking->booking_number) }}" method="POST" @submit="submittingReschedule = true" class="space-y-4 text-sm">
-                @csrf
-                <input type="hidden" name="pin" value="{{ $booking->pin }}">
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label for="reschedule-start-date" class="block font-bold text-[#1D1D1F] mb-2">New Start Date <span class="text-[#D70015]">*</span></label>
-                        <x-date-picker id="reschedule-start-date" name="requested_start_date" model="rescheduleStartDate" x-on:change="onRescheduleDateChange()" :min="date('Y-m-d', strtotime('+3 days'))" required />
-                    </div>
-                    <div>
-                        <label for="reschedule-end-date" class="block font-bold text-[#6E6E73] mb-1">New End Date (Auto)</label>
-                        <x-date-picker id="reschedule-end-date" name="requested_end_date" model="rescheduleEndDate" readonly required />
-                    </div>
-                </div>
-
-                <!-- Weather Loading State -->
-                <div x-show="weatherLoading" x-cloak role="status" aria-live="polite" class="p-3.5 rounded-xl bg-[#F2F2F7] text-xs sm:text-sm text-[#1D1D1F] flex items-center gap-2">
-                    <svg class="animate-spin h-4 w-4 text-[#00C3D0] shrink-0" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                    <span class="font-medium text-[#1D1D1F]">Checking sea safety &amp; weather conditions for selected dates...</span>
-                </div>
-
-                <!-- Weather check (uses components/dive-safety/live-evaluation) -->
-                <template x-if="rescheduleForecast && rescheduleForecast.day1 && !weatherLoading">
-                    <x-dive-safety.live-evaluation forecast="rescheduleForecast" />
-                </template>
-
-                <div>
-                    <label for="reschedule-reason" class="block font-bold text-[#1D1D1F] mb-2">Reason for Rescheduling (Optional)</label>
-                    <textarea id="reschedule-reason" name="reason" rows="2" placeholder="e.g. Work schedule change" class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:outline-none text-sm text-[#1D1D1F] bg-white transition-colors"></textarea>
-                </div>
-
-                <div class="banner banner-warning">
-                    <strong>Note:</strong> On submission, your request status is set to <strong>Pending Approval</strong>. The camp will review coach availability and notify you via email.
-                </div>
-
-                <div class="flex items-center justify-end gap-3 pt-3">
-                    <button type="button" @click="openRescheduleModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">Cancel</button>
-                    <button type="submit" 
-                            :disabled="weatherLoading || (rescheduleForecast && !rescheduleForecast.is_bookable) || submittingReschedule" 
-                            class="btn-primary min-h-[44px] px-5 py-2.5 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        <span x-show="!submittingReschedule">Submit Reschedule Request</span>
-                        <span x-show="submittingReschedule" x-cloak class="inline-flex items-center gap-2">
-                            <svg class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                            <span>Submitting...</span>
-                        </span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Cancellation Modal -->
-    <div x-show="openCancelModal" 
-         x-cloak 
-         role="dialog" 
-         aria-modal="true" 
-         aria-labelledby="cancel-modal-title" 
-         @keydown.escape.window="openCancelModal = false" 
-         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-8 space-y-5 sm:space-y-6 shadow-2xl border-l border-[#E5E5EA]" 
-             @click.outside="openCancelModal = false"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-x-full"
-             x-transition:enter-end="opacity-100 translate-x-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-x-0"
-             x-transition:leave-end="opacity-0 translate-x-full">
-            <div class="flex items-center justify-between pb-4">
-                <div>
-                    <h3 id="cancel-modal-title" class="text-lg font-bold text-[#1D1D1F]">Request Booking Cancellation</h3>
-                    <p class="text-sm text-[#6E6E73]">Review your refund calculation according to camp policy.</p>
-                </div>
-                <button type="button" 
-                        @click="openCancelModal = false" 
-                        aria-label="Close cancellation modal" 
-                        class="w-11 h-11 min-h-[44px] min-w-[44px] -mr-2 rounded-full flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F2F2F7] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
+            <!-- Weather Loading State -->
+            <div x-show="weatherLoading" x-cloak role="status" aria-live="polite" class="flex items-center gap-2 rounded-xl bg-[#F2F2F7] p-3.5 text-[#1D1D1F]">
+                <svg class="h-4 w-4 shrink-0 animate-spin text-[#00C3D0]" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                <span class="font-medium">Checking sea safety and weather for these dates...</span>
             </div>
 
-            <form action="{{ route('manage.cancel', $booking->booking_number) }}" method="POST" @submit="submittingCancel = true" class="space-y-4 text-sm">
-                @csrf
-                <input type="hidden" name="pin" value="{{ $booking->pin }}">
+            <!-- Weather check (uses components/dive-safety/live-evaluation) -->
+            <template x-if="rescheduleForecast && rescheduleForecast.day1 && !weatherLoading">
+                <x-dive-safety.live-evaluation forecast="rescheduleForecast" />
+            </template>
 
-                <!-- Refund Calculation Breakdown -->
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-[#6E6E73]">Downpayment Paid:</span>
-                        <span class="font-bold text-[#1D1D1F]">₱{{ number_format($booking->downpayment_amount, 2) }}</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-[#6E6E73]">Days Before Dive Date:</span>
-                        <span class="font-bold text-[#1D1D1F]">{{ $policy['days_until_dive'] }} days</span>
-                    </div>
-                    <div class="flex justify-between border-t border-[#E5E5EA] pt-2">
-                        <span class="font-bold text-[#1D1D1F]">Calculated Refund Amount:</span>
-                        <span class="font-extrabold text-[#780000]">₱{{ number_format($policy['calculated_refund'], 2) }}</span>
-                    </div>
-                    <p class="text-sm text-[#6E6E73] mt-1">{{ $policy['cancel_message'] }}</p>
-                </div>
+            <div>
+                <label for="reschedule-reason" class="form-label">Reason (optional)</label>
+                <textarea id="reschedule-reason" name="reason" rows="2" placeholder="e.g. Work schedule change" class="form-textarea"></textarea>
+            </div>
 
-                <div>
-                    <label for="cancel-reason" class="block font-bold text-[#1D1D1F] text-sm mb-1.5">Reason for Cancellation</label>
-                    <textarea id="cancel-reason" name="reason" rows="2" placeholder="Please let us know why you need to cancel" class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:outline-none text-sm text-[#1D1D1F] bg-white transition-colors"></textarea>
-                </div>
+            <div class="banner banner-info">
+                Your request goes to the camp for approval. We will email you once a coach is confirmed for the new date.
+            </div>
+        </form>
 
-                <!-- Cancellation Confirmation Checkbox -->
-                <div class="pt-1">
-                    <label class="flex items-start gap-3 cursor-pointer p-2.5 min-h-[44px] rounded-xl hover:bg-[#F2F2F7] transition-colors select-none">
-                        <input type="checkbox" 
-                               x-ref="cancelCheck" 
-                               name="confirm_cancel_ack" 
-                               required 
-                               class="w-4.5 h-4.5 rounded text-[#780000] focus:ring-[#780000] mt-0.5 shrink-0 cursor-pointer">
-                        <span class="text-sm text-[#1D1D1F] leading-relaxed">
-                            I confirm that I want to cancel this booking and understand the refund amount will be reviewed by the camp. <span class="text-[#D70015]">*</span>
-                        </span>
-                    </label>
-                </div>
+        <x-slot:footer>
+            <button type="button" @click="openRescheduleModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="reschedule-form"
+                    :disabled="weatherLoading || (rescheduleForecast && !rescheduleForecast.is_bookable) || submittingReschedule"
+                    class="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+                <span x-show="!submittingReschedule">Send request</span>
+                <span x-show="submittingReschedule" x-cloak>Sending...</span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
 
-                <div class="flex items-center justify-end gap-3 pt-2">
-                    <button type="button" @click="openCancelModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">Keep My Booking</button>
-                    <button type="submit" 
-                            :disabled="submittingCancel"
-                            class="btn-danger min-h-[44px] px-5 py-2.5 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D70015] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        <span x-show="!submittingCancel">Confirm Cancellation Request</span>
-                        <span x-show="submittingCancel" x-cloak class="inline-flex items-center gap-2">
-                            <svg class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                            <span>Cancelling...</span>
-                        </span>
-                    </button>
-                </div>
-            </form>
+    <!-- Cancellation Panel -->
+    <x-side-panel show="openCancelModal" role="alertdialog"
+                  :eyebrow="'Booking ' . $booking->booking_number"
+                  title="Cancel your booking"
+                  description="Check your refund before you confirm.">
+        <div class="panel-context space-y-2">
+            <div class="flex justify-between gap-4">
+                <span class="text-[#6E6E73]">Downpayment paid</span>
+                <span class="font-bold">₱{{ number_format($booking->downpayment_amount, 2) }}</span>
+            </div>
+            <div class="flex justify-between gap-4">
+                <span class="text-[#6E6E73]">Days before your dive</span>
+                <span class="font-bold">{{ $policy['days_until_dive'] }} days</span>
+            </div>
+            <div class="flex justify-between gap-4 border-t border-[#D1D1D6] pt-2">
+                <span class="font-bold">Refund</span>
+                <span class="font-extrabold text-[#780000]">₱{{ number_format($policy['calculated_refund'], 2) }}</span>
+            </div>
+            <p class="text-[#6E6E73]">{{ $policy['cancel_message'] }}</p>
         </div>
-    </div>
+
+        <form id="cancel-booking-form" action="{{ route('manage.cancel', $booking->booking_number) }}" method="POST" @submit="submittingCancel = true" class="space-y-5">
+            @csrf
+            <input type="hidden" name="pin" value="{{ $booking->pin }}">
+
+            <div>
+                <label for="cancel-reason" class="form-label">Reason (optional)</label>
+                <textarea id="cancel-reason" name="reason" rows="2" placeholder="Let us know why you need to cancel" class="form-textarea"></textarea>
+            </div>
+
+            <label class="flex cursor-pointer select-none items-start gap-3">
+                <input type="checkbox"
+                       x-ref="cancelCheck"
+                       name="confirm_cancel_ack"
+                       required
+                       class="mt-0.5 h-4.5 w-4.5 shrink-0 cursor-pointer rounded text-[#780000] focus:ring-[#780000]">
+                <span class="leading-relaxed">
+                    I want to cancel this booking. I understand the camp reviews the refund amount. <span class="text-[#D70015]">*</span>
+                </span>
+            </label>
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openCancelModal = false" class="btn-secondary">Keep booking</button>
+            <button type="submit" form="cancel-booking-form" :disabled="submittingCancel" class="btn-danger disabled:cursor-not-allowed disabled:opacity-50">
+                <span x-show="!submittingCancel">Cancel booking</span>
+                <span x-show="submittingCancel" x-cloak>Cancelling...</span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

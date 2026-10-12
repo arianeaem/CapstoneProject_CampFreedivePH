@@ -271,48 +271,42 @@
         </div>
     </div>
 
-    <!-- Status Change Modal -->
-    <div x-show="openStatusModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-7 space-y-4 sm:space-y-5 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openStatusModal = false">
-            <div class="flex items-center justify-between pb-3">
-                <h3 class="text-lg font-bold text-[#1D1D1F]">Update Booking Status</h3>
-                <button type="button" @click="openStatusModal = false" aria-label="Close status modal" class="text-[#8E8E93] hover:text-[#1D1D1F] font-bold text-lg p-1">✕</button>
+    <!-- Status Change Panel -->
+    <x-side-panel show="openStatusModal"
+                  :eyebrow="'Booking ' . $booking->booking_number"
+                  title="Update booking status"
+                  :description="$booking->contact_name">
+        <form id="booking-status-form" action="{{ route('admin.bookings.status.update', $booking) }}" method="POST" class="space-y-4">
+            @csrf
+            @method('PATCH')
+
+            <div>
+                <label for="booking-new-status" class="form-label form-label-required">New status</label>
+                <select id="booking-new-status" name="status" required class="form-select w-full">
+                    <option value="confirmed" {{ $booking->status === 'confirmed' ? 'selected' : '' }}>Confirmed</option>
+                    <option value="completed" {{ $booking->status === 'completed' ? 'selected' : '' }}>Completed (Dive Completed)</option>
+                    <option value="rescheduled" {{ $booking->status === 'rescheduled' ? 'selected' : '' }}>Rescheduled</option>
+                    <option value="no_show" {{ $booking->status === 'no_show' ? 'selected' : '' }}>No-Show (Forfeits Downpayment)</option>
+                    <option value="cancelled_by_camp" {{ $booking->status === 'cancelled_by_camp' ? 'selected' : '' }}>Cancelled by Camp (Weather/Admin)</option>
+                    <option value="cancelled_by_guest" {{ $booking->status === 'cancelled_by_guest' ? 'selected' : '' }}>Cancelled by Participant</option>
+                </select>
             </div>
 
-            <form action="{{ route('admin.bookings.status.update', $booking) }}" method="POST" class="space-y-4 text-sm">
-                @csrf
-                @method('PATCH')
+            <div>
+                <label for="booking-status-note" class="form-label">Reason (optional)</label>
+                <textarea id="booking-status-note" name="note" rows="3" placeholder="Why is the status changing?" class="form-textarea"></textarea>
+            </div>
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">New Status <span class="text-[#780000]">*</span></label>
-                    <select name="status" required class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white font-medium">
-                        <option value="confirmed" {{ $booking->status === 'confirmed' ? 'selected' : '' }}>Confirmed</option>
-                        <option value="completed" {{ $booking->status === 'completed' ? 'selected' : '' }}>Completed (Dive Completed)</option>
-                        <option value="rescheduled" {{ $booking->status === 'rescheduled' ? 'selected' : '' }}>Rescheduled</option>
-                        <option value="no_show" {{ $booking->status === 'no_show' ? 'selected' : '' }}>No-Show (Forfeits Downpayment)</option>
-                        <option value="cancelled_by_camp" {{ $booking->status === 'cancelled_by_camp' ? 'selected' : '' }}>Cancelled by Camp (Weather/Admin)</option>
-                        <option value="cancelled_by_guest" {{ $booking->status === 'cancelled_by_guest' ? 'selected' : '' }}>Cancelled by Participant</option>
-                    </select>
-                </div>
+            <div class="banner banner-warning">
+                The change shows right away in the Coach Portal, batch schedule and reports. If you cancel, process the refund in <strong>Payments &amp; Refunds</strong>.
+            </div>
+        </form>
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Reason / Status Note</label>
-                    <textarea name="note" rows="3" placeholder="Explain why this status is being changed..." class="w-full px-3.5 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white"></textarea>
-                </div>
-
-                <div class="banner banner-warning">
-                    <strong>Note:</strong> Status changes propagate immediately to the Coach Portal, Batch schedule, and Reports. If setting to Cancelled, please process the refund via Payments & Refunds.
-                </div>
-
-                <div class="flex items-center justify-end gap-2.5 pt-3">
-                    <button type="button" @click="openStatusModal = false" class="btn-secondary px-4 py-2 text-sm font-semibold">Cancel</button>
-                    <button type="submit" class="btn-primary px-5 py-2 text-sm font-bold">
-                        Update Status
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <x-slot:footer>
+            <button type="button" @click="openStatusModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="booking-status-form" class="btn-primary">Update status</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

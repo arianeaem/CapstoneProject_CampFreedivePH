@@ -290,39 +290,30 @@
         {{ $rules->links() }}
     </div>
 
-    <!-- Soft Delete Confirmation Modal -->
-    <div x-show="deleteModal" 
-         x-cloak 
-         class="fixed inset-0 z-50 flex justify-end bg-black/40"
-         @keydown.escape.window="deleteModal = false">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-xl border-l border-[#E5E5EA]"
-             @click.away="deleteModal = false">
-            <div class="space-y-1.5">
-                <h3 class="text-lg font-bold text-[#1D1D1F]">Delete Pricing Rule?</h3>
-                <p class="text-sm text-[#6E6E73]">
-                    Are you sure you want to remove rule <strong class="text-[#1D1D1F]" x-text="ruleName"></strong>?
-                </p>
-                <template x-if="triggeredCount > 0">
-                    <div class="banner banner-warning mt-2">
-                        <strong>Notice:</strong> This rule has affected <span x-text="triggeredCount"></span> booking(s). It will be soft-deleted to preserve all past receipts and audit histories.
-                    </div>
-                </template>
-            </div>
+    <!-- Delete Pricing Rule Panel -->
+    <x-side-panel show="deleteModal" role="alertdialog" eyebrow="Pricing rule" title="Delete pricing rule">
+        <x-slot:description><span x-text="ruleName"></span></x-slot:description>
 
-            <div class="flex items-center justify-end gap-2">
-                <button type="button" @click="deleteModal = false" class="btn-secondary px-3.5 py-1.5 text-sm font-semibold">
-                    Cancel
-                </button>
+        <p class="text-[#3A3A3C]">
+            The rule stops applying to new bookings.
+        </p>
 
-                <form :action="deleteUrl" method="POST">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn-danger px-4 py-1.5 text-sm font-bold">
-                        Yes, Delete Rule
-                    </button>
-                </form>
+        <template x-if="triggeredCount > 0">
+            <div class="banner banner-info">
+                This rule was used in <strong x-text="triggeredCount"></strong> booking(s). Those past receipts and records stay as they are.
             </div>
-        </div>
+        </template>
+
+        <form id="delete-pricing-rule-form" :action="deleteUrl" method="POST">
+            @csrf
+            @method('DELETE')
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="deleteModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="delete-pricing-rule-form" class="btn-danger">Delete rule</button>
+        </x-slot:footer>
+    </x-side-panel>
     </div>
 
 </div>

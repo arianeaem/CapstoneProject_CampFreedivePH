@@ -177,44 +177,53 @@
         </div>
     </div>
 
-    <!-- Balance Settlement Modal -->
-    <div x-show="openBalanceModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openBalanceModal = false">
-            <h3 class="text-lg font-bold text-[#1D1D1F]">Record Balance Settlement</h3>
-            <p class="text-sm text-[#6E6E73]">
-                Collect remaining balance of <strong class="text-[#780000]">₱{{ number_format($payment->booking->balance_amount, 2) }}</strong> for Booking #{{ $payment->booking->booking_number }}.
-            </p>
-
-            <form action="{{ route('admin.payments.settle_balance', $payment) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-
+    <!-- Balance Settlement Panel -->
+    <x-side-panel show="openBalanceModal"
+                  :eyebrow="'Booking ' . $payment->booking->booking_number"
+                  title="Record balance payment"
+                  description="Log the remaining balance the participant paid at camp.">
+        <div class="panel-context">
+            <dl class="panel-meta">
                 <div>
-                    <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Amount to Settle (PHP) <span class="text-[#780000]">*</span></label>
-                    <input type="number" name="amount" value="{{ $payment->booking->balance_amount }}" step="0.01" min="1" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] focus:border-[#780000] text-sm text-[#1D1D1F] bg-white">
+                    <dt>Balance due</dt>
+                    <dd class="text-[#780000]">₱{{ number_format($payment->booking->balance_amount, 2) }}</dd>
                 </div>
-
                 <div>
-                    <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Payment Method <span class="text-[#780000]">*</span></label>
-                    <select name="payment_method" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
-                        <option value="cash" selected>Cash at Camp</option>
-                        <option value="gcash">GCash</option>
-                        <option value="bpi_bank_transfer">BPI Bank Transfer</option>
-                        <option value="maya">Maya</option>
-                    </select>
+                    <dt>Booked by</dt>
+                    <dd>{{ $payment->booking->contact_name }}</dd>
                 </div>
-
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] text-sm mb-2">Receipt / Reference (Optional)</label>
-                    <input type="text" name="transaction_id" placeholder="e.g. BAL-CASH-101" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
-                </div>
-
-                <div class="flex items-center justify-end gap-3 pt-3">
-                    <button type="button" @click="openBalanceModal = false" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
-                    <button type="submit" class="btn-primary px-5 py-2 text-sm font-bold">Save Settlement</button>
-                </div>
-            </form>
+            </dl>
         </div>
-    </div>
+
+        <form id="settle-balance-form" action="{{ route('admin.payments.settle_balance', $payment) }}" method="POST" class="space-y-4">
+            @csrf
+
+            <div>
+                <label for="settle-amount" class="form-label form-label-required">Amount received (PHP)</label>
+                <input id="settle-amount" type="number" name="amount" value="{{ $payment->booking->balance_amount }}" step="0.01" min="1" required class="form-input">
+            </div>
+
+            <div>
+                <label for="settle-method" class="form-label form-label-required">Payment method</label>
+                <select id="settle-method" name="payment_method" required class="form-select w-full">
+                    <option value="cash" selected>Cash at Camp</option>
+                    <option value="gcash">GCash</option>
+                    <option value="bpi_bank_transfer">BPI Bank Transfer</option>
+                    <option value="maya">Maya</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="settle-reference" class="form-label">Receipt or reference no. (optional)</label>
+                <input id="settle-reference" type="text" name="transaction_id" placeholder="e.g. BAL-CASH-101" class="form-input">
+            </div>
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openBalanceModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="settle-balance-form" class="btn-primary">Save payment</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

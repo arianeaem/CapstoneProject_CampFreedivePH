@@ -347,106 +347,68 @@
         </div>
     </div>
 
-    <!-- Emergency Release Request Modal -->
-    <div x-show="releaseModalOpen" 
-         x-cloak 
-         role="dialog"
-         aria-modal="true"
-         aria-labelledby="availability-release-modal-title"
-         @keydown.escape.window="releaseModalOpen = false"
-         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-6 shadow-2xl border-l border-[#E5E5EA] space-y-6 relative" 
-             @click.outside="releaseModalOpen = false"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-x-full"
-             x-transition:enter-end="opacity-100 translate-x-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-x-0"
-             x-transition:leave-end="opacity-0 translate-x-full">
-            
-            <div class="flex items-start justify-between border-b border-[#E5E5EA] pb-4">
-                <div>
-                    <h3 id="availability-release-modal-title" class="text-lg font-black text-[#1D1D1F]">Request Assignment Release</h3>
-                    <p class="text-sm font-semibold text-rose-600 mt-0.5">Emergency Staffing Request</p>
-                </div>
-                <button type="button" 
-                        @click="releaseModalOpen = false" 
-                        aria-label="Close release modal" 
-                        class="w-11 h-11 min-h-[44px] min-w-[44px] -mr-2 -mt-1 rounded-full flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F2F2F7] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
-
-            <template x-if="selectedAssignedDay">
-                <div class="space-y-4">
-                    <!-- Session Details -->
-                    <div class="p-4 rounded-xl bg-[#F2F2F7] space-y-2 text-sm shadow-2xs">
-                        <div class="flex items-center justify-between">
-                            <span class="font-bold text-[#1D1D1F]" x-text="selectedAssignedDay.batch?.batch_number || 'Dive Batch'"></span>
-                            <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold" x-text="selectedAssignedDay.students_count + ' Participant(s) Assigned'"></span>
+    <!-- Emergency Release Request Panel -->
+    <x-side-panel show="releaseModalOpen" size="lg"
+                  eyebrow="Emergency request"
+                  title="Ask to be released from a batch"
+                  description="The camp admin finds another coach for your participants.">
+        <template x-if="selectedAssignedDay">
+            <div class="space-y-5">
+                <div class="panel-context">
+                    <dl class="panel-meta">
+                        <div>
+                            <dt>Batch</dt>
+                            <dd x-text="selectedAssignedDay.batch?.batch_number || 'Dive batch'"></dd>
                         </div>
-                        <div><strong>Dive Date:</strong> <span x-text="selectedAssignedDay.date_str"></span></div>
-                        <div x-text="'Hours until dive departure: ' + selectedAssignedDay.hours_until_dive + 'h'"></div>
-                    </div>
-
-                    <div class="banner banner-warning space-y-2">
-                        <div class="font-bold">Emergency release requests are available at any time.</div>
-                        <p class="leading-relaxed">
-                            Submit the request as soon as possible so Camp Administration can arrange replacement staffing.
-                        </p>
-                    </div>
-
-                    <!-- Emergency Release Form -->
-                    <template x-if="selectedAssignedDay.can_request_release">
-                        <form action="{{ route('coach.availability.release') }}" method="POST" @submit="submittingRelease = true" class="space-y-4">
-                            @csrf
-                            <input type="hidden" name="batch_id" :value="selectedAssignedDay.batch?.id">
-                            <input type="hidden" name="dive_date" :value="selectedAssignedDay.date_str">
-
-                            <div class="space-y-1.5">
-                                <label for="emergency-release-reason" class="block text-sm font-bold text-[#1D1D1F]">
-                                    Reason for Emergency Release <span class="text-rose-500">*</span>
-                                </label>
-                                <textarea id="emergency-release-reason"
-                                          name="reason" 
-                                          rows="4" 
-                                          required 
-                                          placeholder="Please explain the emergency, illness, or unavoidable circumstance requiring reassignment..."
-                                          class="w-full text-sm rounded-xl border border-[#D1D1D6] focus:border-[#780000] focus:ring-[#780000] p-3"></textarea>
-                                <span class="text-sm text-[#8E8E93]">Your request will be submitted to Camp Admin for review and participant reassignment.</span>
-                            </div>
-
-                            <div class="flex items-center justify-end gap-2.5 pt-2">
-                                <button type="button" 
-                                        @click="releaseModalOpen = false" 
-                                        class="btn-secondary min-h-[44px] px-4 py-2 text-sm font-semibold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                                    Cancel
-                                </button>
-                                <button type="submit" 
-                                        :disabled="submittingRelease" 
-                                        class="btn-danger min-h-[44px] px-5 py-2 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D70015] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                                    <span x-show="!submittingRelease">Submit Release Request</span>
-                                    <span x-show="submittingRelease" x-cloak class="inline-flex items-center gap-2">
-                                        <svg class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                                        <span>Submitting...</span>
-                                    </span>
-                                </button>
-                            </div>
-                        </form>
-                    </template>
+                        <div>
+                            <dt>Dive date</dt>
+                            <dd x-text="selectedAssignedDay.date_str"></dd>
+                        </div>
+                        <div>
+                            <dt>Participants</dt>
+                            <dd x-text="selectedAssignedDay.students_count"></dd>
+                        </div>
+                        <div>
+                            <dt>Time until dive</dt>
+                            <dd x-text="selectedAssignedDay.hours_until_dive + ' hours'"></dd>
+                        </div>
+                    </dl>
                 </div>
-            </template>
 
-        </div>
-    </div>
+                <div class="banner banner-warning">
+                    You can send this at any time. Send it as early as possible so the camp can find a replacement.
+                </div>
+
+                <template x-if="selectedAssignedDay.can_request_release">
+                    <form id="availability-release-form" action="{{ route('coach.availability.release') }}" method="POST" @submit="submittingRelease = true">
+                        @csrf
+                        <input type="hidden" name="batch_id" :value="selectedAssignedDay.batch?.id">
+                        <input type="hidden" name="dive_date" :value="selectedAssignedDay.date_str">
+
+                        <label for="emergency-release-reason" class="form-label form-label-required">Reason</label>
+                        <textarea id="emergency-release-reason"
+                                  name="reason"
+                                  rows="4"
+                                  required
+                                  placeholder="e.g. Illness or a family emergency"
+                                  class="form-textarea"></textarea>
+                        <span class="form-hint">The camp admin reviews it and moves your participants.</span>
+                    </form>
+                </template>
+            </div>
+        </template>
+
+        <x-slot:footer>
+            <button type="button" @click="releaseModalOpen = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="availability-release-form"
+                    x-show="selectedAssignedDay?.can_request_release"
+                    :disabled="submittingRelease"
+                    class="btn-danger disabled:cursor-not-allowed disabled:opacity-50">
+                <span x-show="!submittingRelease">Send request</span>
+                <span x-show="submittingRelease" x-cloak>Sending...</span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 

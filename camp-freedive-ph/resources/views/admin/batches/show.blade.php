@@ -501,160 +501,132 @@
         </div>
     </div>
 
-    <!-- Cancel Batch Modal -->
-    <div x-show="openCancelModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div role="alertdialog" aria-modal="true" aria-labelledby="modal-cancel-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCancelModal = false">
-            <h3 id="modal-cancel-batch-title" class="text-lg font-bold text-[#780000]">Cancel Batch (by Camp)</h3>
-            <p class="text-sm text-[#6E6E73]">
-                Cancelling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will automatically update all connected bookings, set them to <strong>Cancelled by Camp</strong>, trigger <strong>100% force majeure refund eligibility</strong>, and send custom cancellation emails to all participants.
-            </p>
-
-            <form action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-                <input type="hidden" name="status" value="cancelled_by_camp">
-
-                <div>
-                    <label for="cancel-batch-note" class="block font-bold text-[#1D1D1F] mb-2">
-                        Camp Advisory / Cancellation Reason <span class="text-[#780000]">*</span>
-                    </label>
-                    <textarea id="cancel-batch-note" name="note" required rows="3" placeholder="e.g. Typhoon storm signal #2 in Batangas / Severe localized marine surge" class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all"></textarea>
-                </div>
-
-                <div class="flex items-center justify-end gap-2.5 pt-3">
-                    <button type="button" @click="openCancelModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">Close</button>
-                    <button type="submit" class="btn-danger min-h-[44px] px-5 py-2.5 text-sm font-bold shadow-2xs rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-rose-500">
-                        Confirm Cancellation
-                    </button>
-                </div>
-            </form>
+    <!-- Cancel Batch Panel -->
+    <x-side-panel show="openCancelModal" role="alertdialog"
+                  :eyebrow="'Batch ' . $batch->batch_number"
+                  title="Cancel this batch"
+                  :description="$batch->display_name . ' · ' . $batch->formatted_date_range">
+        <div class="banner banner-warning">
+            All bookings in this batch become <strong>Cancelled by Camp</strong>, get a <strong>100% refund</strong>, and each participant receives a cancellation email.
         </div>
-    </div>
 
-    <!-- Reschedule Batch Modal -->
-    <div x-show="openRescheduleModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-reschedule-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openRescheduleModal = false">
-            <h3 id="modal-reschedule-batch-title" class="text-lg font-bold text-[#1D1D1F]">Reschedule Batch (by Camp)</h3>
-            <p class="text-sm text-[#6E6E73]">
-                Rescheduling <strong class="text-[#1D1D1F]">{{ $batch->display_name }}</strong> will set connected bookings to <strong>Rescheduled</strong> and send a custom email notifying participants to pick their preferred new date through the <strong>Manage Booking</strong> portal.
-            </p>
+        <form id="cancel-batch-form" action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-4">
+            @csrf
+            <input type="hidden" name="status" value="cancelled_by_camp">
 
-            <form action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-                <input type="hidden" name="status" value="rescheduled">
+            <div>
+                <label for="cancel-batch-note" class="form-label form-label-required">Reason for cancelling</label>
+                <textarea id="cancel-batch-note" name="note" required rows="3" placeholder="e.g. Typhoon storm signal #2 in Batangas" class="form-textarea"></textarea>
+                <span class="form-hint">Participants see this in their email.</span>
+            </div>
+        </form>
 
-                <div>
-                    <label for="reschedule-batch-note" class="block font-bold text-[#1D1D1F] mb-2">
-                        Reschedule Explanation / Instructions <span class="text-[#780000]">*</span>
-                    </label>
-                    <textarea id="reschedule-batch-note" name="note" required rows="3" placeholder="e.g. Venue maintenance on resort / Weather shift. Please choose a new weekend." class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all"></textarea>
-                </div>
+        <x-slot:footer>
+            <button type="button" @click="openCancelModal = false" class="btn-secondary">Keep batch</button>
+            <button type="submit" form="cancel-batch-form" class="btn-danger">Cancel batch</button>
+        </x-slot:footer>
+    </x-side-panel>
 
-                <div class="flex items-center justify-end gap-2.5 pt-3">
-                    <button type="button" @click="openRescheduleModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">Close</button>
-                    <button type="submit" class="btn-primary min-h-[44px] px-5 py-2.5 text-sm font-bold shadow-2xs rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                        Confirm Batch Reschedule
-                    </button>
-                </div>
-            </form>
+    <!-- Reschedule Batch Panel -->
+    <x-side-panel show="openRescheduleModal"
+                  :eyebrow="'Batch ' . $batch->batch_number"
+                  title="Reschedule this batch"
+                  :description="$batch->display_name . ' · ' . $batch->formatted_date_range">
+        <div class="banner banner-info">
+            All bookings in this batch become <strong>Rescheduled</strong>. Each participant gets an email asking them to pick a new date in <strong>Manage Booking</strong>.
         </div>
-    </div>
 
-    <!-- Move Booking Modal -->
-    <div x-show="openMoveModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-move-booking-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openMoveModal = false">
-            <h3 id="modal-move-booking-title" class="text-lg font-bold text-[#1D1D1F]">Move Booking to Another Batch</h3>
-            <p class="text-sm text-[#6E6E73]">
-                Reassign booking <strong class="text-[#780000] font-mono" x-text="selectedBookingNumber"></strong> to another scheduled 2D1N batch or unbatch it.
-            </p>
+        <form id="reschedule-batch-form" action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-4">
+            @csrf
+            <input type="hidden" name="status" value="rescheduled">
 
-            <form action="{{ route('admin.batches.move_booking', $batch) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-                <input type="hidden" name="booking_id" :value="selectedBookingId">
+            <div>
+                <label for="reschedule-batch-note" class="form-label form-label-required">Message to participants</label>
+                <textarea id="reschedule-batch-note" name="note" required rows="3" placeholder="e.g. Resort maintenance. Please choose a new weekend." class="form-textarea"></textarea>
+                <span class="form-hint">Explain why and what they should do next.</span>
+            </div>
+        </form>
 
-                <div>
-                    <label for="move-target-batch-id" class="block font-bold text-[#1D1D1F] mb-2">Target Batch</label>
-                    <select id="move-target-batch-id" name="target_batch_id" class="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
-                        <option value="">-- Remove from Batch (Unbatch) --</option>
-                        @foreach($otherBatches as $ob)
-                            <option value="{{ $ob->id }}">
-                                {{ $ob->display_name }} ({{ $ob->formatted_date_range }})
-                            </option>
-                        @endforeach
-                    </select>
-                </div>
+        <x-slot:footer>
+            <button type="button" @click="openRescheduleModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="reschedule-batch-form" class="btn-primary">Reschedule batch</button>
+        </x-slot:footer>
+    </x-side-panel>
 
-                <div>
-                    <label for="move-reason" class="block font-bold text-[#1D1D1F] mb-2">Reason / Note</label>
-                    <input id="move-reason" type="text" name="reason" placeholder="e.g. Correcting booking grouping misassignment" class="w-full min-h-[44px] px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all">
-                </div>
+    <!-- Move Booking Panel -->
+    <x-side-panel show="openMoveModal" title="Move booking to another batch">
+        <x-slot:eyebrow>Booking <span x-text="selectedBookingNumber"></span></x-slot:eyebrow>
+        <x-slot:description>Pick another 2D1N batch, or remove the booking from any batch.</x-slot:description>
 
-                <div class="flex items-center justify-end gap-2.5 pt-3">
-                    <button type="button" @click="openMoveModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">Cancel</button>
-                    <button type="submit" class="btn-primary min-h-[44px] px-5 py-2.5 text-sm font-bold shadow-2xs rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                        Confirm Move
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <form id="move-booking-form" action="{{ route('admin.batches.move_booking', $batch) }}" method="POST" class="space-y-4">
+            @csrf
+            <input type="hidden" name="booking_id" :value="selectedBookingId">
 
-    <!-- Complete Batch Modal -->
-    <div x-show="openCompleteModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-complete-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openCompleteModal = false">
-            <div class="flex items-center gap-3">
-                <div>
-                    <h3 id="modal-complete-batch-title" class="text-lg font-bold text-[#1D1D1F]">Mark Batch as Completed</h3>
-                    <p class="text-xs text-[#6E6E73]">{{ $batch->batch_number }} &bull; {{ $batch->formatted_date_range }}</p>
-                </div>
+            <div>
+                <label for="move-target-batch-id" class="form-label">New batch</label>
+                <select id="move-target-batch-id" name="target_batch_id" class="form-select w-full">
+                    <option value="">Remove from batch (no batch)</option>
+                    @foreach($otherBatches as $ob)
+                        <option value="{{ $ob->id }}">
+                            {{ $ob->display_name }} ({{ $ob->formatted_date_range }})
+                        </option>
+                    @endforeach
+                </select>
             </div>
 
-            <p class="text-sm text-[#6E6E73]">
-                Marking this batch as <strong class="text-[#1D1D1F]">Completed</strong> will conclude the 2D1N dive schedule and transition active connected bookings to completed status.
-            </p>
-
-            <form action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-                <input type="hidden" name="status" value="completed">
-                <input type="hidden" name="note" value="2D1N dive schedule concluded successfully.">
-
-                <div class="flex items-center justify-end gap-2.5 pt-3">
-                    <button type="button" @click="openCompleteModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">Cancel</button>
-                    <button type="submit" class="btn-primary min-h-[44px] px-5 py-2.5 text-sm font-bold shadow-2xs rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                        Confirm & Complete
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Reactivate Batch Modal -->
-    <div x-show="openReactivateModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div role="dialog" aria-modal="true" aria-labelledby="modal-reactivate-batch-title" class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openReactivateModal = false">
-            <div class="flex items-center gap-3">
-                <div>
-                    <h3 id="modal-reactivate-batch-title" class="text-lg font-bold text-[#1D1D1F]">Reactivate Batch</h3>
-                    <p class="text-xs text-[#6E6E73]">{{ $batch->batch_number }} &bull; {{ $batch->formatted_date_range }}</p>
-                </div>
+            <div>
+                <label for="move-reason" class="form-label">Reason (optional)</label>
+                <input id="move-reason" type="text" name="reason" placeholder="e.g. Booking was put in the wrong batch" class="form-input">
             </div>
+        </form>
 
-            <p class="text-sm text-[#6E6E73]">
-                Are you sure you want to reactivate <strong class="text-[#1D1D1F]">{{ $batch->batch_number }}</strong> ({{ $batch->formatted_date_range }}) to <strong class="text-emerald-700 font-bold">Confirmed</strong> status? This will reopen the batch for schedule and roster operations.
-            </p>
+        <x-slot:footer>
+            <button type="button" @click="openMoveModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="move-booking-form" class="btn-primary">Move booking</button>
+        </x-slot:footer>
+    </x-side-panel>
 
-            <form action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-3 text-sm">
-                @csrf
-                <input type="hidden" name="status" value="confirmed">
-                <input type="hidden" name="note" value="Reactivated batch to Confirmed status.">
+    <!-- Complete Batch Panel -->
+    <x-side-panel show="openCompleteModal"
+                  :eyebrow="'Batch ' . $batch->batch_number"
+                  title="Mark batch as completed"
+                  :description="$batch->display_name . ' · ' . $batch->formatted_date_range">
+        <p class="text-[#3A3A3C]">
+            This closes the dive schedule. All active bookings in this batch become <strong>Completed</strong>.
+        </p>
 
-                <div class="flex items-center justify-end gap-2.5 pt-3">
-                    <button type="button" @click="openReactivateModal = false" class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">Cancel</button>
-                    <button type="submit" class="btn-primary min-h-[44px] px-5 py-2.5 text-sm font-bold shadow-2xs rounded-xl inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                        Confirm Reactivation
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <form id="complete-batch-form" action="{{ route('admin.batches.update_status', $batch) }}" method="POST">
+            @csrf
+            <input type="hidden" name="status" value="completed">
+            <input type="hidden" name="note" value="2D1N dive schedule concluded successfully.">
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openCompleteModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="complete-batch-form" class="btn-primary">Mark completed</button>
+        </x-slot:footer>
+    </x-side-panel>
+
+    <!-- Reactivate Batch Panel -->
+    <x-side-panel show="openReactivateModal"
+                  :eyebrow="'Batch ' . $batch->batch_number"
+                  title="Reactivate batch"
+                  :description="$batch->display_name . ' · ' . $batch->formatted_date_range">
+        <p class="text-[#3A3A3C]">
+            The batch goes back to <strong>Confirmed</strong> and reopens for scheduling and roster changes.
+        </p>
+
+        <form id="reactivate-batch-form" action="{{ route('admin.batches.update_status', $batch) }}" method="POST">
+            @csrf
+            <input type="hidden" name="status" value="confirmed">
+            <input type="hidden" name="note" value="Reactivated batch to Confirmed status.">
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openReactivateModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="reactivate-batch-form" class="btn-primary">Reactivate batch</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

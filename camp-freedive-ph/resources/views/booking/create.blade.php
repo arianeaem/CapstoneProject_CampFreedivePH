@@ -1752,57 +1752,18 @@
 
     </main>
 
-    <!-- Session Expired In-Page Modal Dialog -->
-    <div x-show="sessionExpired" 
-         x-cloak
-         role="dialog"
-         aria-modal="true"
-         aria-labelledby="session-expired-title"
-         aria-describedby="session-expired-desc"
-         class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 sm:p-7 shadow-2xl text-center space-y-4 relative border-l border-[#E5E5EA]"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-x-full"
-             x-transition:enter-end="opacity-100 translate-x-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-x-0"
-             x-transition:leave-end="opacity-0 translate-x-full">
-            
-            <!-- Warning Icon -->
-            <div class="w-14 h-14 mx-auto rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-                <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-            </div>
-
-            <!-- Title & Description -->
-            <div class="space-y-2">
-                <h3 id="session-expired-title" class="text-lg sm:text-xl font-black text-[#1D1D1F] tracking-tight">
-                    Session Expired
-                </h3>
-                <p id="session-expired-desc" class="text-xs sm:text-sm text-[#6E6E73] leading-relaxed">
-                    Your 15-minute reservation hold has expired. To maintain fair slot availability for all campers, your session needs to restart.
-                </p>
-            </div>
-
-            <!-- Action Button -->
-            <div class="pt-2">
-                <button type="button"
-                        @click="restartSession()"
-                        class="w-full min-h-[44px] py-3 px-5 rounded-xl font-extrabold text-sm text-center flex items-center justify-center bg-[#780000] hover:bg-[#5E0000] active:scale-[0.98] text-white shadow-sm transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2">
-                    Restart Session
-                </button>
-            </div>
+    <!-- Session Expired Panel (must act, so it cannot be dismissed) -->
+    <x-side-panel show="sessionExpired" :dismissible="false" role="alertdialog"
+                  eyebrow="Booking"
+                  title="Your session expired">
+        <div class="banner banner-warning">
+            Your slot was held for 15 minutes and that time has run out. Restart to check the latest availability and continue booking.
         </div>
-    </div>
+
+        <x-slot:footer>
+            <button type="button" @click="restartSession()" class="btn-primary">Restart booking</button>
+        </x-slot:footer>
+    </x-side-panel>
 </div>
 @endsection
 

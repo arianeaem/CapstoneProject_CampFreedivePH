@@ -378,86 +378,82 @@
         {{ $users->links() }}
     </div>
 
-    <!-- Create Staff Account Modal -->
-    <div x-show="openAddModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openAddModal = false">
-            <div>
-                <h3 class="text-lg font-bold text-[#1D1D1F]">Create Staff Account</h3>
-                <p class="text-sm text-[#6E6E73] mt-0.5">Add a new coach or staff member and set up their login credentials.</p>
+    <!-- Create Staff Account Panel -->
+    <x-side-panel show="openAddModal" size="lg"
+                  eyebrow="Staff"
+                  title="Create staff account"
+                  description="Add a coach or staff member and set up their login.">
+        <form id="create-staff-form" action="{{ route('admin.users.store') }}" method="POST" class="space-y-4">
+            @csrf
+
+            <div x-data="{ noMiddleName: false }" class="space-y-4">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                        <label for="staff-first-name" class="form-label form-label-required">First name</label>
+                        <input id="staff-first-name" type="text" name="first_name" required placeholder="e.g. Maria" class="form-input">
+                    </div>
+                    <div>
+                        <label for="staff-middle-name" class="form-label">Middle name (optional)</label>
+                        <input id="staff-middle-name" type="text" name="middle_name" :disabled="noMiddleName" placeholder="Full middle name" class="form-input disabled:bg-[#F2F2F7] disabled:text-[#8E8E93]">
+                        <label class="mt-1.5 inline-flex cursor-pointer items-center gap-1.5 text-sm text-[#6E6E73]">
+                            <input type="checkbox" name="no_middle_name" value="1" x-model="noMiddleName" class="rounded border-[#D1D1D6] text-[#780000] focus:ring-[#780000]">
+                            <span>No legal middle name</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div class="sm:col-span-2">
+                        <label for="staff-last-name" class="form-label form-label-required">Last name</label>
+                        <input id="staff-last-name" type="text" name="last_name" required placeholder="e.g. De la Cruz" class="form-input">
+                    </div>
+                    <div>
+                        <label for="staff-suffix" class="form-label">Suffix (optional)</label>
+                        <select id="staff-suffix" name="suffix" class="form-select w-full">
+                            <option value="">None</option>
+                            <option value="Jr.">Jr.</option>
+                            <option value="Sr.">Sr.</option>
+                            <option value="II">II</option>
+                            <option value="III">III</option>
+                            <option value="IV">IV</option>
+                            <option value="V">V</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
-            <form action="{{ route('admin.users.store') }}" method="POST" class="space-y-3.5 text-sm">
-                @csrf
+            <div>
+                <label for="staff-email" class="form-label form-label-required">Email (used to sign in)</label>
+                <input id="staff-email" type="email" name="email" required placeholder="name@campfreedive.ph" class="form-input">
+            </div>
 
-                <div x-data="{ noMiddleName: false }">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                        <div>
-                            <label class="block font-bold text-[#1D1D1F] mb-1.5">First Name <span class="text-[#780000]">*</span></label>
-                            <input type="text" name="first_name" required placeholder="e.g. Maria Ma." class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-[#1D1D1F] mb-1.5">Middle Name <span class="text-xs font-normal text-[#6E6E73]">(Optional)</span></label>
-                            <input type="text" name="middle_name" :disabled="noMiddleName" placeholder="Full middle name" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white disabled:bg-gray-100 disabled:text-gray-400">
-                            <label class="inline-flex items-center gap-1.5 mt-1.5 text-xs text-[#6E6E73] cursor-pointer">
-                                <input type="checkbox" name="no_middle_name" value="1" x-model="noMiddleName" class="rounded border-[#D1D1D6] text-[#780000] focus:ring-[#780000]">
-                                <span>I do not have a legal middle name</span>
-                            </label>
-                        </div>
-                    </div>
+            <div>
+                <label for="staff-phone" class="form-label form-label-required">Phone number</label>
+                <input id="staff-phone" type="tel" name="phone" required placeholder="0917 123 4567" class="form-input">
+            </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div class="sm:col-span-2">
-                            <label class="block font-bold text-[#1D1D1F] mb-1.5">Last Name <span class="text-[#780000]">*</span></label>
-                            <input type="text" name="last_name" required placeholder="e.g. Santos-Concepcion or De la Cruz" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
-                        </div>
-                        <div>
-                            <label class="block font-bold text-[#1D1D1F] mb-1.5">Suffix <span class="text-xs font-normal text-[#6E6E73]">(Optional)</span></label>
-                            <select name="suffix" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
-                                <option value="">None</option>
-                                <option value="Jr.">Jr.</option>
-                                <option value="Sr.">Sr.</option>
-                                <option value="II">II</option>
-                                <option value="III">III</option>
-                                <option value="IV">IV</option>
-                                <option value="V">V</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
+            <div>
+                <label for="staff-role" class="form-label form-label-required">Role</label>
+                <select id="staff-role" name="role" required class="form-select w-full">
+                    <option value="coach" selected>Freediving Coach (Coach Portal Access)</option>
+                    @if($currentUser->isOwner())
+                        <option value="admin">Camp Admin (Operations & Booking Coordinator)</option>
+                    @endif
+                </select>
+            </div>
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Email Address (Login Username) <span class="text-[#780000]">*</span></label>
-                    <input type="email" name="email" required placeholder="name@campfreedive.ph" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
-                </div>
+            <div>
+                <label for="staff-temp-password" class="form-label">Temporary password (optional)</label>
+                <input id="staff-temp-password" type="text" name="temp_password" placeholder="Leave blank to generate one" class="form-input">
+                <span class="form-hint">They will be asked to change it the first time they sign in.</span>
+            </div>
+        </form>
 
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Contact Phone Number <span class="text-[#780000]">*</span></label>
-                    <input type="tel" name="phone" required placeholder="0917 123 4567" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
-                </div>
-
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Assigned Staff Role <span class="text-[#780000]">*</span></label>
-                    <select name="role" required class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white font-medium">
-                        <option value="coach" selected>Freediving Coach (Coach Portal Access)</option>
-                        @if($currentUser->isOwner())
-                            <option value="admin">Camp Admin (Operations & Booking Coordinator)</option>
-                        @endif
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block font-bold text-[#1D1D1F] mb-1.5">Temporary Initial Password (Optional)</label>
-                    <input type="text" name="temp_password" placeholder="Leave blank to auto-generate secure password" class="w-full px-3 py-2 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white">
-                    <span class="text-sm text-[#6E6E73] mt-1 block">Staff member will be prompted to change password on first login.</span>
-                </div>
-
-                <div class="flex items-center justify-end gap-2 pt-3">
-                    <button type="button" @click="openAddModal = false" class="btn-secondary px-3.5 py-1.5 text-sm">Cancel</button>
-                    <button type="submit" class="btn-primary px-4 py-1.5 text-sm font-bold shadow-2xs">Create Staff Account</button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <x-slot:footer>
+            <button type="button" @click="openAddModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="create-staff-form" class="btn-primary">Create account</button>
+        </x-slot:footer>
+    </x-side-panel>
 
     <!-- ==================================================================== -->
     <!-- NEWLY PROVISIONED / RESET CREDENTIALS MODAL -->
@@ -473,162 +469,86 @@
             . "Temporary Password: " . ($creds['temp_password'] ?? '') . "\n\n"
             . "(Note: You will be required to change your temporary password upon your first login.)";
     @endphp
-    <div x-show="showCredentialsModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-6 sm:p-7 space-y-5 shadow-2xl border-l border-[#E5E5EA] relative" @click.outside="showCredentialsModal = false">
-            
-            <!-- Modal Header -->
-            <div class="flex items-start justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
-                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                    </div>
-                    <div>
-                        <h3 class="text-base sm:text-lg font-extrabold text-[#1D1D1F]">
-                            {{ !empty($creds['is_reset']) ? 'Password Reset Successfully' : 'Account Provisioned Successfully' }}
-                        </h3>
-                        <p class="text-sm text-[#6E6E73]">Copy and share these initial login credentials with the staff member.</p>
-                    </div>
-                </div>
-                <button type="button" @click="showCredentialsModal = false" aria-label="Close credentials modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
-            </div>
-
-            <!-- Credentials Box -->
-            <div class="bg-[#F2F2F7] rounded-xl p-4 space-y-3.5">
-                
-                <!-- Staff Info -->
-                <div class="flex items-center justify-between pb-3 border-b border-[#E5E5EA]">
-                    <div>
-                        <span class="text-sm text-[#6E6E73] block">Staff Name</span>
-                        <strong class="text-sm font-bold text-[#1D1D1F]">{{ $creds['name'] }}</strong>
-                    </div>
-                    <span class="px-2.5 py-0.5 rounded-full text-sm font-bold bg-[#F2F2F7] text-[#1D1D1F]">
-                        {{ $creds['role_label'] }}
-                    </span>
-                </div>
-
-                <!-- Username / Email Field -->
-                <div>
-                    <label class="block text-sm font-bold text-[#6E6E73] uppercase tracking-wider mb-1.5">Email (Username)</label>
-                    <div class="flex items-center gap-2">
-                        <input type="text" 
-                               readonly 
-                               value="{{ $creds['email'] }}" 
-                               class="w-full px-3 py-2 rounded-lg border border-[#D1D1D6] bg-white font-mono text-sm text-[#1D1D1F] select-all">
-                        <button type="button" 
-                                @click="copyToClipboard('{{ addslashes($creds['email']) }}', 'email')" 
-                                class="btn-secondary px-3 py-2 text-sm font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer">
-                            <span x-text="copiedEmail ? 'Copied!' : 'Copy'"></span>
-                            <img src="{{ asset('icons/icons8-copy-60.png') }}" class="w-4.5 h-4.5 object-contain shrink-0" alt="" aria-hidden="true" x-show="!copiedEmail">
-                            <svg x-show="copiedEmail" class="w-4.5 h-4.5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Temporary Password Field -->
-                <div>
-                    <div class="flex items-center justify-between mb-1">
-                        <label class="text-sm font-bold text-[#6E6E73] uppercase tracking-wider">Temporary Password</label>
-                        <button type="button" 
-                                @click="showPassword = !showPassword" 
-                                class="text-sm font-semibold text-[#780000] hover:underline cursor-pointer">
-                            <span x-text="showPassword ? 'Hide' : 'Reveal'"></span>
-                        </button>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input :type="showPassword ? 'text' : 'password'" 
-                               readonly 
-                               value="{{ $creds['temp_password'] }}" 
-                               class="w-full px-3 py-2 rounded-lg border border-[#D1D1D6] bg-white font-mono text-sm text-[#1D1D1F] font-bold tracking-wider select-all">
-                        <button type="button" 
-                                @click="copyToClipboard('{{ addslashes($creds['temp_password']) }}', 'password')" 
-                                class="btn-secondary px-3 py-2 text-sm font-bold whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer">
-                            <span x-text="copiedPassword ? 'Copied!' : 'Copy'"></span>
-                            <img src="{{ asset('icons/icons8-copy-60.png') }}" class="w-4.5 h-4.5 object-contain shrink-0" alt="" aria-hidden="true" x-show="!copiedPassword">
-                            <svg x-show="copiedPassword" class="w-4.5 h-4.5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Login URL -->
-                <div>
-                    <label class="block text-sm font-bold text-[#6E6E73] uppercase tracking-wider mb-1.5">Login Portal</label>
-                    <span class="block px-3 py-2 rounded-lg border border-[#E5E5EA] bg-white text-sm font-mono text-[#6E6E73] truncate">
-                        {{ $creds['login_url'] }}
-                    </span>
-                </div>
-
-            </div>
-
-            <!-- Notice & Instructions -->
-            <div class="banner banner-warning flex items-start gap-2.5">
-                <div class="space-y-0.5 leading-relaxed">
-                    <strong class="font-bold block">First Login Password Change Required</strong>
-                    <span>When logging in with this temporary password, the system will immediately require the user to set a permanent private password.</span>
-                </div>
-            </div>
-
-            <!-- Action Controls -->
-            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-[#E5E5EA]">
-                <button type="button" 
-                        @click="copyToClipboard({{ json_encode($fullDetails) }}, 'all')" 
-                        class="w-full sm:w-auto btn-primary px-4 py-2.5 text-sm font-bold flex items-center justify-center gap-2 shadow-2xs cursor-pointer">
-                    <img src="{{ asset('icons/icons8-copy-60.png') }}" class="w-5 h-5 object-contain brightness-0 invert shrink-0" alt="" aria-hidden="true" x-show="!copiedAll">
-                    <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" x-show="copiedAll" x-cloak><polyline points="20 6 9 17 4 12"/></svg>
-                    <span x-text="copiedAll ? 'All Credentials Copied!' : 'Copy Complete Login Details'"></span>
-                </button>
-
-                <button type="button" 
-                        @click="showCredentialsModal = false" 
-                        class="w-full sm:w-auto btn-secondary px-4 py-2 text-sm font-bold cursor-pointer">
-                    Done
-                </button>
-            </div>
-
+    <x-side-panel show="showCredentialsModal" size="lg"
+                  :eyebrow="$creds['name'] . ' · ' . $creds['role_label']"
+                  :title="!empty($creds['is_reset']) ? 'Password reset' : 'Account created'"
+                  description="Copy these login details and send them to the staff member.">
+        <div class="banner banner-success">
+            {{ !empty($creds['is_reset']) ? 'The password was reset.' : 'The account is ready.' }} They must change this temporary password the first time they sign in.
         </div>
-    </div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="cred-email" class="form-label">Email (used to sign in)</label>
+                <div class="flex items-center gap-2">
+                    <input id="cred-email" type="text" readonly value="{{ $creds['email'] }}" class="form-input font-mono select-all">
+                    <button type="button"
+                            @click="copyToClipboard('{{ addslashes($creds['email']) }}', 'email')"
+                            class="btn-secondary shrink-0 whitespace-nowrap">
+                        <span x-text="copiedEmail ? 'Copied!' : 'Copy'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <div class="mb-2 flex items-center justify-between">
+                    <label for="cred-password" class="form-label mb-0">Temporary password</label>
+                    <button type="button" @click="showPassword = !showPassword" class="cursor-pointer text-sm font-semibold text-[#780000] hover:underline">
+                        <span x-text="showPassword ? 'Hide' : 'Show'"></span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input id="cred-password" :type="showPassword ? 'text' : 'password'" readonly value="{{ $creds['temp_password'] }}" class="form-input font-mono font-bold tracking-wider select-all">
+                    <button type="button"
+                            @click="copyToClipboard('{{ addslashes($creds['temp_password']) }}', 'password')"
+                            class="btn-secondary shrink-0 whitespace-nowrap">
+                        <span x-text="copiedPassword ? 'Copied!' : 'Copy'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <span class="form-label">Sign-in page</span>
+                <span class="block truncate rounded-xl border border-[#E5E5EA] bg-[#F2F2F7] px-3.5 py-2.5 font-mono text-sm text-[#6E6E73]">
+                    {{ $creds['login_url'] }}
+                </span>
+            </div>
+        </div>
+
+        <x-slot:footer>
+            <button type="button" @click="showCredentialsModal = false" class="btn-secondary">Done</button>
+            <button type="button" @click="copyToClipboard({{ json_encode($fullDetails) }}, 'all')" class="btn-primary">
+                <span x-text="copiedAll ? 'Copied!' : 'Copy all details'"></span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
     @endif
 
-    <!-- ==================================================================== -->
-    <!-- DELETE USER CONFIRMATION MODAL -->
-    <!-- ==================================================================== -->
-    <div x-show="openDeleteModal" x-cloak class="fixed inset-0 z-50 bg-black/40 flex justify-end">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-md w-full p-6 sm:p-7 space-y-4 shadow-2xl border-l border-[#E5E5EA]" @click.outside="openDeleteModal = false">
-            
-            <div class="flex items-start justify-between">
-                <div class="flex items-center gap-3">
-                    <div>
-                        <h3 class="text-base sm:text-lg font-extrabold text-[#780000]">Remove Staff Account</h3>
-                        <p class="text-sm text-[#6E6E73]">The account is closed, but nothing is deleted.</p>
-                    </div>
-                </div>
-                <button type="button" @click="openDeleteModal = false" aria-label="Close delete modal" class="text-lg font-bold text-[#8E8E93] hover:text-[#1D1D1F]">✕</button>
-            </div>
+    <!-- Remove Staff Account Panel -->
+    <x-side-panel show="openDeleteModal" role="alertdialog" eyebrow="Staff account" title="Remove account">
+        <x-slot:description><span x-text="deleteUser.name"></span> · <span x-text="deleteUser.email"></span></x-slot:description>
 
-            <div class="space-y-3 text-sm">
-                <p class="text-[#1D1D1F]">
-                    Remove the account for <strong x-text="deleteUser.name" class="text-[#780000]"></strong> (<span x-text="deleteUser.email" class="font-mono"></span>)?
-                </p>
-
-                <ul class="p-3 bg-[#F2F2F7] rounded-xl text-[#3A3A3C] text-sm space-y-1 list-disc pl-8">
-                    <li>They can no longer sign in.</li>
-                    <li>Their records (bookings, dives coached, history) are <strong>kept</strong>.</li>
-                    <li>They will get an email saying their account was removed.</li>
-                    <li>Coaches with upcoming batches must have their participants reassigned first.</li>
-                    <li>You can restore the account later from the <strong>Removed</strong> filter.</li>
-                </ul>
-            </div>
-
-            <form :action="deleteUser.url" method="POST" class="flex items-center justify-end gap-2">
-                @csrf
-                @method('DELETE')
-                <button type="button" @click="openDeleteModal = false" class="btn-secondary px-3.5 py-2 text-sm font-semibold cursor-pointer">Cancel</button>
-                <button type="submit" class="btn-danger px-4 py-2 text-sm font-bold shadow-2xs cursor-pointer">
-                    Remove Account
-                </button>
-            </form>
-
+        <div class="panel-context">
+            <p class="panel-section-title">What happens</p>
+            <ul class="list-disc space-y-1 pl-5 text-[#3A3A3C]">
+                <li>They can no longer sign in.</li>
+                <li>Their records (bookings, dives coached, history) are <strong>kept</strong>.</li>
+                <li>They get an email saying their account was removed.</li>
+                <li>Coaches with upcoming batches must have their participants moved first.</li>
+                <li>You can restore the account later from the <strong>Removed</strong> filter.</li>
+            </ul>
         </div>
-    </div>
+
+        <form id="remove-user-form" :action="deleteUser.url" method="POST">
+            @csrf
+            @method('DELETE')
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openDeleteModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="remove-user-form" class="btn-danger">Remove account</button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection

@@ -366,161 +366,69 @@
 
     <!-- Release Request Modal -->
     @if($nextSessionData && $nextSessionData['can_request_release'])
-    <div x-show="openReleaseModal" 
-         x-cloak 
-         role="dialog" 
-         aria-modal="true" 
-         aria-labelledby="release-modal-title"
-         @keydown.escape.window="openReleaseModal = false"
-         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" 
-             @click.outside="openReleaseModal = false"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-x-full"
-             x-transition:enter-end="opacity-100 translate-x-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-x-0"
-             x-transition:leave-end="opacity-0 translate-x-full">
-            <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1">
-                    <h3 id="release-modal-title" class="text-base sm:text-lg font-extrabold text-[#1D1D1F]">Request Release from Assignment</h3>
-                    <p class="text-sm text-[#6E6E73]">
-                        <span class="font-bold text-[#1D1D1F]">{{ $nextSessionData['batch']->batch_number }}</span> &bull; 
-                        <span>{{ $nextSessionData['dive_date']->format('M d, Y') }}</span>
-                    </p>
-                </div>
-                <button type="button" 
-                        @click="openReleaseModal = false" 
-                        aria-label="Close release modal" 
-                        class="w-11 h-11 min-h-[44px] min-w-[44px] -mr-2 rounded-full flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F2F2F7] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
+    <x-side-panel show="openReleaseModal"
+                  :eyebrow="'Batch ' . $nextSessionData['batch']->batch_number"
+                  title="Ask to be released from this batch"
+                  :description="'Dive date: ' . $nextSessionData['dive_date']->format('M d, Y')">
+        <form id="dashboard-release-form" action="{{ route('coach.availability.release') }}" method="POST" @submit="submittingRelease = true">
+            @csrf
+            <input type="hidden" name="batch_id" value="{{ $nextSessionData['batch']->id }}">
+            <input type="hidden" name="dive_date" value="{{ $nextSessionData['dive_date']->format('Y-m-d') }}">
 
-            <form action="{{ route('coach.availability.release') }}" method="POST" @submit="submittingRelease = true" class="space-y-4 text-sm">
-                @csrf
-                <input type="hidden" name="batch_id" value="{{ $nextSessionData['batch']->id }}">
-                <input type="hidden" name="dive_date" value="{{ $nextSessionData['dive_date']->format('Y-m-d') }}">
+            <label for="dashboard-release-reason" class="form-label form-label-required">Reason</label>
+            <textarea id="dashboard-release-reason"
+                      name="reason"
+                      rows="3"
+                      required
+                      placeholder="e.g. Medical emergency or urgent personal conflict"
+                      class="form-textarea"></textarea>
+            <span class="form-hint">The camp coordinator reviews it and assigns a replacement coach.</span>
+        </form>
 
-                <div>
-                    <label for="dashboard-release-reason" class="block font-bold text-[#1D1D1F] mb-1.5">Reason for Release <span class="text-[#780000]">*</span></label>
-                    <textarea id="dashboard-release-reason" 
-                              name="reason" 
-                              rows="3" 
-                              required 
-                              placeholder="e.g. Medical emergency, urgent personal conflict" 
-                              class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all"></textarea>
-                    <p class="text-xs text-[#6E6E73] mt-2">
-                        Your request will be submitted to the camp coordinator for approval. A replacement coach will be assigned from the availability pool.
-                    </p>
-                </div>
-
-                <div class="flex items-center justify-end gap-2.5 pt-2">
-                    <button type="button" 
-                            @click="openReleaseModal = false" 
-                            class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                        Cancel
-                    </button>
-                    <button type="submit" 
-                            :disabled="submittingRelease" 
-                            class="btn-danger min-h-[44px] px-5 py-2.5 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D70015] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        <span x-show="!submittingRelease">Submit Release Request</span>
-                        <span x-show="submittingRelease" x-cloak class="inline-flex items-center gap-2">
-                            <svg class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                            <span>Submitting...</span>
-                        </span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+        <x-slot:footer>
+            <button type="button" @click="openReleaseModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="dashboard-release-form" :disabled="submittingRelease" class="btn-danger disabled:cursor-not-allowed disabled:opacity-50">
+                <span x-show="!submittingRelease">Send request</span>
+                <span x-show="submittingRelease" x-cloak>Sending...</span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
     @endif
 
-    <!-- Volunteer Request Modal -->
-    <div x-show="openApplyModal" 
-         x-cloak 
-         role="dialog" 
-         aria-modal="true" 
-         aria-labelledby="volunteer-modal-title"
-         @keydown.escape.window="openApplyModal = false"
-         class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex justify-end"
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0">
-        <div class="dive-side-panel h-full overflow-y-auto overscroll-contain bg-white sm:max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl border-l border-[#E5E5EA]" 
-             @click.outside="openApplyModal = false"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0 translate-x-full"
-             x-transition:enter-end="opacity-100 translate-x-0"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100 translate-x-0"
-             x-transition:leave-end="opacity-0 translate-x-full">
-            <div class="flex items-start justify-between gap-3">
-                <div class="space-y-1">
-                    <h3 id="volunteer-modal-title" class="text-base sm:text-lg font-extrabold text-[#1D1D1F]">Volunteer for Camp Slot</h3>
-                    <p class="text-sm text-[#6E6E73]">
-                        <span class="font-bold text-[#1D1D1F]" x-text="selectedOpeningBatch"></span> &bull; 
-                        <span x-text="selectedOpeningDate"></span>
-                    </p>
-                    <p class="text-xs font-semibold text-[#780000]" x-show="selectedOpeningNeeded">
-                        <span x-text="selectedOpeningNeeded"></span> Participant(s) needing a coach
-                    </p>
-                </div>
-                <button type="button" 
-                        @click="openApplyModal = false" 
-                        aria-label="Close volunteer modal" 
-                        class="w-11 h-11 min-h-[44px] min-w-[44px] -mr-2 rounded-full flex items-center justify-center text-[#6E6E73] hover:text-[#1D1D1F] hover:bg-[#F2F2F7] transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                        <path d="M18 6L6 18M6 6l12 12"/>
-                    </svg>
-                </button>
-            </div>
+    <!-- Volunteer Request Panel -->
+    <x-side-panel show="openApplyModal" title="Volunteer for this slot">
+        <x-slot:eyebrow>Batch <span x-text="selectedOpeningBatch"></span></x-slot:eyebrow>
+        <x-slot:description>Dive date: <span x-text="selectedOpeningDate"></span></x-slot:description>
 
-            <form :action="'{{ url('/coach/open-slot-requests') }}/' + selectedOpeningId + '/apply'" method="POST" @submit="submittingApply = true" class="space-y-4 text-sm">
-                @csrf
-
+        <div class="panel-context" x-show="selectedOpeningNeeded">
+            <dl class="panel-meta">
                 <div>
-                    <label for="volunteer-notes" class="block font-bold text-[#1D1D1F] mb-1.5">Optional Note to Camp Admin</label>
-                    <textarea id="volunteer-notes" 
-                              name="notes" 
-                              rows="3" 
-                              placeholder="e.g. I have gear ready and available for this entire weekend..." 
-                              class="w-full px-3.5 py-2.5 rounded-xl border border-[#D1D1D6] text-sm text-[#1D1D1F] bg-white focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none transition-all"></textarea>
-                    <p class="text-xs text-[#6E6E73] mt-2">
-                        Submitting interest notifies Camp Admin. If selected, participants will be automatically matched to your roster.
-                    </p>
+                    <dt>Participants needing a coach</dt>
+                    <dd x-text="selectedOpeningNeeded"></dd>
                 </div>
-
-                <div class="flex items-center justify-end gap-2.5 pt-2">
-                    <button type="button" 
-                            @click="openApplyModal = false" 
-                            class="btn-secondary min-h-[44px] px-4 py-2.5 text-sm font-semibold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
-                        Cancel
-                    </button>
-                    <button type="submit" 
-                            :disabled="submittingApply" 
-                            class="btn-primary min-h-[44px] px-5 py-2.5 text-sm font-bold rounded-xl cursor-pointer transition-all active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000] focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                        <span x-show="!submittingApply">Submit Volunteer Request</span>
-                        <span x-show="submittingApply" x-cloak class="inline-flex items-center gap-2">
-                            <svg class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
-                            <span>Submitting...</span>
-                        </span>
-                    </button>
-                </div>
-            </form>
+            </dl>
         </div>
-    </div>
+
+        <form id="volunteer-form" :action="'{{ url('/coach/open-slot-requests') }}/' + selectedOpeningId + '/apply'" method="POST" @submit="submittingApply = true">
+            @csrf
+
+            <label for="volunteer-notes" class="form-label">Note to the camp admin (optional)</label>
+            <textarea id="volunteer-notes"
+                      name="notes"
+                      rows="3"
+                      placeholder="e.g. I have my gear ready and I'm free the whole weekend."
+                      class="form-textarea"></textarea>
+            <span class="form-hint">The camp admin is notified. If you are chosen, participants are added to your roster.</span>
+        </form>
+
+        <x-slot:footer>
+            <button type="button" @click="openApplyModal = false" class="btn-secondary">Cancel</button>
+            <button type="submit" form="volunteer-form" :disabled="submittingApply" class="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+                <span x-show="!submittingApply">Volunteer</span>
+                <span x-show="submittingApply" x-cloak>Sending...</span>
+            </button>
+        </x-slot:footer>
+    </x-side-panel>
 
 </div>
 @endsection
