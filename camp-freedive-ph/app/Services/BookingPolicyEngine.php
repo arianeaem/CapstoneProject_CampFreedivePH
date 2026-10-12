@@ -12,7 +12,7 @@ use Carbon\Carbon;
  * (PAGASA typhoon signal, Coast Guard gale warning):
  * 1. Storm / weather: full refund or free reschedule.
  * 2. More than 14 days: full refund or free reschedule (we can still give the slots to others).
- * 3. 7 to 14 days: free reschedule, but cancelling gives 0% refund.
+ * 3. 7 to 14 days: free reschedule only, no cancelling.
  * 4. Less than 7 days: no cancel or reschedule (coaches, boat and gear are already paid for).
  */
 class BookingPolicyEngine
@@ -77,18 +77,18 @@ class BookingPolicyEngine
             $refundPercentage = 100;
             $calculatedRefund = (float) $booking->downpayment_amount;
             $rescheduleAllowed = true;
-            $cancelAllowed = false;
+            $cancelAllowed = true;
             $rescheduleMessage = "Allowed: More than {$fullRefundDays} days before dive date. Free reschedule to any available safe batch.";
             $cancelMessage = 'Eligible for 100% Full Downpayment Refund (₱' . number_format($booking->downpayment_amount, 2) . ') or Free Reschedule.';
         } elseif ($daysUntilDive >= $rescheduleOnlyDays && $daysUntilDive <= $fullRefundDays) {
-            // Free reschedule, but cancelling loses the downpayment
+            // Free reschedule only; cancelling is not allowed
             $policyTier = 'within_two_weeks';
             $refundPercentage = 0;
             $calculatedRefund = 0.00;
             $rescheduleAllowed = true;
-            $cancelAllowed = true;
+            $cancelAllowed = false;
             $rescheduleMessage = "Allowed: Within {$rescheduleOnlyDays} to {$fullRefundDays} days window. Free reschedule to another available date.";
-            $cancelMessage = "0% Refund (Downpayment Forfeited): Cancellations made within {$rescheduleOnlyDays} to {$fullRefundDays} days forfeit downpayment (free reschedule is permitted).";
+            $cancelMessage = "Not Allowed: Cancellations are not accepted within {$rescheduleOnlyDays} to {$fullRefundDays} days of the dive date. You can still reschedule for free.";
         } else {
             // Too close to the dive: coaches, rooms and boat are already booked
             $policyTier = 'within_one_week';

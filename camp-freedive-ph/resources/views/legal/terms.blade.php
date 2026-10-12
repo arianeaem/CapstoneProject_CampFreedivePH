@@ -238,7 +238,7 @@
                             A booking is subject to availability and is considered secured only upon successful submission and confirmation of the required reservation payment.
                         </p>
                         <p class="mb-2">
-                            The standard reservation downpayment is <strong>Three Thousand Philippine Pesos (₱3,000.00) per participant</strong>, unless a different amount or payment arrangement is expressly indicated during the booking process.
+                            The reservation downpayment is <strong>Three Thousand Philippine Pesos (₱3,000.00) per participant</strong> for participants using camp-arranged van transportation, or <strong>Two Thousand Philippine Pesos (₱2,000.00) per participant</strong> for participants arranging their own transportation, unless a different amount or payment arrangement is expressly indicated during the booking process.
                         </p>
                         <p>
                             Payments may be processed through the payment methods made available through our authorized payment processor, including GCash, Maya, credit or debit cards, and other supported online payment methods.

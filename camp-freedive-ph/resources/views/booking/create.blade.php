@@ -1570,7 +1570,7 @@
                                     </span>
                                 </div>
                                 <p class="text-xs text-[#6E6E73] leading-relaxed">
-                                    Free date reschedule to another available schedule. Downpayment is non-refundable.
+                                    Free date reschedule to another available schedule. Cancelling is not allowed and the downpayment is non-refundable.
                                 </p>
                             </div>
 
