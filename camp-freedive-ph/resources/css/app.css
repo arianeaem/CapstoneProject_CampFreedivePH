@@ -377,38 +377,41 @@
 }
 
 /* 6. Stat cards */
-.kpi-tile {
-    background-color: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #E5E5EA;
-    padding: 1rem 1.25rem;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
+/* In a layer so color utilities (e.g. an amber warning tile) can override them */
+@layer components {
+    .kpi-tile {
+        background-color: #ffffff;
+        border-radius: 12px;
+        border: 1px solid #E5E5EA;
+        padding: 1rem 1.25rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
 
-.kpi-label {
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: #6E6E73;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-}
+    .kpi-label {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: #6E6E73;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
 
-.kpi-value {
-    font-size: 1.5rem;
-    font-weight: 900;
-    color: #1D1D1F;
-    margin-top: 0.25rem;
-    font-family: var(--font-heading);
-    letter-spacing: -0.02em;
-}
+    .kpi-value {
+        font-size: 1.5rem;
+        font-weight: 900;
+        color: #1D1D1F;
+        margin-top: 0.25rem;
+        font-family: var(--font-heading);
+        letter-spacing: -0.02em;
+    }
 
-.kpi-sub {
-    font-size: 0.875rem;
-    color: #8E8E93;
-    margin-top: 0.25rem;
+    .kpi-sub {
+        font-size: 0.875rem;
+        color: #6E6E73;
+        margin-top: 0.25rem;
+    }
 }
 
 /* 7. Toolbars and filter bars */

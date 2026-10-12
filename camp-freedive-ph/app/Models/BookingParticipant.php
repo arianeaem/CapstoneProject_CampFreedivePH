@@ -44,6 +44,33 @@ class BookingParticipant extends Model
         });
     }
 
+    /**
+     * True when the health note says something staff should act on.
+     * "None", "Fit for diving" and similar all-clear answers don't count.
+     */
+    public function getHasHealthNoteAttribute(): bool
+    {
+        $note = strtolower(rtrim(trim($this->health_condition ?? ''), '.'));
+
+        if ($note === '' || in_array($note, ['none', 'none declared', 'no', 'n/a', 'na', 'nil', 'normal'], true)) {
+            return false;
+        }
+
+        foreach (['fit for diving', 'none', 'cleared medical waiver', 'first time freediving', 'certified aida', 'working on frenzel'] as $allClear) {
+            if (str_starts_with($note, $allClear)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Gender as shown to staff. */
+    public function getGenderLabelAttribute(): string
+    {
+        return ['male' => 'Male', 'female' => 'Female', 'prefer_not_to_say' => 'Prefer not to say'][$this->gender] ?? 'Not given';
+    }
+
     /** The person in the Participant Directory. */
     public function participant(): BelongsTo
     {

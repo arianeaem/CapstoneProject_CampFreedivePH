@@ -9,8 +9,21 @@
 @endsection
 
 @section('content')
-<div class="space-y-6 text-sm" x-data="{ 
-    openCancelModal: false, 
+@php
+    $isActive = in_array($batch->status, ['confirmed', 'open']);
+    $activeBookings = $batch->bookings->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']);
+    $participantCount = $batch->total_participants_count;
+    $capacity = $batch->computed_capacity;
+    $occPct = (int) round($batch->occupancy_percentage ?? 0);
+    $spotsLeft = max(0, $capacity - $participantCount);
+    $coaches = $assignedCoaches ?? collect();
+    $balanceDue = $batch->outstanding_balance_bookings->sum('balance_amount');
+    $vanBookings = $activeBookings->where('pickup_option', 'carpool');
+    $vanRiders = $vanBookings->sum(fn($b) => $b->participants->count());
+    $assignRoute = auth()->user()->isOwner() ? route('owner.batches.assign_participant', $batch) : route('admin.batches.assign_participant', $batch);
+@endphp
+<div class="space-y-6 text-sm" x-data="{
+    openCancelModal: false,
     openRescheduleModal: false,
     openMoveModal: false,
     openCompleteModal: false,
@@ -19,487 +32,313 @@
     selectedBookingId: null,
     selectedBookingNumber: ''
 }">
-    
-    <!-- Top Header Bar & Controls -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">{{ $batch->batch_number }}</h1>
-            <span class="text-sm sm:text-sm text-[#1D1D1F] font-bold block mt-0.5">
-                {{ $batch->formatted_date_range }}
+
+    <!-- Header: name, status, dates, actions -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div class="min-w-0 space-y-1">
+            <div class="flex flex-wrap items-center gap-2.5">
+                <h1 class="text-2xl font-extrabold tracking-tight text-[#1D1D1F] sm:text-3xl">{{ $batch->batch_number }}</h1>
+                <span class="rounded-full px-2.5 py-0.5 text-sm font-bold {{ $batch->status_badge['class'] }}">{{ $batch->status_badge['label'] }}</span>
+            </div>
+            <p class="text-[#6E6E73]"><strong class="text-[#1D1D1F]">{{ $batch->formatted_date_range }}</strong></p>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+            <button type="button"
+                    @click="{{ $isActive ? 'openCompleteModal' : 'openReactivateModal' }} = true"
+                    class="btn-primary min-h-[44px] flex-1 px-4 font-bold sm:flex-initial">
+                {{ $isActive ? 'Mark as completed' : 'Reactivate batch' }}
+            </button>
+
+            <div class="relative" @click.outside="openActionsMenu = false" @keydown.escape="openActionsMenu = false">
+                <button type="button"
+                        @click="openActionsMenu = !openActionsMenu"
+                        :aria-expanded="openActionsMenu"
+                        aria-haspopup="true"
+                        aria-label="More batch actions"
+                        class="inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-[#E5E5EA] bg-white text-[#1D1D1F] transition-colors hover:bg-[#F2F2F7] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#780000]">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="1.75"/><circle cx="19" cy="12" r="1.75"/><circle cx="5" cy="12" r="1.75"/></svg>
+                </button>
+
+                <div x-show="openActionsMenu" x-cloak x-transition.opacity.duration.100ms class="menu-panel absolute right-0 z-20 mt-2" role="menu">
+                    <button type="button" role="menuitem" @click="openActionsMenu = false; openRescheduleModal = true" class="menu-item">Reschedule batch</button>
+                    @if($isActive)
+                        <div class="menu-divider"></div>
+                        <button type="button" role="menuitem" @click="openActionsMenu = false; openCancelModal = true" class="menu-item menu-item-danger">Cancel batch</button>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if($batch->status === 'cancelled_by_camp' && $batch->cancellation_reason)
+        <div class="banner banner-error">
+            <strong>Cancelled by the camp{{ $batch->cancelled_at ? ' on ' . $batch->cancelled_at->format('M d, Y g:i A') : '' }}.</strong>
+            Reason: {{ $batch->cancellation_reason }}
+        </div>
+    @endif
+
+    <!-- At a glance -->
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="kpi-tile">
+            <span class="kpi-label">Participants</span>
+            <span class="kpi-value">{{ $participantCount }} <span class="text-base font-semibold text-[#6E6E73]">/ {{ $capacity }}</span></span>
+            <div role="progressbar" aria-valuenow="{{ $occPct }}" aria-valuemin="0" aria-valuemax="100" aria-label="{{ $occPct }}% full"
+                 class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#E5E5EA]">
+                <div class="h-full rounded-full {{ $occPct >= 100 ? 'bg-[#780000]' : ($occPct > 70 ? 'bg-amber-600' : 'bg-emerald-600') }}" style="width: {{ min(100, $occPct) }}%"></div>
+            </div>
+            <span class="kpi-sub">{{ $spotsLeft > 0 ? $spotsLeft . ' ' . Str::plural('spot', $spotsLeft) . ' left' : 'Full' }}</span>
+        </div>
+
+        <div class="kpi-tile">
+            <span class="kpi-label">Bookings</span>
+            <span class="kpi-value">{{ $activeBookings->count() }}</span>
+            <span class="kpi-sub">{{ $vanRiders > 0 ? $vanRiders . ' riding the camp van' : 'All own transport' }}</span>
+        </div>
+
+        <div class="kpi-tile {{ $batch->is_coach_pending ? 'border-amber-300 bg-amber-50' : '' }}">
+            <span class="kpi-label">Coaches</span>
+            <span class="kpi-value">{{ $coaches->count() }}</span>
+            <span class="kpi-sub {{ $batch->is_coach_pending ? 'font-semibold text-amber-900' : '' }}">
+                {{ $batch->is_coach_pending ? 'No coach assigned yet' : ($coaches->isEmpty() ? 'None needed yet' : $coaches->pluck('name')->join(', ')) }}
             </span>
         </div>
 
-        <!-- Whole-Batch Status Actions: Primary Button + 3-Dot Overflow Menu -->
-        <div class="flex items-center gap-2.5">
-            
-            @if(in_array($batch->status, ['confirmed', 'open']))
-                <!-- Primary Action: Mark as Completed -->
-                <button type="button" 
-                        @click="openCompleteModal = true"
-                        class="btn-primary min-h-[44px] px-4 py-2.5 text-sm font-bold shadow-2xs inline-flex items-center justify-center gap-2 active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>Mark as Completed</span>
-                </button>
-
-                <!-- 3-Dot More Actions Menu -->
-                <div class="relative inline-block text-left" @click.outside="openActionsMenu = false">
-                    <button type="button" 
-                            @click="openActionsMenu = !openActionsMenu"
-                            :aria-expanded="openActionsMenu"
-                            aria-haspopup="true"
-                            aria-label="More batch actions"
-                            class="min-h-[44px] min-w-[44px] w-11 h-11 inline-flex items-center justify-center rounded-xl bg-white border border-[#E5E5EA] text-[#1D1D1F] hover:bg-[#F2F2F7] hover:border-[#D1D1D6] active:scale-[0.97] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000] cursor-pointer shadow-2xs">
-                        <svg class="w-5 h-5 text-[#1D1D1F]" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="12" r="1.75"/>
-                            <circle cx="19" cy="12" r="1.75"/>
-                            <circle cx="5" cy="12" r="1.75"/>
-                        </svg>
-                    </button>
-
-                    <!-- Contextual Menu Dropdown -->
-                    <div x-show="openActionsMenu" 
-                         x-cloak
-                         x-transition:enter="transition ease-out duration-100"
-                         x-transition:enter-start="transform opacity-0 scale-95"
-                         x-transition:enter-end="transform opacity-100 scale-100"
-                         x-transition:leave="transition ease-in duration-75"
-                         x-transition:leave-start="transform opacity-100 scale-100"
-                         x-transition:leave-end="transform opacity-0 scale-95"
-                         class="menu-panel absolute right-0 mt-2">
-                        
-                        <!-- Reschedule Action -->
-                        <button type="button"
-                                @click="openActionsMenu = false; openRescheduleModal = true"
-                                class="menu-item">
-                            <span>Reschedule Batch</span>
-                        </button>
-
-                        <div class="menu-divider"></div>
-
-                        <!-- Cancel by Camp Action -->
-                        <button type="button"
-                                @click="openActionsMenu = false; openCancelModal = true"
-                                class="menu-item menu-item-danger">
-                            <svg class="w-4 h-4 text-rose-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"/>
-                                <line x1="15" y1="9" x2="9" y2="15"/>
-                                <line x1="9" y1="9" x2="15" y2="15"/>
-                            </svg>
-                            <span>Cancel Batch (by Camp)</span>
-                        </button>
-                    </div>
-                </div>
-
-            @else
-                
-                <!-- Primary Action: Reactivate Batch -->
-                <button type="button"
-                        @click="openReactivateModal = true"
-                        class="btn-primary min-h-[44px] px-4 py-2.5 text-sm font-bold shadow-2xs inline-flex items-center justify-center gap-2 active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-                    <span>Reactivate Batch</span>
-                </button>
-
-                <!-- 3-Dot More Actions Menu -->
-                <div class="relative inline-block text-left" @click.outside="openActionsMenu = false">
-                    <button type="button" 
-                            @click="openActionsMenu = !openActionsMenu"
-                            :aria-expanded="openActionsMenu"
-                            aria-haspopup="true"
-                            aria-label="More batch actions"
-                            class="min-h-[44px] min-w-[44px] w-11 h-11 inline-flex items-center justify-center rounded-xl bg-white border border-[#E5E5EA] text-[#1D1D1F] hover:bg-[#F2F2F7] hover:border-[#D1D1D6] active:scale-[0.97] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000] cursor-pointer shadow-2xs">
-                        <svg class="w-5 h-5 text-[#1D1D1F]" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="12" r="1.75"/>
-                            <circle cx="19" cy="12" r="1.75"/>
-                            <circle cx="5" cy="12" r="1.75"/>
-                        </svg>
-                    </button>
-
-                    <!-- Contextual Menu Dropdown -->
-                    <div x-show="openActionsMenu" 
-                         x-cloak
-                         x-transition:enter="transition ease-out duration-100"
-                         x-transition:enter-start="transform opacity-0 scale-95"
-                         x-transition:enter-end="transform opacity-100 scale-100"
-                         x-transition:leave="transition ease-in duration-75"
-                         x-transition:leave-start="transform opacity-100 scale-100"
-                         x-transition:leave-end="transform opacity-0 scale-95"
-                         class="menu-panel absolute right-0 mt-2">
-                        
-                        <!-- Reschedule Action -->
-                        <button type="button"
-                                @click="openActionsMenu = false; openRescheduleModal = true"
-                                class="menu-item">
-                            <span>Reschedule Batch</span>
-                        </button>
-                    </div>
-                </div>
-
-            @endif
-
+        <div class="kpi-tile">
+            <span class="kpi-label">Balance to collect</span>
+            <span class="kpi-value {{ $balanceDue > 0 ? 'text-amber-800' : '' }}">₱{{ number_format($balanceDue) }}</span>
+            <span class="kpi-sub">
+                {{ $batch->outstanding_balance_bookings_count > 0 ? 'From ' . $batch->outstanding_balance_bookings_count . ' ' . Str::plural('booking', $batch->outstanding_balance_bookings_count) : 'Everyone has paid' }}
+            </span>
         </div>
     </div>
 
-    <!-- Batch Details & Operations -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <!-- Connected Bookings -->
-        <div class="lg:col-span-2 space-y-6">
-            
-            <!-- Connected Bookings Section -->
+    @if($batch->capacity_note)
+        <p class="text-[#6E6E73]"><strong class="text-[#1D1D1F]">Capacity note:</strong> {{ $batch->capacity_note }}</p>
+    @endif
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+
+        <!-- Bookings and their participants -->
+        <section class="space-y-4 xl:col-span-2" aria-labelledby="batch-bookings-title">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 id="batch-bookings-title" class="text-base font-bold text-[#1D1D1F]">
+                    Bookings <span class="font-semibold text-[#6E6E73]">({{ $activeBookings->count() }})</span>
+                </h2>
+                @if($coaches->isNotEmpty())
+                    <p class="text-[#6E6E73]">Changing a participant's coach saves right away.</p>
+                @endif
+            </div>
+
             <div class="space-y-4">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3.5">
-                    <div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            @php
-                                $connectedBookingsCount = $batch->bookings->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'])->count();
-                            @endphp
-                            <h3 class="text-base font-extrabold text-[#1D1D1F]">
-                                {{ $connectedBookingsCount }} Connected {{ Str::plural('Booking', $connectedBookingsCount) }}
-                            </h3>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bookings List -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-                    @forelse($batch->bookings->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']) as $booking)
-                    <div class="bg-white rounded-2xl border border-[#E5E5EA] p-4 sm:p-5 shadow-2xs hover:border-[#D1D1D6] hover:shadow-md active:scale-[0.99] active:brightness-95 transition-all flex flex-col justify-between space-y-4">
-                        <!-- Card Content -->
-                        <div class="space-y-3.5">
-                            <!-- Header: Booking Number & Status with Class Category Together -->
-                            <div class="flex items-start justify-between gap-2">
-                                <div>
-                                    <a href="{{ route('admin.bookings.show', $booking) }}" class="text-base sm:text-lg font-black text-[#1D1D1F] hover:text-[#780000] transition-colors tracking-tight font-mono whitespace-nowrap">
-                                        {{ $booking->booking_number }}
-                                    </a>
-                                </div>
-
-                                <div class="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
-                                    <span class="px-2.5 py-0.5 rounded-full text-xs sm:text-sm font-bold whitespace-nowrap {{ $booking->status_badge['class'] }}">
-                                        {{ $booking->status_badge['label'] }}
-                                    </span>
-                                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-[#E5E5EA] text-[#1D1D1F] whitespace-nowrap">
-                                        {{ ucfirst($booking->class_type ?? 'Discovery') }}
-                                    </span>
-                                </div>
+                @forelse($activeBookings as $booking)
+                    <article class="flex flex-col rounded-2xl border border-[#E5E5EA] bg-white shadow-2xs">
+                        <!-- Who booked, status -->
+                        <div class="flex flex-col gap-2 border-b border-[#F2F2F7] px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3 sm:px-5">
+                            <div class="min-w-0">
+                                <a href="{{ route('admin.bookings.show', $booking) }}" class="whitespace-nowrap font-mono text-base font-bold text-[#1D1D1F] hover:text-[#780000]">{{ $booking->booking_number }}</a>
+                                <p class="break-words text-[#6E6E73]">{{ $booking->contact_name }} · {{ ucfirst($booking->class_type ?? 'Discovery') }}</p>
                             </div>
+                            <span class="shrink-0 self-start whitespace-nowrap rounded-full px-2.5 py-0.5 text-sm font-bold {{ $booking->status_badge['class'] }}">{{ $booking->status_badge['label'] }}</span>
+                        </div>
 
-                            <!-- Participants & Pod Assignment List -->
-                            <div class="space-y-2">
-                                <span class="text-xs font-bold uppercase tracking-wider text-[#6E6E73] flex items-center gap-1.5">
-                                    <span>Participants & Coaches ({{ $booking->participants->count() }})</span>
-                                </span>
+                        <!-- Trip details -->
+                        <dl class="grid grid-cols-2 gap-3 px-4 pt-3.5 sm:px-5">
+                            <div>
+                                <dt class="text-[#6E6E73]">Transport</dt>
+                                <dd class="font-semibold text-[#1D1D1F]">{{ $booking->pickup_option === 'carpool' ? 'Camp van · ' . ($booking->pickup_location ?: 'Metro Manila') : 'Own transport' }}</dd>
+                            </div>
+                            <div>
+                                <dt class="text-[#6E6E73]">Balance</dt>
+                                <dd class="font-semibold {{ (float) $booking->balance_amount > 0 ? 'text-amber-800' : 'text-emerald-700' }}">
+                                    {{ (float) $booking->balance_amount > 0 ? '₱' . number_format($booking->balance_amount, 2) . ' due' : 'Paid' }}
+                                </dd>
+                            </div>
+                        </dl>
 
-                                <div class="space-y-2.5">
-                                    @foreach($booking->participants as $p)
-                                        @php 
-                                             $coach = $p->coach; 
-                                             $rawCondition = trim($p->health_condition ?? '');
-                                             $cleanHealth = strtolower(rtrim($rawCondition, '.'));
-                                             $isNoneOrGeneral = empty($cleanHealth) 
-                                                 || in_array($cleanHealth, ['none', 'none declared', 'no', 'n/a', 'na', 'nil', 'normal', 'fit for diving', 'fit for diving, no declared medical issues', 'cleared medical waiver', 'first time freediving'])
-                                                 || str_starts_with($cleanHealth, 'fit for diving')
-                                                 || str_starts_with($cleanHealth, 'none')
-                                                 || str_starts_with($cleanHealth, 'cleared medical waiver')
-                                                 || str_starts_with($cleanHealth, 'first time freediving')
-                                                 || str_starts_with($cleanHealth, 'certified aida')
-                                                 || str_starts_with($cleanHealth, 'working on frenzel');
-                                             $hasMedical = !$isNoneOrGeneral && !empty($rawCondition);
-                                        @endphp
-                                        <div class="bg-[#F8F9FA] rounded-xl p-3 sm:p-3.5 space-y-2">
-                                            <!-- Line 1: Participant Name, Age, Swimmer Badge -->
-                                            <div class="flex items-center justify-between gap-2 flex-wrap">
-                                                <div class="flex items-center gap-1.5 flex-wrap">
-                                                    <strong class="text-sm font-bold text-[#1D1D1F]">{{ $p->name }}</strong>
-                                                    <span class="text-xs text-[#6E6E73] font-normal">({{ $p->age }} yrs old)</span>
-                                                    <x-participant-history-badge :bp="$p" />
-                                                </div>
-                                                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 {{ strtolower($p->swimmer_status) === 'non_swimmer' ? 'bg-rose-50 text-rose-700' : 'bg-white text-[#1D1D1F] shadow-2xs' }}">
-                                                    {{ ucfirst(str_replace('_', ' ', $p->swimmer_status ?? 'Swimmer')) }}
-                                                </span>
-                                            </div>
+                        <!-- Participants (same style as the booking page) -->
+                        <div class="flex-1 space-y-3 px-4 py-3.5 sm:px-5">
+                            <h3 class="font-bold text-[#1D1D1F]">Participant(s) ({{ $booking->participants->count() }} pax)</h3>
+                            <div class="divide-y divide-[#E5E5EA]">
+                            @foreach($booking->participants as $index => $p)
+                                @php
+                                    $coach = $p->coach;
+                                    $hasMedical = $p->has_health_note;
+                                    $isNonSwimmer = strtolower($p->swimmer_status ?? '') === 'non_swimmer';
+                                @endphp
+                                <div class="space-y-2.5 py-4 first:pt-0 last:pb-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#F2F2F7] text-xs font-bold text-[#1D1D1F]" aria-hidden="true">{{ $index + 1 }}</span>
+                                        <strong class="text-base font-bold text-[#1D1D1F]">{{ $p->name }}</strong>
+                                        <span class="font-medium text-[#6E6E73]">({{ $p->age }} yrs old)</span>
+                                        <span class="rounded-md px-2 py-0.5 font-semibold {{ $isNonSwimmer ? 'bg-rose-50 text-rose-700' : 'bg-[#F2F2F7] text-[#1D1D1F]' }}">{{ $isNonSwimmer ? 'Non-swimmer' : 'Swimmer' }}</span>
+                                        <x-participant-history-badge :bp="$p" />
+                                    </div>
 
-                                            @if($hasMedical)
-                                                <div class="text-xs font-medium text-amber-900 bg-amber-50/80 px-2.5 py-1 rounded-lg flex items-start gap-1.5" title="{{ $p->health_condition }}">
-                                                    <span class="break-words leading-tight">{{ $p->health_condition }}</span>
-                                                </div>
+                                    <div class="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-3">
+                                        <div>
+                                            <span class="mb-0.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">Gender</span>
+                                            <span class="text-[#1D1D1F]">{{ $p->gender_label }}</span>
+                                        </div>
+                                        <div>
+                                            <span class="mb-0.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">Health notes</span>
+                                            <span class="break-words {{ $hasMedical ? 'font-medium text-[#92400E]' : 'text-[#1D1D1F]' }}">{{ $hasMedical ? '⚠ ' . $p->health_condition : ($p->health_condition ?: 'None declared') }}</span>
+                                        </div>
+                                        <div>
+                                            @if($coaches->isNotEmpty())
+                                                <form action="{{ $assignRoute }}" method="POST">
+                                                    @csrf
+                                                    <input type="hidden" name="participant_id" value="{{ $p->id }}">
+                                                    <label for="coach-{{ $p->id }}" class="mb-1 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">Assigned coach</label>
+                                                    <select id="coach-{{ $p->id }}" name="coach_id" onchange="this.form.submit()"
+                                                            class="form-select w-full min-h-[44px] {{ $coach ? 'font-bold' : 'text-[#6E6E73]' }}">
+                                                        <option value="" @selected(!$coach)>Not assigned yet</option>
+                                                        @foreach($coaches as $batchCoach)
+                                                            <option value="{{ $batchCoach->id }}" @selected($coach && $coach->id === $batchCoach->id)>{{ $batchCoach->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </form>
+                                            @else
+                                                <span class="mb-0.5 block text-xs font-bold uppercase tracking-wider text-[#6E6E73]">Assigned coach</span>
+                                                <span class="{{ $coach ? 'font-bold text-[#1D1D1F]' : 'text-[#6E6E73]' }}">{{ $coach ? $coach->name : 'Not assigned yet' }}</span>
                                             @endif
-
-                                            <!-- Line 2: Coach Assignment on dedicated row -->
-                                            <div class="space-y-1 pt-0.5">
-                                                <span class="text-xs text-[#6E6E73] font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                                                    <span>Assigned Coach:</span>
-                                                </span>
-                                                @if(isset($assignedCoaches) && count($assignedCoaches) > 0)
-                                                    <form action="{{ auth()->user()->isOwner() ? route('owner.batches.assign_participant', $batch) : route('admin.batches.assign_participant', $batch) }}" 
-                                                          method="POST"
-                                                          class="w-full">
-                                                        @csrf
-                                                        <input type="hidden" name="participant_id" value="{{ $p->id }}">
-                                                         <select name="coach_id" 
-                                                                onchange="this.form.submit()" 
-                                                                class="w-full min-h-[44px] text-xs sm:text-sm font-semibold py-2 px-3 rounded-xl border border-[#D1D1D6] bg-white text-[#1D1D1F] hover:border-[#AEAEB2] focus:border-[#780000] focus:ring-2 focus:ring-[#780000]/20 focus:outline-none cursor-pointer transition-all shadow-2xs {{ $coach ? 'text-[#780000] font-bold bg-[#FDF5F5]' : '' }}">
-                                                            <option value="" {{ !$coach ? 'selected' : '' }}>-- Shared Pool (Unassigned) --</option>
-                                                            @foreach($assignedCoaches as $batchCoach)
-                                                                <option value="{{ $batchCoach->id }}" {{ $coach && $coach->id === $batchCoach->id ? 'selected' : '' }}>
-                                                                    Coach {{ $batchCoach->name }}
-                                                                </option>
-                                                            @endforeach
-                                                        </select>
-                                                    </form>
-                                                @else
-                                                    <span class="text-xs sm:text-sm font-medium text-[#6E6E73] italic block">
-                                                        {{ $coach ? 'Coach ' . $coach->name : 'Shared Pool' }}
-                                                    </span>
-                                                @endif
-                                            </div>
                                         </div>
-                                    @endforeach
+                                    </div>
                                 </div>
+                            @endforeach
                             </div>
                         </div>
 
-                        <!-- Card Footer Actions -->
-                        <div class="flex items-center justify-between pt-3 border-t border-[#F2F2F7]">
-                            <button type="button" 
+                        <div class="flex items-center justify-between gap-2 border-t border-[#F2F2F7] px-4 py-3 sm:px-5">
+                            <button type="button"
                                     @click="selectedBookingId = {{ $booking->id }}; selectedBookingNumber = '{{ $booking->booking_number }}'; openMoveModal = true"
-                                    class="min-h-[44px] text-sm font-semibold text-[#6E6E73] hover:text-[#1D1D1F] py-2 px-3 rounded-xl hover:bg-[#F2F2F7] active:scale-[0.98] transition-all inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-[#780000]"
-                                    title="Move to another batch">
-                                Move Batch
+                                    class="btn-ghost min-h-[44px]">
+                                Move to another batch
                             </button>
-
-                            <a href="{{ route('admin.bookings.show', $booking) }}" 
-                               class="btn-secondary min-h-[44px] py-2 px-3.5 text-sm font-semibold text-center inline-flex items-center justify-center active:scale-[0.98] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                                View Details
-                            </a>
+                            <a href="{{ route('admin.bookings.show', $booking) }}" class="btn-secondary min-h-[44px]">View booking</a>
                         </div>
+                    </article>
+                @empty
+                    <div class="col-span-full rounded-2xl border border-dashed border-[#D1D1D6] bg-white p-8 text-center text-[#6E6E73]">
+                        No bookings in this batch yet. New bookings for {{ $batch->formatted_date_range }} appear here.
                     </div>
-                    @empty
-                    <div class="col-span-full bg-white rounded-2xl border border-[#E5E5EA] p-8 text-center text-sm text-[#6E6E73]">
-                        No bookings connected to this batch yet.
-                    </div>
-                    @endforelse
-                </div>
+                @endforelse
             </div>
+        </section>
 
-        </div>
-
-        <!-- Batch Summary & Logistics -->
-        <div class="space-y-6">
-            
-            <!-- Batch Status & Occupancy -->
-            <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 shadow-2xs space-y-4">
+        <!-- Sidebar: coaches, transport, payments -->
+        <aside class="grid content-start gap-6 md:grid-cols-2 xl:grid-cols-1">
+            <div class="card space-y-3">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-base font-bold text-[#1D1D1F]">Batch Status & Capacity</h3>
-                    <span class="px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 {{ $batch->status_badge['class'] }}">
-                        {{ $batch->status_badge['label'] }}
-                    </span>
+                    <h2 class="text-base font-bold text-[#1D1D1F]">Coaches</h2>
+                    <span class="text-[#6E6E73]">{{ $coaches->count() }}</span>
                 </div>
-
-                @if($batch->capacity_note)
-                    <p class="text-sm text-[#6E6E73] font-medium italic">
-                        Note: {{ $batch->capacity_note }}
-                    </p>
+                @if($batch->is_coach_pending)
+                    <div class="banner banner-warning">This batch has participants but no coach yet.</div>
+                @elseif($coaches->isNotEmpty())
+                    <ul class="divide-y divide-[#F2F2F7]">
+                        @foreach($coaches as $c)
+                            @php($coachPax = $activeBookings->flatMap->participants->filter(fn($p) => $p->coach?->id === $c->id)->count())
+                            <li class="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                                <span class="font-semibold text-[#1D1D1F]">{{ $c->name }}</span>
+                                <span class="text-[#6E6E73]">{{ $coachPax }} {{ Str::plural('participant', $coachPax) }}</span>
+                            </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <p class="text-[#6E6E73]">No coaches yet. Add one when bookings come in.</p>
                 @endif
+                <a href="{{ route('admin.coaches.matching') }}" class="btn-secondary min-h-[44px] w-full">Manage coaches</a>
+            </div>
 
-                @if($batch->status === 'cancelled_by_camp' && $batch->cancellation_reason)
-                    <div class="banner banner-error">
-                        <strong>Camp Cancellation Advisory:</strong> {{ $batch->cancellation_reason }} (Logged at {{ $batch->cancelled_at ? $batch->cancelled_at->format('M d, Y h:i A') : 'N/A' }})
-                    </div>
+            <div class="card space-y-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-base font-bold text-[#1D1D1F]">Camp van</h2>
+                    <span class="text-[#6E6E73]">{{ $vanRiders }} {{ Str::plural('rider', $vanRiders) }}</span>
+                </div>
+                @if($vanBookings->isNotEmpty())
+                    <ul class="divide-y divide-[#F2F2F7]">
+                        @foreach($vanBookings as $vb)
+                            <li class="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+                                <div class="min-w-0">
+                                    <span class="block break-words font-semibold text-[#1D1D1F]">{{ $vb->pickup_location ?: 'Metro Manila' }}</span>
+                                    <span class="block break-words text-[#6E6E73]">{{ $vb->contact_name }} · {{ $vb->participants->count() }} {{ Str::plural('person', $vb->participants->count()) }}</span>
+                                </div>
+                                <a href="{{ route('admin.bookings.show', $vb) }}" class="shrink-0 font-semibold text-[#780000] hover:underline" aria-label="View booking {{ $vb->booking_number }}">View</a>
+                            </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <p class="text-[#6E6E73]">Nobody is riding the camp van. Everyone is coming on their own.</p>
                 @endif
-
-                <!-- Occupancy & Capacity -->
-                <div class="space-y-2 pt-1">
-                    @if($batch->total_participants_count > 0 && $batch->is_coach_pending)
-                        <div class="banner banner-warning text-left flex items-center gap-2.5">
-                            <span class="font-bold">Coach Pending</span>
-                        </div>
-                    @else
-                        <div class="flex items-baseline justify-between">
-                            <span class="text-sm font-bold text-[#6E6E73] uppercase tracking-wider">Occupancy</span>
-                            <div class="text-xl font-extrabold text-[#1D1D1F]">
-                                {{ $batch->total_participants_count }} <span class="text-sm font-semibold text-[#6E6E73]">/ {{ $batch->computed_capacity }} Pax</span>
-                            </div>
-                        </div>
-                        
-                        @php
-                            $occPct = (int) round($batch->occupancy_percentage ?? 0);
-                            $occWarning = $occPct >= 100 ? 'at capacity warning' : ($occPct > 70 ? 'high capacity warning' : 'normal capacity');
-                        @endphp
-                        <div role="progressbar" 
-                             aria-valuenow="{{ $occPct }}" 
-                             aria-valuemin="0" 
-                             aria-valuemax="100" 
-                             aria-label="Occupancy: {{ $occPct }} percent, {{ $occWarning }}"
-                             class="w-full bg-[#E5E5EA] rounded-full h-2 overflow-hidden">
-                            <div class="h-2 rounded-full {{ $occPct >= 100 ? 'bg-[#780000]' : ($occPct > 70 ? 'bg-amber-600' : 'bg-emerald-600') }}" 
-                                 style="width: {{ min(100, $occPct) }}%"></div>
-                        </div>
-                    @endif
-                </div>
-
-                <!-- Assigned Coaches Count & Status -->
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between text-sm">
-                        <span class="text-[#6E6E73] font-medium flex items-center gap-2">
-                            <span>Assigned Coaches:</span>
-                        </span>
-                        <strong class="font-bold text-[#1D1D1F]">
-                            {{ $batch->coachAssignments->unique('coach_id')->count() }} Coach(es)
-                        </strong>
-                    </div>
-
-                    <div class="pt-2">
-                        <a href="{{ route('admin.coaches.matching') }}" class="btn-secondary w-full min-h-[44px] py-2.5 text-sm font-semibold text-center inline-flex items-center justify-center active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#780000]">
-                            Manage Coach Assignments
-                        </a>
-                    </div>
-                </div>
             </div>
 
-            <!-- Transportation Logistics -->
-            @php
-                $carpoolBookingsList = $batch->bookings->where('pickup_option', 'carpool');
-                $totalCarpoolPax = $carpoolBookingsList->sum(fn($b) => $b->participants->count());
-            @endphp
-            <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 shadow-2xs space-y-3">
+            <div class="card space-y-3">
                 <div class="flex items-center justify-between">
-                    <h3 class="text-base font-bold text-[#1D1D1F]">Transportation Logistics</h3>
-                    @if($totalCarpoolPax > 0)
-                        <span class="px-2.5 py-0.5 rounded-full text-sm font-bold bg-[#F8EAEA] text-[#780000]">
-                            {{ $totalCarpoolPax }} Carpool Pax
-                        </span>
-                    @else
-                        <span class="px-2.5 py-0.5 rounded-full text-sm font-semibold bg-[#F2F2F7] text-[#6E6E73]">
-                            Own Transpo Only
-                        </span>
-                    @endif
+                    <h2 class="text-base font-bold text-[#1D1D1F]">Payments</h2>
+                    <a href="{{ route('admin.payments.index') }}" class="font-semibold text-[#780000] hover:underline">All payments</a>
                 </div>
-
-                <div class="text-sm">
-                    @if($carpoolBookingsList->isNotEmpty())
-                        <div class="space-y-2 pt-1">
-                            <div class="divide-y divide-[#F2F2F7]">
-                                @foreach($carpoolBookingsList as $cb)
-                                    <div class="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2">
-                                        <div class="min-w-0">
-                                            <span class="font-bold text-[#1D1D1F] block truncate">
-                                                {{ $cb->pickup_location ?: 'Metro Manila Hub' }}
-                                            </span>
-                                            <span class="text-sm text-[#6E6E73] block truncate">
-                                                {{ $cb->contact_name }} ({{ $cb->participants->count() }} pax)
-                                            </span>
-                                        </div>
-                                        <a href="{{ route('admin.bookings.show', $cb) }}" class="min-h-[44px] inline-flex items-center px-2.5 py-2 text-sm font-semibold text-[#780000] hover:underline shrink-0 active:scale-[0.98] transition-all">
-                                            View
-                                        </a>
-                                    </div>
-                                @endforeach
-                            </div>
-                        </div>
-                    @else
-                        <p class="text-sm text-[#6E6E73] text-center py-2">
-                            All participants are using own transportation.
-                        </p>
-                    @endif
-                </div>
-            </div>
-
-            <!-- Financial Overview -->
-            <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 shadow-2xs space-y-4">
-                <div class="flex items-center justify-between">
-                    <h3 class="text-base font-bold text-[#1D1D1F]">Financial Overview</h3>
-                    <a href="{{ route('admin.payments.index') }}" class="min-h-[44px] inline-flex items-center px-2 py-1 text-sm text-[#780000] font-bold hover:underline active:scale-[0.98] transition-all">
-                        Ledger
-                    </a>
-                </div>
-
-                <div class="space-y-3.5 text-sm">
-                    <div class="flex items-center justify-between">
-                        <span class="text-[#6E6E73] font-medium">Total Expected Revenue:</span>
-                        <strong class="text-sm font-extrabold text-[#1D1D1F]">
-                            ₱{{ number_format($batch->total_revenue, 2) }}
-                        </strong>
+                <dl class="space-y-2">
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-[#6E6E73]">Expected total</dt>
+                        <dd class="font-bold text-[#1D1D1F]">₱{{ number_format($batch->total_revenue, 2) }}</dd>
                     </div>
-
-                    <div class="flex items-center justify-between">
-                        <span class="text-[#6E6E73] font-medium">Verified Collected Amount:</span>
-                        <strong class="text-sm font-extrabold text-emerald-700">
-                            ₱{{ number_format($batch->collected_revenue, 2) }}
-                        </strong>
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-[#6E6E73]">Collected</dt>
+                        <dd class="font-bold text-emerald-700">₱{{ number_format($batch->collected_revenue, 2) }}</dd>
                     </div>
-
-                    <!-- Bookings with Balance -->
-                    <div class="space-y-1.5 pt-2 border-t border-[#F2F2F7]">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[#6E6E73] font-medium">Bookings with Balance:</span>
-                            @if($batch->outstanding_balance_bookings_count > 0)
-                                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-900">
-                                    {{ $batch->outstanding_balance_bookings_count }} {{ Str::plural('Booking', $batch->outstanding_balance_bookings_count) }}
-                                </span>
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-[#6E6E73]">Pending refund requests</dt>
+                        <dd class="font-bold {{ $batch->pending_refunds_count > 0 ? 'text-[#780000]' : 'text-[#1D1D1F]' }}">
+                            @if($batch->pending_refunds_count > 0)
+                                <a href="{{ route('admin.payments.refunds') }}" class="hover:underline">{{ $batch->pending_refunds_count }}</a>
                             @else
-                                <strong class="text-sm font-extrabold text-[#6E6E73]">
-                                    0 Bookings
-                                </strong>
+                                0
                             @endif
-                        </div>
-
-                        @if($batch->outstanding_balance_bookings->isNotEmpty())
-                            <div class="space-y-1 pt-1">
-                                @foreach($batch->outstanding_balance_bookings as $balBooking)
-                                    <div class="flex items-center justify-between text-sm px-2.5 py-1 text-amber-900">
-                                        <a href="{{ route('admin.bookings.show', $balBooking) }}" class="font-bold hover:underline text-[#780000] flex items-center gap-1 font-mono truncate mr-2">
-                                            <span>{{ $balBooking->booking_number }}</span>
-                                        </a>
-                                        <span class="font-bold text-amber-800 shrink-0">₱{{ number_format($balBooking->balance_amount, 2) }} due</span>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
+                        </dd>
                     </div>
+                </dl>
 
-                    <div class="flex items-center justify-between pt-2 border-t border-[#F2F2F7]">
-                        <span class="text-[#6E6E73] font-medium">Pending Refund Requests:</span>
-                        <strong class="text-sm font-extrabold {{ $batch->pending_refunds_count > 0 ? 'text-[#780000]' : 'text-[#6E6E73]' }}">
-                            {{ $batch->pending_refunds_count }} Pending
-                        </strong>
+                @if($batch->outstanding_balance_bookings->isNotEmpty())
+                    <div class="border-t border-[#F2F2F7] pt-3">
+                        <h3 class="mb-2 font-semibold text-[#1D1D1F]">Balance still due</h3>
+                        <ul class="space-y-1.5">
+                            @foreach($batch->outstanding_balance_bookings as $balBooking)
+                                <li class="flex items-center justify-between gap-2">
+                                    <a href="{{ route('admin.bookings.show', $balBooking) }}" class="whitespace-nowrap font-mono font-semibold text-[#780000] hover:underline">{{ $balBooking->booking_number }}</a>
+                                    <span class="shrink-0 font-semibold text-amber-800">₱{{ number_format($balBooking->balance_amount, 2) }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
                     </div>
-                </div>
+                @endif
             </div>
-
-        </div>
-
+        </aside>
     </div>
 
-    <!-- Batch status history -->
-    <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 shadow-2xs space-y-4">
-        <h3 class="text-base font-bold text-[#1D1D1F] border-b border-[#F2F2F7] pb-3">Batch Status History</h3>
-
-        <div class="space-y-4">
+    <!-- Status history -->
+    <section class="card space-y-4" aria-labelledby="batch-history-title">
+        <h2 id="batch-history-title" class="text-base font-bold text-[#1D1D1F]">Status history</h2>
+        <ol class="space-y-4">
             @forelse($batch->statusLogs as $log)
-            <div class="flex items-start gap-3 text-sm">
-                <div class="w-2.5 h-2.5 rounded-full bg-[#780000] mt-1.5 shrink-0"></div>
-                <div class="space-y-0.5 flex-grow">
-                    <div class="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
-                        <strong class="text-[#1D1D1F]">
-                            Status: <span class="uppercase">{{ str_replace('_', ' ', $log->new_status) }}</span>
-                        </strong>
-                        <span class="text-[#6E6E73] text-xs sm:text-sm shrink-0">{{ $log->created_at->format('M d, Y h:i A') }}</span>
+                <li class="flex items-start gap-3">
+                    <span class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#780000]" aria-hidden="true"></span>
+                    <div class="min-w-0 flex-1 space-y-0.5">
+                        <div class="flex flex-col justify-between gap-1 sm:flex-row sm:items-baseline">
+                            <strong class="text-[#1D1D1F]">{{ ucfirst(str_replace('_', ' ', $log->new_status)) }}</strong>
+                            <span class="shrink-0 text-[#6E6E73]">{{ $log->created_at->format('M d, Y g:i A') }}</span>
+                        </div>
+                        @if($log->note)
+                            <p class="break-words text-[#3A3A3C]">{{ $log->note }}</p>
+                        @endif
+                        <span class="block text-[#6E6E73]">By {{ $log->changer ? $log->changer->name : 'the system' }}</span>
                     </div>
-                    @if($log->note)
-                        <p class="text-[#6E6E73] break-words">{{ $log->note }}</p>
-                    @endif
-                    <span class="text-xs sm:text-sm text-[#6E6E73] block">
-                        By: {{ $log->changer ? $log->changer->name : 'System Trigger' }}
-                    </span>
-                </div>
-            </div>
+                </li>
             @empty
-            <p class="text-sm text-[#6E6E73] py-2 text-center">No status history logged yet.</p>
+                <li class="py-2 text-center text-[#6E6E73]">No status changes yet.</li>
             @endforelse
-        </div>
-    </div>
+        </ol>
+    </section>
 
     <!-- Cancel Batch Panel -->
     <x-side-panel show="openCancelModal" role="alertdialog"
