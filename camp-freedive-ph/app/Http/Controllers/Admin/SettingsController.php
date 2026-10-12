@@ -51,6 +51,10 @@ class SettingsController extends Controller
             'base_price_fundive_noncert' => $this->settingService->get('program_pricing.base_price_fundive_noncert', 3300.00),
             'base_price_refinement' => $this->settingService->get('program_pricing.base_price_refinement', 4100.00),
             'dynamic_pricing_cap_percent' => $this->settingService->get('program_pricing.dynamic_pricing_cap_percent', 30.00),
+            'min_price_discovery' => $this->settingService->get('program_pricing.min_price_discovery', 3400.00),
+            'min_price_fundive_cert' => $this->settingService->get('program_pricing.min_price_fundive_cert', 2000.00),
+            'min_price_fundive_noncert' => $this->settingService->get('program_pricing.min_price_fundive_noncert', 2650.00),
+            'min_price_refinement' => $this->settingService->get('program_pricing.min_price_refinement', 3300.00),
             'discovery_inclusions' => $this->settingService->get('program_pricing.discovery_inclusions', []),
             'discovery_exclusions' => $this->settingService->get('program_pricing.discovery_exclusions', []),
             'fundive_inclusions' => $this->settingService->get('program_pricing.fundive_inclusions', []),
@@ -87,6 +91,13 @@ class SettingsController extends Controller
             'program_pricing.refinement_inclusions' => json_encode($parseLines($validated['refinement_inclusions'] ?? '')),
             'program_pricing.refinement_exclusions' => json_encode($parseLines($validated['refinement_exclusions'] ?? '')),
         ];
+
+        // Lowest prices are optional in the request; only save the ones sent
+        foreach (['discovery', 'fundive_cert', 'fundive_noncert', 'refinement'] as $class) {
+            if (isset($validated["min_price_{$class}"])) {
+                $settingsToUpdate["program_pricing.min_price_{$class}"] = number_format((float) $validated["min_price_{$class}"], 2, '.', '');
+            }
+        }
 
         $this->settingService->updateMany($settingsToUpdate, Auth::user());
 

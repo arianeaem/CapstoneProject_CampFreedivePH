@@ -36,6 +36,7 @@ class PricingRule extends Model
         'condition_operator',
         'condition_value',
         'max_fill_percent',
+        'min_fill_percent',
         'applies_to',
         'adjustment_type',
         'adjustment_method',
@@ -49,6 +50,7 @@ class PricingRule extends Model
         'adjustment_value' => 'decimal:2',
         'priority' => 'integer',
         'max_fill_percent' => 'integer',
+        'min_fill_percent' => 'integer',
     ];
 
     public function creator(): BelongsTo
@@ -71,7 +73,8 @@ class PricingRule extends Model
      */
     public function getConditionSummaryAttribute(): string
     {
-        $fill = $this->max_fill_percent !== null ? " · batch < {$this->max_fill_percent}% full" : '';
+        $fill = ($this->min_fill_percent !== null ? " · batch ≥ {$this->min_fill_percent}% full" : '')
+            . ($this->max_fill_percent !== null ? " · batch < {$this->max_fill_percent}% full" : '');
 
         return match ($this->rule_type) {
             'demand' => 'Demand = ' . ucfirst($this->condition_value),

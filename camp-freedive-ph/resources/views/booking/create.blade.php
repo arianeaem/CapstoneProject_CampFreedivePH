@@ -158,6 +158,15 @@
             <button type="button" @click="bookAgainNotice = ''" aria-label="Dismiss notice" class="w-9 h-9 flex items-center justify-center rounded-lg font-bold shrink-0">✕</button>
         </div>
 
+        <!-- Price changed: the guest confirms the new price before paying -->
+        <div x-show="priceChangeMessage" x-cloak role="alert" class="mb-6 flex flex-col gap-3 rounded-xl bg-amber-50 p-4 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+            <span x-text="priceChangeMessage"></span>
+            <div class="flex shrink-0 gap-2">
+                <button type="button" @click="priceChangeMessage = ''" class="btn-secondary min-h-[44px]">Not now</button>
+                <button type="button" @click="priceChangeMessage = ''; processPayment(false, true)" :disabled="submittingPayment" class="btn-primary min-h-[44px]">Accept new price and pay</button>
+            </div>
+        </div>
+
         <!-- Error Alert Banner -->
         <div x-show="errorMessage" x-cloak class="banner banner-error mb-6 flex items-center justify-between gap-3">
             <div class="flex items-center gap-2 min-w-0">
@@ -1853,6 +1862,7 @@ function bookingForm(config) {
             return this.weatherTips[this.weatherTipIndex] || this.weatherTips[0];
         },
         errorMessage: '',
+        priceChangeMessage: '',
         bookAgainNotice: '',
         submittingPayment: false,
         timerSeconds: 15 * 60,
@@ -2808,7 +2818,10 @@ function bookingForm(config) {
                 const payload = {
                     ...this.form,
                     has_agreed_to_terms: this.form.hasAgreedToTerms,
-                    payment_method: 'paymongo'
+                    payment_method: 'paymongo',
+                    // Locks the price shown on screen (valid 15 minutes)
+                    quote_token: this.pricingQuote?.quote_token ?? null,
+                    quoted_price_per_pax: this.pricingQuote?.adjusted_price_per_pax ?? null
                 };
 
                 const response = await fetch(config.storeBookingUrl, {
@@ -2844,6 +2857,11 @@ function bookingForm(config) {
                     // Otherwise show confirmation step (Step 5)
                     this.confirmedBooking = data;
                     this.currentStep = 5;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else if (response.status === 409 && data && data.price_changed) {
+                    // Show the new price; the guest pays only after accepting it
+                    this.pricingQuote = data.quote;
+                    this.priceChangeMessage = data.message;
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
                     let errMsg = "Payment processing error. Please check your details and try again.";

@@ -120,7 +120,7 @@ class DemoSeeder extends Seeder
             ['Low Demand Discount', 'demand', '==', 'low', 'decrease', 10],
             ['Peak Season Premium', 'seasonality', '==', 'peak', 'increase', 10],
             ['Off-Peak Discount', 'seasonality', '==', 'off_peak', 'decrease', 10],
-            ['Early Bird', 'lead_time', '>=', '30', 'decrease', 5],
+            ['Early Bird', 'lead_time', '>=', '30', 'decrease', 10],
             ['Last-Minute Fill', 'lead_time', '<=', '7', 'decrease', 10],
             ['Shoulder Season Offer', 'seasonality', '==', 'shoulder', 'decrease', 5],
         ];
@@ -141,7 +141,11 @@ class DemoSeeder extends Seeder
                 'priority' => $index + 1,
                 // Off-Peak repeats Low Demand and shoulder months are average demand: kept but off
                 'status' => in_array($name, ['Off-Peak Discount', 'Shoulder Season Offer'], true) ? 'inactive' : 'active',
-                'max_fill_percent' => $name === 'Last-Minute Fill' ? 50 : null,
+                'max_fill_percent' => match ($name) {
+                    'Last-Minute Fill', 'Off-Peak Discount' => 50,
+                    'Early Bird' => 40,
+                    default => null,
+                },
                 'created_by' => $adminId,
             ]);
         })->all();

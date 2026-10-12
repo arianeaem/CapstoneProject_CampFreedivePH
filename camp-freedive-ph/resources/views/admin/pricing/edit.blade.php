@@ -223,6 +223,18 @@
                         </div>
                     </div>
 
+                    <!-- Optional extra condition: batch at least X% full -->
+                    <div class="space-y-1.5 pt-2">
+                        <label for="min_fill_percent" class="block text-xs sm:text-sm font-bold text-[#1D1D1F]">Only once the batch is at least (Optional):</label>
+                        <div class="relative sm:w-1/2">
+                            <input type="number" id="min_fill_percent" name="min_fill_percent" value="{{ old('min_fill_percent', $rule->min_fill_percent) }}" min="1" max="100" placeholder="e.g. 70"
+                                   class="w-full text-sm rounded-xl border border-[#D1D1D6] px-3.5 py-2.5 bg-white font-medium text-[#1D1D1F] focus:border-[#780000] pr-16">
+                            <span class="absolute right-3.5 top-2.5 text-sm text-[#6E6E73] font-semibold">% full</span>
+                        </div>
+                        <p class="text-xs text-[#6E6E73]">Leave empty to apply no matter how many are booked. Useful for surcharges, so they only apply when the batch is filling up.</p>
+                        @error('min_fill_percent')<span class="form-error">{{ $message }}</span>@enderror
+                    </div>
+
                     <!-- Optional extra condition: batch fill -->
                     <div class="space-y-1.5 pt-2">
                         <label class="block text-xs sm:text-sm font-bold text-[#1D1D1F]">Only when the batch is less than (Optional):</label>

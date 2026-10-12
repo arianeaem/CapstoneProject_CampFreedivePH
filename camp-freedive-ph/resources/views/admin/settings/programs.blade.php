@@ -84,6 +84,21 @@
                                        required
                                        class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
                             </div>
+                            <label for="min_price_discovery" class="block pt-1.5 font-bold text-xs text-[#1D1D1F]">Lowest Price / Person (₱)</label>
+                            <div class="relative">
+                                <span class="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#6E6E73]">₱</span>
+                                <input type="number"
+                                       step="50"
+                                       id="min_price_discovery"
+                                       name="min_price_discovery"
+                                       value="{{ old('min_price_discovery', $settings['min_price_discovery']) }}"
+                                       min="0"
+                                       required
+                                       aria-describedby="min_price_discovery_hint"
+                                       class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
+                            </div>
+                            <p id="min_price_discovery_hint" class="text-xs text-[#6E6E73]">Discounts never take the price below this.</p>
+                            @error('min_price_discovery')<span class="form-error">{{ $message }}</span>@enderror
                         </div>
 
                         <div class="space-y-1.5">
@@ -158,6 +173,21 @@
                                        required
                                        class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
                             </div>
+                            <label for="min_price_fundive_cert" class="block pt-1.5 font-bold text-xs text-[#1D1D1F]">Lowest Price / Person (₱)</label>
+                            <div class="relative">
+                                <span class="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#6E6E73]">₱</span>
+                                <input type="number"
+                                       step="50"
+                                       id="min_price_fundive_cert"
+                                       name="min_price_fundive_cert"
+                                       value="{{ old('min_price_fundive_cert', $settings['min_price_fundive_cert']) }}"
+                                       min="0"
+                                       required
+                                       aria-describedby="min_price_fundive_cert_hint"
+                                       class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
+                            </div>
+                            <p id="min_price_fundive_cert_hint" class="text-xs text-[#6E6E73]">Discounts never take the price below this.</p>
+                            @error('min_price_fundive_cert')<span class="form-error">{{ $message }}</span>@enderror
                         </div>
 
                         <div class="space-y-1.5">
@@ -174,6 +204,21 @@
                                        required
                                        class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
                             </div>
+                            <label for="min_price_fundive_noncert" class="block pt-1.5 font-bold text-xs text-[#1D1D1F]">Lowest Price / Person (₱)</label>
+                            <div class="relative">
+                                <span class="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#6E6E73]">₱</span>
+                                <input type="number"
+                                       step="50"
+                                       id="min_price_fundive_noncert"
+                                       name="min_price_fundive_noncert"
+                                       value="{{ old('min_price_fundive_noncert', $settings['min_price_fundive_noncert']) }}"
+                                       min="0"
+                                       required
+                                       aria-describedby="min_price_fundive_noncert_hint"
+                                       class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
+                            </div>
+                            <p id="min_price_fundive_noncert_hint" class="text-xs text-[#6E6E73]">Discounts never take the price below this.</p>
+                            @error('min_price_fundive_noncert')<span class="form-error">{{ $message }}</span>@enderror
                         </div>
 
                         <div class="space-y-1.5">
@@ -247,6 +292,21 @@
                                        required
                                        class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
                             </div>
+                            <label for="min_price_refinement" class="block pt-1.5 font-bold text-xs text-[#1D1D1F]">Lowest Price / Person (₱)</label>
+                            <div class="relative">
+                                <span class="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#6E6E73]">₱</span>
+                                <input type="number"
+                                       step="50"
+                                       id="min_price_refinement"
+                                       name="min_price_refinement"
+                                       value="{{ old('min_price_refinement', $settings['min_price_refinement']) }}"
+                                       min="0"
+                                       required
+                                       aria-describedby="min_price_refinement_hint"
+                                       class="w-full min-h-[40px] pl-8 pr-3.5 py-2 text-xs rounded-lg border border-[#D1D1D6] bg-white font-semibold text-[#1D1D1F] focus:border-[#780000] focus:ring-1 focus:ring-[#780000] focus:outline-none">
+                            </div>
+                            <p id="min_price_refinement_hint" class="text-xs text-[#6E6E73]">Discounts never take the price below this.</p>
+                            @error('min_price_refinement')<span class="form-error">{{ $message }}</span>@enderror
                         </div>
 
                         <div class="space-y-1.5">

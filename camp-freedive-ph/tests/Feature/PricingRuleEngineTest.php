@@ -253,7 +253,7 @@ class PricingRuleEngineTest extends TestCase
         $this->assertEquals(9350.00, (float)$booking->subtotal);
     }
 
-    public function test_pricing_engine_uses_ml_demand_forecast_for_future_unbooked_batches(): void
+    public function test_forecast_alone_never_raises_the_price_of_an_unbooked_batch(): void
     {
         DemandForecast::query()->delete();
         \Illuminate\Support\Facades\Cache::forget('ml_demand_forecast');
@@ -277,8 +277,9 @@ class PricingRuleEngineTest extends TestCase
 
         \Illuminate\Support\Facades\Cache::forget('ml_demand_forecast');
 
-        // 3. Now the demand should be 'high'
-        $this->assertEquals('high', $engine->getDemandForDate($futureDate));
+        // 3. The forecast says high, but nobody has booked: surcharges see 'low'
+        $this->assertEquals('high', $engine->getForecastDemandForDate($futureDate));
+        $this->assertEquals('low', $engine->getDemandForDate($futureDate));
         $this->assertEquals('peak', $engine->getSeasonForDate($futureDate));
 
         // 4. Create an active high demand pricing rule
@@ -296,13 +297,16 @@ class PricingRuleEngineTest extends TestCase
 
         $quote = $engine->evaluate('discovery', $futureDate, false, 1);
 
-        $this->assertEquals('high', $quote['demand']);
+        $this->assertEquals('low', $quote['demand']);
+        $this->assertEquals('high', $quote['forecast_demand']);
         $this->assertEquals('ml_predictive', $quote['forecast_source']);
         $this->assertEquals(38, $quote['predicted_participants']);
-        $this->assertEquals(4250.00, $quote['base_price_per_pax']);
-        $this->assertEquals(637.50, $quote['delta_per_pax']); // +15% of 4250
-        $this->assertEquals(4887.50, $quote['adjusted_price_per_pax']);
-        $this->assertCount(1, $quote['adjustments']);
+        $this->assertEquals(4250.00, $quote['adjusted_price_per_pax'], 'no surcharge on an empty batch');
+        $this->assertCount(0, $quote['adjustments']);
+
+        // 5. A low-demand promo follows the forecast: it stays off because a busy date is expected
+        $this->discount('Quiet Date Promo', 'demand', 'low', 10);
+        $this->assertCount(0, $engine->evaluate('discovery', $futureDate, false, 1)['adjustments']);
     }
 
     private function discount(string $name, string $type, string $value, float $pct, array $extra = []): PricingRule
@@ -382,5 +386,72 @@ class PricingRuleEngineTest extends TestCase
 
         $this->assertSame(50, $rule->fresh()->max_fill_percent);
         $this->assertStringContainsString('batch < 50% full', $rule->fresh()->condition_summary);
+    }
+
+    public function test_rule_with_min_fill_percent_waits_until_batch_is_filling_up(): void
+    {
+        $date = now()->addDays(5)->format('Y-m-d');
+        $this->discount('Last-Minute Fee', 'lead_time', '7', 10, ['adjustment_type' => 'increase', 'min_fill_percent' => 70]);
+
+        $engineAt = function (float $fill) {
+            $engine = \Mockery::mock(PricingRuleEngine::class, [
+                app(\App\Services\DemandForecastService::class),
+                app(\App\Services\SystemSettingService::class),
+            ])->makePartial();
+            $engine->shouldReceive('getFillPercentForDate')->andReturn($fill);
+
+            return $engine;
+        };
+
+        $this->assertEquals(0.0, $engineAt(40.0)->evaluate('discovery', $date)['delta_per_pax']);
+        $this->assertEquals(425.00, $engineAt(75.0)->evaluate('discovery', $date)['delta_per_pax']);
+    }
+
+    public function test_price_never_drops_below_the_class_minimum(): void
+    {
+        \App\Models\SystemSetting::where('key', 'program_pricing.min_price_discovery')->update(['value' => '4000.00']);
+        \Illuminate\Support\Facades\Cache::flush();
+        $this->discount('Big Promo', 'lead_time', '3650', 20);
+
+        $quote = app(PricingRuleEngine::class)->evaluate('discovery', now()->addDays(10)->format('Y-m-d'));
+
+        $this->assertEquals(4000.00, $quote['adjusted_price_per_pax']);
+        $this->assertEquals(-250.00, $quote['delta_per_pax']);
+    }
+
+    public function test_checkout_charges_the_locked_quote_and_asks_before_charging_a_new_price(): void
+    {
+        $this->seed();
+        PricingRule::query()->forceDelete();
+        $date = '2027-03-13';
+        $payload = fn (array $extra) => $extra + [
+            'class_type' => 'discovery', 'start_date' => $date, 'end_date' => '2027-03-14',
+            'participants' => [['first_name' => 'Ana', 'last_name' => 'Lock', 'name' => 'Ana Lock', 'age' => 25, 'health_condition' => 'None', 'swimmer_status' => 'beginner']],
+            'contact_first_name' => 'Ana', 'contact_last_name' => 'Lock', 'contact_name' => 'Ana Lock',
+            'contact_email' => 'ana.lock@example.com', 'contact_phone' => '09171234567',
+            'pickup_option' => 'own', 'has_agreed_to_terms' => true, 'confirmation_ack' => true, 'payment_method' => 'paymongo',
+        ];
+
+        // Guest sees the base price, then a 10% surcharge is switched on before they pay
+        $quote = $this->postJson(route('api.pricing.quote'), ['class_type' => 'discovery', 'start_date' => $date, 'participants_count' => 1])->json();
+        $this->assertNotEmpty($quote['quote_token']);
+        $this->discount('New Surge', 'seasonality', 'peak', 10, ['adjustment_type' => 'increase']);
+
+        // Locked: charged what they saw
+        $this->postJson(route('booking.store'), $payload(['quote_token' => $quote['quote_token'], 'quoted_price_per_pax' => $quote['adjusted_price_per_pax']]))
+            ->assertOk();
+        $this->assertEquals(4250.00, (float) Booking::where('contact_email', 'ana.lock@example.com')->first()->subtotal);
+
+        // Lock expired: the new price needs the guest's OK first
+        $response = $this->postJson(route('booking.store'), $payload(['contact_email' => 'ana.late@example.com', 'quoted_price_per_pax' => 4250.00]))
+            ->assertStatus(409)
+            ->assertJson(['price_changed' => true]);
+        $this->assertEquals(4675.00, $response->json('quote.adjusted_price_per_pax'));
+        $this->assertNull(Booking::where('contact_email', 'ana.late@example.com')->first());
+
+        // After accepting, the new token locks the new price
+        $this->postJson(route('booking.store'), $payload(['contact_email' => 'ana.late@example.com', 'quote_token' => $response->json('quote.quote_token'), 'quoted_price_per_pax' => 4675.00]))
+            ->assertOk();
+        $this->assertEquals(4675.00, (float) Booking::where('contact_email', 'ana.late@example.com')->first()->subtotal);
     }
 }

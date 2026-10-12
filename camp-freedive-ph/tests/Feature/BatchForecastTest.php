@@ -193,7 +193,8 @@ class BatchForecastTest extends TestCase
         Cache::forget('ml_demand_forecast');
 
         $engine = app(PricingRuleEngine::class);
-        $this->assertSame('high', $engine->getDemandForDate($date));
+        $this->assertSame('high', $engine->getForecastDemandForDate($date));
+        $this->assertSame('low', $engine->getDemandForDate($date), 'surcharges follow real bookings only');
         $this->assertSame('peak', $engine->getSeasonForDate($date));
     }
 

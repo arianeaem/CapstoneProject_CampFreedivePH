@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -267,7 +268,46 @@ class BookingController extends Controller
             (int) ($validated['participants_count'] ?? 1)
         );
 
-        return response()->json($quote);
+        return response()->json($this->issueQuoteToken($quote));
+    }
+
+    /** Minutes a quoted price stays locked: the same as the checkout timer. */
+    private const QUOTE_LOCK_MINUTES = 15;
+
+    /**
+     * Remember a quote so checkout charges exactly what the guest was shown.
+     */
+    private function issueQuoteToken(array $quote): array
+    {
+        $token = Str::random(40);
+        Cache::put("pricing_quote:{$token}", $quote, now()->addMinutes(self::QUOTE_LOCK_MINUTES));
+
+        return $quote + ['quote_token' => $token, 'quote_locked_minutes' => self::QUOTE_LOCK_MINUTES];
+    }
+
+    /**
+     * The locked quote for this token, resized to the final group size.
+     * Null when the token is missing, expired, or was issued for another class, date or certification.
+     */
+    private function lockedQuote(?string $token, string $classType, string $startDate, bool $isCertified, int $paxCount): ?array
+    {
+        $quote = $token ? Cache::get("pricing_quote:{$token}") : null;
+
+        if (! is_array($quote)
+            || strtolower($quote['class_type']) !== strtolower($classType)
+            || $quote['dive_date'] !== $startDate
+            || (bool) $quote['is_certified'] !== $isCertified) {
+            return null;
+        }
+
+        $quote['pax_count'] = $paxCount;
+        $quote['subtotal'] = round($quote['adjusted_price_per_pax'] * $paxCount, 2);
+        $quote['adjustments'] = array_map(
+            fn ($a) => ['total_delta' => round($a['delta_per_pax'] * $paxCount, 2)] + $a,
+            $quote['adjustments']
+        );
+
+        return $quote;
     }
 
     /**
@@ -345,13 +385,25 @@ class BookingController extends Controller
                     ], 422);
                 }
 
-                // Price with discounts (early bird, certified diver, group)
-                $quote = $this->pricingRuleEngine->evaluate(
-                    $validated['class_type'],
-                    $startDate,
-                    $isCertified,
-                    $paxCount
-                );
+                // Charge the price the guest was shown (locked for 15 minutes).
+                // Without a valid lock, use today's price, but if it differs from what
+                // the guest saw, stop and ask them to confirm the new price first.
+                $quote = $this->lockedQuote($validated['quote_token'] ?? null, $validated['class_type'], $startDate, $isCertified, $paxCount);
+
+                if (! $quote) {
+                    $quote = $this->pricingRuleEngine->evaluate($validated['class_type'], $startDate, $isCertified, $paxCount);
+                    $shownPrice = $validated['quoted_price_per_pax'] ?? null;
+
+                    if ($shownPrice !== null && abs((float) $shownPrice - $quote['adjusted_price_per_pax']) >= 0.01) {
+                        return response()->json([
+                            'success' => false,
+                            'price_changed' => true,
+                            'message' => 'The price for this date changed from ₱' . number_format((float) $shownPrice, 2)
+                                . ' to ₱' . number_format($quote['adjusted_price_per_pax'], 2) . ' per person. Please confirm the new price to continue.',
+                            'quote' => $this->issueQuoteToken($quote),
+                        ], 409);
+                    }
+                }
 
                 $classPrice = $quote['adjusted_price_per_pax'];
                 $subtotal = $quote['subtotal'];

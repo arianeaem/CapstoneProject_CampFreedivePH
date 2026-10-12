@@ -14,7 +14,10 @@ use Carbon\Carbon;
  * - looks at season, how full the batch is, the demand forecast and how early people book
  * - all adjustments together are kept between -30% and +30% of the base price
  * - discounts do not stack: only the single biggest discount is applied (premiums still add up)
- * - a rule with max_fill_percent only applies while the batch is less than that % full
+ * - a rule with max_fill_percent only applies while the batch is less than that % full,
+ *   and one with min_fill_percent only once the batch is at least that % full
+ * - surcharges follow real bookings only; discounts follow the demand forecast when there is one
+ * - the price never drops below the class minimum (settings), whatever the rules say
  * - Peak / Shoulder / Off-Peak months come from config/demand.php (based on the 553 real
  *   registration records), not from this file
  */
@@ -106,31 +109,35 @@ class PricingRuleEngine
     }
 
     /**
-     * Demand level for a date: 'high', 'medium' or 'low'.
-     *
-     * 1. Start with the forecast's demand_level for that date.
-     * 2. Real bookings can only make it higher, never lower (uses the same thresholds).
-     * 3. If there's no forecast for the date, only real bookings are used.
+     * Demand level from real bookings only: 'high', 'medium' or 'low'.
+     * Used for surcharges, so a forecast alone never raises the price of an empty batch.
      */
     public function getDemandForDate(string|Carbon $date): string
     {
-        $bookedCount = $this->getBookedCountForDate($date);
+        return strtolower(DemandRules::demandLevel($this->getBookedCountForDate($date)));
+    }
 
-        $rank = [DemandRules::LOW => 1, DemandRules::MEDIUM => 2, DemandRules::HIGH => 3];
+    /**
+     * Forecast demand level for a date, or null when there is no forecast.
+     * Used for discounts: a promo runs when the forecast says the date will be quiet.
+     */
+    public function getForecastDemandForDate(string|Carbon $date): ?string
+    {
+        $level = DemandRules::normalizeLevel($this->demandForecastService?->getForecastForDate($date)['demand_level'] ?? null);
 
-        $level = DemandRules::demandLevel($bookedCount);
+        return $level !== null ? strtolower($level) : null;
+    }
 
-        if ($this->demandForecastService) {
-            $forecast = $this->demandForecastService->getForecastForDate($date);
-            $forecastLevel = DemandRules::normalizeLevel($forecast['demand_level'] ?? null);
+    /**
+     * Lowest price per person for a class (Settings › Programs). 500 when not set.
+     */
+    public function getMinPrice(string $classType, bool $isCertified = false): float
+    {
+        $key = strtolower($classType) === 'fundive'
+            ? ($isCertified ? 'fundive_cert' : 'fundive_noncert')
+            : strtolower($classType);
 
-            if ($forecastLevel !== null) {
-                // Real bookings can only raise the level, not lower it
-                $level = ($rank[$level] > $rank[$forecastLevel]) ? $level : $forecastLevel;
-            }
-        }
-
-        return strtolower($level);
+        return (float) ($this->settingService?->get("program_pricing.min_price_{$key}") ?? 500.00);
     }
 
     /**
@@ -179,6 +186,7 @@ class PricingRuleEngine
         $normalizedClass = strtolower($classType);
         $season = $this->getSeasonForDate($diveDate);
         $demand = $this->getDemandForDate($diveDate);
+        $forecastDemand = $this->getForecastDemandForDate($diveDate);
         $leadTimeDays = $this->getLeadTimeDays($diveDate);
         $fillPercent = null; // only looked up if a rule needs it
 
@@ -200,7 +208,8 @@ class PricingRuleEngine
 
             switch ($rule->rule_type) {
                 case 'demand':
-                    $matched = ($rule->condition_value === $demand);
+                    $level = $rule->adjustment_type === 'decrease' ? ($forecastDemand ?? $demand) : $demand;
+                    $matched = ($rule->condition_value === $level);
                     break;
 
                 case 'seasonality':
@@ -226,6 +235,12 @@ class PricingRuleEngine
             if ($matched && $rule->max_fill_percent !== null) {
                 $fillPercent ??= $this->getFillPercentForDate($diveDate);
                 $matched = $fillPercent < (float) $rule->max_fill_percent;
+            }
+
+            // Optional extra condition: only once the batch is at least X% full
+            if ($matched && $rule->min_fill_percent !== null) {
+                $fillPercent ??= $this->getFillPercentForDate($diveDate);
+                $matched = $fillPercent >= (float) $rule->min_fill_percent;
             }
 
             if ($matched) {
@@ -274,7 +289,8 @@ class PricingRuleEngine
         $clampedDelta = max($minAdjustment, min($maxAdjustment, $rawTotalDelta));
         $wasClamped = ($clampedDelta !== $rawTotalDelta);
 
-        $adjustedPricePerPax = max(500.00, round($basePrice + $clampedDelta, 2));
+        $adjustedPricePerPax = max($this->getMinPrice($classType, $isCertified), round($basePrice + $clampedDelta, 2));
+        $clampedDelta = $adjustedPricePerPax - $basePrice; // the minimum price can raise it back up
 
         $forecastData = $this->demandForecastService?->getForecastForDate($diveDate);
 
@@ -286,6 +302,7 @@ class PricingRuleEngine
             'season_label' => ucfirst(str_replace('_', '-', $season)) . ' Season',
             'demand' => $demand,
             'demand_label' => ucfirst($demand) . ' Demand',
+            'forecast_demand' => $forecastDemand,
             'forecast_source' => $forecastData ? 'ml_predictive' : 'historical_headcount',
             'predicted_participants' => $forecastData['predicted_participants'] ?? null,
             'predicted_bookings' => $forecastData['predicted_bookings'] ?? null,

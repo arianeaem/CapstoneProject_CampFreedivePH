@@ -103,7 +103,7 @@ class DemandSingleSourceTest extends TestCase
         Cache::forget('ml_demand_forecast');
 
         $engine = app(PricingRuleEngine::class);
-        $this->assertSame('high', $engine->getDemandForDate($date));
+        $this->assertSame('high', $engine->getForecastDemandForDate($date));
         $this->assertSame('peak', $engine->getSeasonForDate($date));
         $this->assertGreaterThanOrEqual(0, $engine->getLeadTimeDays($date));
     }

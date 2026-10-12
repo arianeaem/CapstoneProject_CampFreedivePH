@@ -92,6 +92,8 @@ class StorePublicBookingRequest extends FormRequest
             'confirmation_ack' => 'required|accepted',
             'has_agreed_to_terms' => 'required|accepted',
             'payment_method' => ['nullable', 'string', 'in:paymongo'],
+            'quote_token' => 'nullable|string|max:64',
+            'quoted_price_per_pax' => 'nullable|numeric|min:0',
         ] + $this->minorConsentRules();
     }
 
