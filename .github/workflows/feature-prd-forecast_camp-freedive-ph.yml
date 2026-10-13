@@ -80,8 +80,10 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B790FB2DFCE64151B5FA9AE0CE98283E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9B0A35A5E607454B867935AF9FB005C9 }}
 
-      # The startup command runs pending migrations, then starts Laravel's scheduler (routes/console.php: forecast refresh,
-      # hourly batch safety checks, nightly accuracy archive). Needs "Always On" in Azure.
+      # The startup command installs our nginx config, runs pending migrations, then starts Laravel's scheduler
+      # (routes/console.php: forecast refresh, hourly batch safety checks, nightly accuracy archive). Needs "Always On" in Azure.
+      # Fails closed: if the config can't be copied or doesn't pass `nginx -t`, nginx is stopped, because Azure's stock
+      # config serves /home/site/wwwroot (including .env) instead of public/.
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
@@ -89,5 +91,23 @@ jobs:
           app-name: 'camp-freedive-ph'
           slot-name: 'Production'
           package: .
-          startup-command: 'cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && service nginx reload && (php /home/site/wwwroot/artisan migrate --force || true) && (php /home/site/wwwroot/artisan optimize || true); (nohup php /home/site/wwwroot/artisan schedule:work >> /home/LogFiles/laravel-scheduler.log 2>&1 &)'
+          startup-command: 'if cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && nginx -t; then service nginx reload; else echo "nginx config not applied, stopping nginx" >&2; service nginx stop; fi; (php /home/site/wwwroot/artisan migrate --force || true) && (php /home/site/wwwroot/artisan optimize || true); (nohup php /home/site/wwwroot/artisan schedule:work >> /home/LogFiles/laravel-scheduler.log 2>&1 &)'
+
+      # Waits for the restarted site, then fails the run if a private file is reachable or the nginx config is missing
+      - name: Check that private files are not served
+        env:
+          SITE_URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+        run: |
+          for i in $(seq 1 30); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/up")" = "200" ] && break
+            sleep 10
+          done
+          fail=0
+          for p in /.env /.htaccess /.git/config /composer.json /artisan /storage/logs/laravel.log; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL$p")
+            echo "$p -> $code"
+            [ "$code" = "200" ] && fail=1
+          done
+          curl -sI "$SITE_URL/" | grep -qi '^x-content-type-options: nosniff' || { echo "Security headers missing: nginx config not applied"; fail=1; }
+          exit $fail
           
