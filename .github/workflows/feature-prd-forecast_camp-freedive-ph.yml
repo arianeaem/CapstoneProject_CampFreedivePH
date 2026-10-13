@@ -80,8 +80,24 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_B790FB2DFCE64151B5FA9AE0CE98283E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_9B0A35A5E607454B867935AF9FB005C9 }}
 
+      # Azure restarts the app if /up stops answering. continue-on-error: a missing permission must not block the deploy.
+      - name: Turn on Health Check
+        continue-on-error: true
+        run: |
+          az webapp config set -g rg-capstone-prod -n camp-freedive-ph --generic-configurations '{"healthCheckPath": "/up"}' --query healthCheckPath -o tsv
+
+      # Prints only non-secret settings, as annotations (the repo is public, so never print keys or passwords here)
+      - name: Report production app settings
+        continue-on-error: true
+        run: |
+          az webapp config appsettings list -g rg-capstone-prod -n camp-freedive-ph \
+            --query "[?name=='APP_ENV' || name=='APP_DEBUG' || name=='MAIL_MAILER' || name=='LOG_LEVEL' || name=='QUEUE_CONNECTION' || name=='DB_CONNECTION'].[name, value]" -o tsv > settings.tsv
+          [ -s settings.tsv ] || echo "None of these keys are set in App Settings" > settings.tsv
+          echo "::notice title=Production app settings::$(tr '\t\n' '= ' < settings.tsv)"
+
       # The startup command installs our nginx config, runs pending migrations, then starts Laravel's scheduler
-      # (routes/console.php: forecast refresh, hourly batch safety checks, nightly accuracy archive). Needs "Always On" in Azure.
+      # (routes/console.php: forecast refresh, hourly batch safety checks, nightly accuracy archive) and a queue worker
+      # (queued mail). Both run in restart loops, and the worker exits hourly (--max-time) to pick up new code. Needs "Always On".
       # Fails closed: if the config can't be copied or doesn't pass `nginx -t`, nginx is stopped, because Azure's stock
       # config serves /home/site/wwwroot (including .env) instead of public/.
       - name: 'Deploy to Azure Web App'
@@ -91,16 +107,16 @@ jobs:
           app-name: 'camp-freedive-ph'
           slot-name: 'Production'
           package: .
-          startup-command: 'if cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && nginx -t; then service nginx reload; else echo "nginx config not applied, stopping nginx" >&2; service nginx stop; fi; (php /home/site/wwwroot/artisan migrate --force || true) && (php /home/site/wwwroot/artisan optimize || true); (nohup php /home/site/wwwroot/artisan schedule:work >> /home/LogFiles/laravel-scheduler.log 2>&1 &)'
+          startup-command: 'if cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && nginx -t; then service nginx reload; else echo "nginx config not applied, stopping nginx" >&2; service nginx stop; fi; (php /home/site/wwwroot/artisan migrate --force || true) && (php /home/site/wwwroot/artisan optimize || true); (nohup sh -c "while true; do php /home/site/wwwroot/artisan schedule:work; sleep 5; done" >> /home/LogFiles/laravel-scheduler.log 2>&1 &); (nohup sh -c "while true; do php /home/site/wwwroot/artisan queue:work --tries=3 --max-time=3600; sleep 5; done" >> /home/LogFiles/laravel-queue.log 2>&1 &)'
 
-      # Waits for the restarted site, then fails the run if a private file is reachable or the nginx config is missing
+      # Waits until the restarted site serves the new config (its security headers), then fails the run if a private file is reachable
       - name: Check that private files are not served
         env:
           SITE_URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
         run: |
-          for i in $(seq 1 30); do
-            [ "$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL/up")" = "200" ] && break
-            sleep 10
+          for i in $(seq 1 40); do
+            curl -sI -m 15 "$SITE_URL/up" | grep -qi '^x-content-type-options: nosniff' && break
+            sleep 15
           done
           fail=0
           for p in /.env /.htaccess /.git/config /composer.json /artisan /storage/logs/laravel.log; do
