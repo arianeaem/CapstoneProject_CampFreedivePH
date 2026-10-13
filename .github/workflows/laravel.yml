@@ -3,11 +3,11 @@ name: Laravel CI
 on:
   push:
     branches:
-      - main
+      - master
       - feature/prd-forecast
   pull_request:
     branches:
-      - main
+      - master
 
 defaults:
   run:
@@ -80,8 +80,8 @@ jobs:
           DB_USERNAME: postgres
           DB_PASSWORD: postgres
 
-      - name: Run focused booking tests
-        run: php artisan test tests/Feature/BookingValidationTest.php --compact
+      - name: Run the full test suite
+        run: php artisan test --compact
         env:
           DB_CONNECTION: pgsql
           DB_HOST: 127.0.0.1

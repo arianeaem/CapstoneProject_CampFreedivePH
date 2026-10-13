@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\BookingParticipant;
 use App\Models\Payment;
 use App\Services\SlotReservationService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
@@ -24,10 +25,19 @@ class BookingSlotLockingTest extends TestCase
         Cache::flush();
     }
 
+    /**
+     * A Saturday-Sunday pair some weeks from today, so the dates never fall inside the booking lead time.
+     */
+    private function weekend(int $weeksAhead): array
+    {
+        $saturday = Carbon::today()->addWeeks($weeksAhead)->next(Carbon::SATURDAY);
+
+        return [$saturday->toDateString(), $saturday->copy()->addDay()->toDateString()];
+    }
+
     public function test_slot_reservation_service_calculates_capacity_and_holds_correctly(): void
     {
-        $startDate = '2026-10-10';
-        $endDate = '2026-10-11';
+        [$startDate, $endDate] = $this->weekend(4);
 
         // 1. Initial State: 45 slots available
         $this->assertEquals(0, $this->slotService->getConfirmedPaxCount($startDate));
@@ -54,8 +64,7 @@ class BookingSlotLockingTest extends TestCase
 
     public function test_booking_submission_acquires_slot_hold_and_decrements_available_capacity(): void
     {
-        $startDate = '2026-10-17';
-        $endDate = '2026-10-18';
+        [$startDate, $endDate] = $this->weekend(5);
 
         $payload = [
             'class_type' => 'discovery',
@@ -91,8 +100,7 @@ class BookingSlotLockingTest extends TestCase
 
     public function test_booking_submission_blocks_when_capacity_exceeded_including_holds(): void
     {
-        $startDate = '2026-10-24';
-        $endDate = '2026-10-25';
+        [$startDate, $endDate] = $this->weekend(6);
 
         // Pre-fill 44 slots via temporary holds
         $this->slotService->acquireHold($startDate, 'EXISTING-HOLD', 44, 900);
@@ -130,8 +138,7 @@ class BookingSlotLockingTest extends TestCase
 
     public function test_payment_confirmation_releases_temporary_hold_and_commits_pax(): void
     {
-        $startDate = '2026-10-31';
-        $endDate = '2026-11-01';
+        [$startDate, $endDate] = $this->weekend(7);
 
         $batch = Batch::create([
             'name' => 'Batch Test Lock',

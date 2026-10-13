@@ -6,17 +6,21 @@ This repository holds three projects that work together:
 | Folder | What it is | Tech |
 |---|---|---|
 | [`camp-freedive-ph/`](camp-freedive-ph/README.md) | The website: public booking, Manage Booking, and the owner / admin / coach portals | Laravel 13, PHP 8.4+, PostgreSQL (Supabase), Vite + Tailwind + Alpine.js |
-| [`safety-forecast/`](safety-forecast/README.md) | Marine weather model service. Forecasts waves, wind and currents and rates each dive day from Very Safe to Critical Risk | Python, FastAPI, XGBoost / ONNX |
+| [`safety-forecast/`](safety-forecast/README.md) | Marine weather model service (research). Forecasts waves, wind and currents and rates each dive day from Very Safe to Critical Risk. Not used by the website | Python, FastAPI, XGBoost / ONNX |
 | `demand-forecast/` | Booking-demand model. Forecasts how busy each batch and month will be and sends the results to the website | Python, scikit-learn |
 
 How they connect:
 
 ```
-safety-forecast (FastAPI :8001) ──▶ camp-freedive-ph ◀── demand-forecast (nightly GitHub Action)
-        weather risk per dive day          website           demand per batch / month
+Open-Meteo APIs ──▶ camp-freedive-ph ◀── demand-forecast (nightly GitHub Action)
+ weather + marine       website           demand per batch / month
+
+safety-forecast (FastAPI :8001, local only, not connected to the website)
 ```
 
-If the safety-forecast service is offline, the website falls back to its own Open-Meteo based rules.
+The website rates each dive day itself, from Open-Meteo data and its own weather rules
+(`WeatherForecastService`, `WeatherSafetyService`). It stopped calling the safety-forecast service in
+commit `ae6b4e7`; that service now runs only on a developer machine for model research.
 
 ## Getting started
 

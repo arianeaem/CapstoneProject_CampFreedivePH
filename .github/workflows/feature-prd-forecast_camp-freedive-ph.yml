@@ -109,13 +109,15 @@ jobs:
           package: .
           startup-command: 'if cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && nginx -t; then service nginx reload; else echo "nginx config not applied, stopping nginx" >&2; service nginx stop; fi; (php /home/site/wwwroot/artisan migrate --force || true) && (php /home/site/wwwroot/artisan optimize || true); (nohup sh -c "while true; do php /home/site/wwwroot/artisan schedule:work; sleep 5; done" >> /home/LogFiles/laravel-scheduler.log 2>&1 &); (nohup sh -c "while true; do php /home/site/wwwroot/artisan queue:work --tries=3 --max-time=3600; sleep 5; done" >> /home/LogFiles/laravel-queue.log 2>&1 &)'
 
-      # Waits until the restarted site serves the new config (its security headers), then fails the run if a private file is reachable
+      # Waits until the restarted app answers /up with 200 under the new config (nginx adds the headers to its own 502s
+      # too, so the status matters), then fails the run if a private file is reachable. The restart takes about 2 minutes.
       - name: Check that private files are not served
         env:
           SITE_URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
         run: |
           for i in $(seq 1 40); do
-            curl -sI -m 15 "$SITE_URL/up" | grep -qi '^x-content-type-options: nosniff' && break
+            h=$(curl -sI -m 15 "$SITE_URL/up" || true)
+            echo "$h" | head -1 | grep -q ' 200' && echo "$h" | grep -qi '^x-content-type-options: nosniff' && break
             sleep 15
           done
           fail=0
