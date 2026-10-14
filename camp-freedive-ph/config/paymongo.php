@@ -22,6 +22,9 @@ return [
 
     'currency' => env('PAYMONGO_CURRENCY', 'PHP'),
 
+    // How long the signed success/cancel return links stay valid
+    'return_url_ttl_hours' => (int) env('PAYMONGO_RETURN_URL_TTL_HOURS', 48),
+
     /*
     |--------------------------------------------------------------------------
     | Supported Hosted Checkout Payment Method Types (QR Ph, GCash, BPI, Card, Maya)

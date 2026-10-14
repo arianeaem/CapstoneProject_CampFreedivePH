@@ -13,11 +13,49 @@ use App\Models\User;
 use App\Services\WeatherForecastService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class WeatherSafetyModuleTest extends TestCase
 {
     use RefreshDatabase;
+
+    /** Calm-sea Open-Meteo responses for every forecast day (same shape as RuleBasedSafetyPipelineTest). */
+    private function fakeOpenMeteo(): void
+    {
+        $today = Carbon::today(WeatherForecastService::TIMEZONE);
+        $times = [];
+        for ($d = 0; $d < WeatherForecastService::MAX_FORECAST_DAYS; $d++) {
+            foreach (range(0, 23) as $h) {
+                $times[] = $today->copy()->addDays($d)->format('Y-m-d') . sprintf('T%02d:00', $h);
+            }
+        }
+        $all = fn (float $v) => array_fill(0, count($times), $v);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'marine-api.open-meteo.com/*' => Http::response(['hourly' => [
+                'time' => $times,
+                'wave_height' => $all(0.2),
+                'wave_period' => $all(6.0),
+                'swell_wave_height' => $all(0.1),
+                'wind_wave_height' => $all(0.1),
+                'ocean_current_velocity' => $all(0.3),
+                'swell_wave_period' => $all(5.0),
+                'wind_wave_period' => $all(2.0),
+            ]]),
+            'api.open-meteo.com/*' => Http::response(['hourly' => [
+                'time' => $times,
+                'precipitation' => $all(0.0),
+                'rain' => $all(0.0),
+                'showers' => $all(0.0),
+                'pressure_msl' => $all(1013.0),
+                'wind_speed_10m' => $all(8.0),
+                'wind_gusts_10m' => $all(12.0),
+                'wind_direction_10m' => $all(45.0),
+            ]]),
+        ]);
+    }
 
     protected User $admin;
     protected User $coach;
@@ -26,6 +64,10 @@ class WeatherSafetyModuleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // These tests used to call the real Open-Meteo API, which made them slow and flaky
+        // (fewer hours returned under load, or offline, failed CI). Calm, complete synthetic data.
+        $this->fakeOpenMeteo();
 
         $this->admin = User::factory()->create([
             'role' => 'admin',

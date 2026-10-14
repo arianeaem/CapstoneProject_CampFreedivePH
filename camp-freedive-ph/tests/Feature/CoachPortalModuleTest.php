@@ -161,6 +161,16 @@ class CoachPortalModuleTest extends TestCase
             'created_by' => $this->admin->id,
         ]);
 
+        // The coach is on the coach team for both batches (release is only for assigned coaches)
+        foreach ([$urgentBatch, $this->upcomingBatch] as $assignedBatch) {
+            CoachAvailability::create([
+                'coach_id' => $this->coach->id,
+                'date' => $assignedBatch->start_date->format('Y-m-d'),
+                'status' => 'assigned',
+                'notes' => "Assigned to {$assignedBatch->batch_code}",
+            ]);
+        }
+
         $responseUrgent = $this->actingAs($this->coach)->post('/coach/availability/release', [
             'batch_id' => $urgentBatch->id,
             'dive_date' => $urgentBatch->start_date->format('Y-m-d'),

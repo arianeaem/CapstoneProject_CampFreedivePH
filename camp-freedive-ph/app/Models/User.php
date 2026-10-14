@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
@@ -39,6 +40,16 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Any password change (reset, forced change, admin-assigned) invalidates "remember me" cookies
+        static::updating(function (User $user) {
+            if ($user->isDirty('password')) {
+                $user->setRememberToken(Str::random(60));
+            }
+        });
     }
 
     public function auditLogs(): HasMany

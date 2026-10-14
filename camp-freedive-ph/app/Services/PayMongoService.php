@@ -444,6 +444,44 @@ class PayMongoService
     }
 
     /**
+     * True when no real API key is set, so checkouts are simulated (local/testing only).
+     */
+    public function isSimulated(): bool
+    {
+        return empty($this->secretKey) || str_contains($this->secretKey, 'your_secret_key');
+    }
+
+    /**
+     * The first paid payment on a checkout session, read fresh from PayMongo (never cached,
+     * because the session may have been fetched before it was paid). Null if not paid.
+     */
+    public function paidPaymentForCheckout(string $checkoutId): ?array
+    {
+        if ($this->isSimulated()) {
+            return null;
+        }
+
+        try {
+            $response = $this->request('GET', "{$this->baseUrl}/checkout_sessions/{$checkoutId}", [], 10);
+        } catch (Exception $e) {
+            Log::error('PayMongo Get Checkout Session Exception: ' . $e->getMessage());
+            return null;
+        }
+
+        if (!$response->successful()) {
+            return null;
+        }
+
+        foreach ($response->json('data.attributes.payments') ?? [] as $payment) {
+            if (($payment['attributes']['status'] ?? null) === 'paid') {
+                return $payment;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Get a checkout session by id (cached).
      */
     public function getCheckoutSession(string $checkoutId): ?array
@@ -475,9 +513,15 @@ class PayMongoService
      */
     public function verifyWebhookSignature(string $payload, string $signatureHeader): bool
     {
+        // No secret means we cannot tell PayMongo from anyone else, so reject
         if (empty($this->webhookSecret)) {
-            return true; // no webhook secret set, skip the check
+            Log::error('PayMongo webhook rejected: PAYMONGO_WEBHOOK_SIGNATURE_SECRET is not set.');
+            return false;
         }
+
+        // Live events are signed in "li", test events in "te"
+        $livemode = (bool) (json_decode($payload, true)['data']['attributes']['livemode'] ?? false);
+        $signatureKey = $livemode ? 'li' : 'te';
 
         $parts = explode(',', $signatureHeader);
         $timestamp = null;
@@ -487,7 +531,7 @@ class PayMongoService
             [$key, $value] = explode('=', trim($part), 2) + [null, null];
             if ($key === 't') {
                 $timestamp = $value;
-            } elseif ($key === 'te' || $key === 'li') {
+            } elseif ($key === $signatureKey) {
                 $signature = $value;
             }
         }

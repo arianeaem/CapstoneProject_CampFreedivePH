@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class UserManagementController extends Controller
@@ -104,7 +105,8 @@ class UserManagementController extends Controller
             return back()->withErrors(['first_name' => 'First and Last name are required.'])->withInput();
         }
 
-        $tempPassword = !empty($validated['temp_password']) ? $validated['temp_password'] : ('TempPass' . mt_rand(1000, 9999) . '!');
+        // Random 16 characters (letters, numbers, symbols) when the owner/admin doesn't type one
+        $tempPassword = !empty($validated['temp_password']) ? $validated['temp_password'] : Str::password(16);
 
         $user = User::create([
             'name' => $fullName,
@@ -161,6 +163,12 @@ class UserManagementController extends Controller
             return $blocked->withInput();
         }
 
+        // A coach who becomes admin/owner would leave their upcoming batches without a coach
+        if ($user->isCoach() && $validated['role'] !== 'coach' && ($blocked = $this->blockIfCoachHasUpcomingWork($user, 'moved to a different role'))) {
+            return $blocked->withInput();
+        }
+
+        $wasArchived = $user->isArchived();
         $fullName = $request->fullName() ?: ($validated['name'] ?? $user->name);
 
         $changes = [];
@@ -185,7 +193,10 @@ class UserManagementController extends Controller
             $changes[] = "Password reset by admin (temporary password assigned)";
         }
 
-        $user->update($updateData);
+        $remainsActiveOwner = $validated['role'] === 'owner' && $validated['status'] === 'active';
+        if (!$this->accounts->withOwnerGuard($user, $remainsActiveOwner, fn () => $user->update($updateData))) {
+            return back()->withInput()->with('error', UserAccountService::LAST_OWNER_MESSAGE);
+        }
 
         $changeSummary = !empty($changes) ? implode(', ', $changes) : 'No field changes';
 
@@ -196,6 +207,11 @@ class UserManagementController extends Controller
             $currentUser->name,
             $request
         );
+
+        // Same event as restoring with the toggle, so restores are easy to find in the audit log
+        if ($wasArchived) {
+            AuditLogger::log('USER_RESTORED', "Removed account restored (status {$validated['status']}) for user: {$user->email} by {$currentUser->name}", $user, $currentUser->name, $request);
+        }
 
         $response = redirect()->route('admin.users.index')
             ->with('success', "Profile for {$user->name} updated successfully.");
@@ -236,7 +252,9 @@ class UserManagementController extends Controller
 
         $wasArchived = $user->isArchived();
         $newStatus = $user->isActive() ? 'inactive' : 'active';
-        $user->update(['status' => $newStatus]);
+        if (!$this->accounts->withOwnerGuard($user, $user->isOwner() && $newStatus === 'active', fn () => $user->update(['status' => $newStatus]))) {
+            return back()->with('error', UserAccountService::LAST_OWNER_MESSAGE);
+        }
 
         AuditLogger::log(
             $wasArchived ? 'USER_RESTORED' : 'USER_STATUS_TOGGLED',
@@ -275,7 +293,9 @@ class UserManagementController extends Controller
             return $blocked;
         }
 
-        $this->accounts->archive($user, $currentUser);
+        if (!$this->accounts->withOwnerGuard($user, false, fn () => $this->accounts->archive($user, $currentUser))) {
+            return back()->with('error', UserAccountService::LAST_OWNER_MESSAGE);
+        }
 
         AuditLogger::log(
             'USER_REMOVED',

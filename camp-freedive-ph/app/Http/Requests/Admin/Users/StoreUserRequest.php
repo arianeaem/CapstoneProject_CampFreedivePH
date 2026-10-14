@@ -6,6 +6,7 @@ use App\Http\Requests\Concerns\BuildsPersonName;
 use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 /** Validation for Admin/UserManagementController::store(). Owners can add admins and coaches; admins only coaches. */
 class StoreUserRequest extends FormRequest
@@ -28,7 +29,7 @@ class StoreUserRequest extends FormRequest
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'phone' => ['required', 'string', 'max:50'],
             'role' => ['required', Rule::in($this->allowedRoles())],
-            'temp_password' => ['nullable', 'string', 'min:8'],
+            'temp_password' => ['nullable', 'string', Password::defaults()],
         ];
     }
 

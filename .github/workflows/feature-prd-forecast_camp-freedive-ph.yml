@@ -9,8 +9,20 @@ on:
       - feature/prd-forecast
   workflow_dispatch:
 
+# Never run two production deploys at once; a newer push waits for the running one
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
+  # The full test suite (PostgreSQL, like production) must pass before anything is built or deployed
+  test:
+    uses: ./.github/workflows/laravel.yml
+    permissions:
+      contents: read
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read #This is required for actions/checkout
@@ -91,15 +103,32 @@ jobs:
         continue-on-error: true
         run: |
           az webapp config appsettings list -g rg-capstone-prod -n camp-freedive-ph \
-            --query "[?name=='APP_ENV' || name=='APP_DEBUG' || name=='MAIL_MAILER' || name=='LOG_LEVEL' || name=='QUEUE_CONNECTION' || name=='DB_CONNECTION'].[name, value]" -o tsv > settings.tsv
+            --query "[?name=='APP_ENV' || name=='APP_DEBUG' || name=='MAIL_MAILER' || name=='LOG_LEVEL' || name=='QUEUE_CONNECTION' || name=='DB_CONNECTION' || name=='SESSION_DRIVER' || name=='SESSION_SECURE_COOKIE'].[name, value]" -o tsv > settings.tsv
           [ -s settings.tsv ] || echo "None of these keys are set in App Settings" > settings.tsv
           echo "::notice title=Production app settings::$(tr '\t\n' '= ' < settings.tsv)"
+
+      # The PayMongo webhook rejects every event when its signing secret is missing, so do not deploy
+      # without it. Only the setting NAME is read; the value is never fetched or printed.
+      - name: Require the PayMongo webhook secret
+        run: |
+          if ! names=$(az webapp config appsettings list -g rg-capstone-prod -n camp-freedive-ph --query "[].name" -o tsv); then
+            echo "::warning title=Webhook secret not verified::Could not list app setting names; check PAYMONGO_WEBHOOK_SIGNATURE_SECRET manually."
+            exit 0
+          fi
+          if ! echo "$names" | grep -qx 'PAYMONGO_WEBHOOK_SIGNATURE_SECRET'; then
+            echo "::error title=Missing app setting::PAYMONGO_WEBHOOK_SIGNATURE_SECRET is not set; PayMongo webhooks would be rejected. Deploy stopped."
+            exit 1
+          fi
+          echo "PAYMONGO_WEBHOOK_SIGNATURE_SECRET is set (value not read)."
 
       # The startup command installs our nginx config, runs pending migrations, then starts Laravel's scheduler
       # (routes/console.php: forecast refresh, hourly batch safety checks, nightly accuracy archive) and a queue worker
       # (queued mail). Both run in restart loops, and the worker exits hourly (--max-time) to pick up new code. Needs "Always On".
       # Fails closed: if the config can't be copied or doesn't pass `nginx -t`, nginx is stopped, because Azure's stock
       # config serves /home/site/wwwroot (including .env) instead of public/.
+      # Migration and optimize output, plus any "STARTUP ERROR" line, go to /home/LogFiles/laravel-startup.log instead of
+      # being discarded. A failed migration is not hidden: /up answers 500 while any migration is pending, which fails the
+      # health wait in the next step (and Azure's health check), so the run goes red. Rollback: re-run the last good deploy.
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
@@ -107,19 +136,26 @@ jobs:
           app-name: 'camp-freedive-ph'
           slot-name: 'Production'
           package: .
-          startup-command: 'if cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && nginx -t; then service nginx reload; else echo "nginx config not applied, stopping nginx" >&2; service nginx stop; fi; (php /home/site/wwwroot/artisan migrate --force || true) && (php /home/site/wwwroot/artisan optimize || true); (nohup sh -c "while true; do php /home/site/wwwroot/artisan schedule:work; sleep 5; done" >> /home/LogFiles/laravel-scheduler.log 2>&1 &); (nohup sh -c "while true; do php /home/site/wwwroot/artisan queue:work --tries=3 --max-time=3600; sleep 5; done" >> /home/LogFiles/laravel-queue.log 2>&1 &)'
+          startup-command: 'if cp /home/site/wwwroot/deploy/nginx/default.conf /etc/nginx/sites-available/default && nginx -t; then service nginx reload; else echo "nginx config not applied, stopping nginx" >&2; service nginx stop; fi; { echo "$(date -u +%FT%TZ) startup: migrate"; php /home/site/wwwroot/artisan migrate --force --no-interaction || echo "$(date -u +%FT%TZ) STARTUP ERROR: migrate failed (exit $?)"; php /home/site/wwwroot/artisan optimize || echo "$(date -u +%FT%TZ) STARTUP ERROR: optimize failed (exit $?)"; } >> /home/LogFiles/laravel-startup.log 2>&1; (nohup sh -c "while true; do php /home/site/wwwroot/artisan schedule:work; sleep 5; done" >> /home/LogFiles/laravel-scheduler.log 2>&1 &); (nohup sh -c "while true; do php /home/site/wwwroot/artisan queue:work --tries=3 --max-time=3600; sleep 5; done" >> /home/LogFiles/laravel-queue.log 2>&1 &)'
 
       # Waits until the restarted app answers /up with 200 under the new config (nginx adds the headers to its own 502s
       # too, so the status matters), then fails the run if a private file is reachable. The restart takes about 2 minutes.
-      - name: Check that private files are not served
+      # If /up never answers 200 (pending/failed migration, or the app does not boot), the run FAILS here instead of
+      # passing silently. Rollback: Actions > last successful run of this workflow > "Re-run all jobs".
+      - name: Check that the app is healthy and private files are not served
         env:
           SITE_URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
         run: |
+          healthy=0
           for i in $(seq 1 40); do
             h=$(curl -sI -m 15 "$SITE_URL/up" || true)
-            echo "$h" | head -1 | grep -q ' 200' && echo "$h" | grep -qi '^x-content-type-options: nosniff' && break
+            if echo "$h" | head -1 | grep -q ' 200' && echo "$h" | grep -qi '^x-content-type-options: nosniff'; then healthy=1; break; fi
             sleep 15
           done
+          if [ "$healthy" != 1 ]; then
+            echo "::error title=App not healthy after deploy::/up did not answer 200 within 10 minutes (last status: $(echo "$h" | head -1 | tr -d '\r')). Likely a failed or pending migration or a startup error: see /home/LogFiles/laravel-startup.log. Roll back by re-running the last successful deploy."
+            exit 1
+          fi
           fail=0
           for p in /.env /.htaccess /.git/config /composer.json /artisan /storage/logs/laravel.log; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL$p")

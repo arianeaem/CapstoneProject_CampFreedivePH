@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - master
-      - feature/prd-forecast
   pull_request:
     branches:
       - master
+      - feature/prd-forecast
+  # Pushes to feature/prd-forecast run this suite from the deploy workflow, which only deploys if it passes
+  workflow_call:
 
 defaults:
   run:
@@ -19,7 +21,8 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # Same major version as production (Supabase PostgreSQL 17)
+        image: postgres:17
         env:
           POSTGRES_DB: testing
           POSTGRES_USER: postgres

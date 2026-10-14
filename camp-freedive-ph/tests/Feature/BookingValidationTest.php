@@ -464,7 +464,7 @@ class BookingValidationTest extends TestCase
                 'booking_number' => 'CFP-2026-AB123',
                 'pin' => $validPin,
             ]);
-            $res->assertRedirect(route('manage.show', ['booking_number' => 'CFP-2026-AB123', 'pin' => $validPin]));
+            $res->assertRedirect(route('manage.show', ['booking_number' => 'CFP-2026-AB123']));
         }
 
         // 2. Reject invalid PINs: 12, 12345, abcd, 12 3

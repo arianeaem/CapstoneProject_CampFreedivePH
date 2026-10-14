@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureAccountActive;
 use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsureSessionPasswordIsCurrent;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PORT
                 | Request::HEADER_X_FORWARDED_PROTO,
         );
+
+        // Sign out other sessions when an account's password changes (see the middleware)
+        $middleware->web(append: [EnsureSessionPasswordIsCurrent::class]);
 
         $middleware->alias([
             'role' => EnsureUserRole::class,

@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\Schema;
 
 class DatabaseSeeder extends Seeder
 {
+    use Concerns\RefusesProduction;
+    use Concerns\GeneratesDemoPassword;
+
     /**
      * Carpool pickup points (same as the booking form).
      */
@@ -40,6 +43,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->refuseInProduction();
+
         // ---------------------------------------------------------------
         // 0. Clear the tables
         // ---------------------------------------------------------------
@@ -89,12 +94,14 @@ class DatabaseSeeder extends Seeder
         // 1. Staff and coach accounts
         // ---------------------------------------------------------------
         
+        $demoPasswordHash = $this->demoPasswordHash();
+
         // 1. Owner (Antonio Mercado)
         $owner = User::create([
             'name' => 'Antonio Mercado',
             'email' => 'owner@campfreedive.ph',
             'phone' => '0927 887 9894',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'owner',
             'status' => 'active',
             'must_change_password' => false,
@@ -107,7 +114,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Maria Santos',
             'email' => 'admin@campfreedive.ph',
             'phone' => '0917 888 1234',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'admin',
             'status' => 'active',
             'must_change_password' => false,
@@ -121,7 +128,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Jose Reyes',
             'email' => 'coach.jose@campfreedive.ph',
             'phone' => '0919 456 7890',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'coach',
             'status' => 'active',
             'must_change_password' => false,
@@ -134,7 +141,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Mary Grace Bautista',
             'email' => 'coach.mary@campfreedive.ph',
             'phone' => '0920 111 2233',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'coach',
             'status' => 'active',
             'must_change_password' => false,
@@ -147,7 +154,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Michael Cruz',
             'email' => 'coach.michael@campfreedive.ph',
             'phone' => '0917 555 4321',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'coach',
             'status' => 'active',
             'must_change_password' => false,
@@ -160,7 +167,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Christine Villamayor',
             'email' => 'coach.christine@campfreedive.ph',
             'phone' => '0918 333 7788',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'coach',
             'status' => 'active',
             'must_change_password' => false,
@@ -173,7 +180,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Mark Garcia',
             'email' => 'coach.mark@campfreedive.ph',
             'phone' => '0922 444 5566',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'coach',
             'status' => 'active',
             'must_change_password' => false,
@@ -186,7 +193,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Angelo Fernandez',
             'email' => 'coach.angelo@campfreedive.ph',
             'phone' => '0999 000 1111',
-            'password' => Hash::make('Password123!'),
+            'password' => $demoPasswordHash,
             'role' => 'coach',
             'status' => 'inactive',
             'must_change_password' => false,
