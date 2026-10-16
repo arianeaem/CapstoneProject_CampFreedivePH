@@ -21,7 +21,9 @@ class ParticipantHistoryController extends Controller
         $participant = $participant->merged_into_id ? $participant->mergedInto : $participant;
         abort_if(!$participant || $participant->anonymized_at, 404);
 
+        // Current or finished classes only. A coach who was reassigned away loses access.
         $isTheirParticipant = ParticipantAssignment::where('coach_id', $coach->id)
+            ->whereIn('status', ['assigned', 'completed'])
             ->whereIn('participant_id', $participant->bookingParticipants()->pluck('id'))
             ->exists();
         abort_unless($isTheirParticipant, 403, 'You can only see participants in your own batches.');

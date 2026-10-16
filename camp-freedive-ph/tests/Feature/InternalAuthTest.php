@@ -29,7 +29,7 @@ class InternalAuthTest extends TestCase
     {
         $response = $this->post('/login', [
             'email' => 'owner@campfreedive.ph',
-            'password' => 'Password123!',
+            'password' => $this->demoPassword,
         ]);
 
         $response->assertRedirect('/owner');
@@ -47,7 +47,7 @@ class InternalAuthTest extends TestCase
     {
         $response = $this->post('/login', [
             'email' => 'admin@campfreedive.ph',
-            'password' => 'Password123!',
+            'password' => $this->demoPassword,
         ]);
 
         $response->assertRedirect('/admin');
@@ -59,7 +59,7 @@ class InternalAuthTest extends TestCase
     {
         $response = $this->post('/login', [
             'email' => 'coach.jose@campfreedive.ph',
-            'password' => 'Password123!',
+            'password' => $this->demoPassword,
         ]);
 
         $response->assertRedirect('/coach');
@@ -71,7 +71,7 @@ class InternalAuthTest extends TestCase
     {
         $response = $this->post('/login', [
             'email' => 'coach.angelo@campfreedive.ph',
-            'password' => 'Password123!',
+            'password' => $this->demoPassword,
         ]);
 
         $response->assertSessionHas('error', 'This account has been deactivated. Please contact the camp owner.');
@@ -194,29 +194,30 @@ class InternalAuthTest extends TestCase
     {
         $response = $this->from('/login')->post('/login', [
             'email' => 'owner@campfreedive.ph',
-            'password' => 'WrongPassword123!',
+            'password' => 'Wrong-Synthetic-Pass-1',
         ]);
 
+        // Same generic message as an unknown e-mail, so the login page can't reveal which accounts exist
         $response->assertRedirect('/login');
-        $response->assertSessionHas('error', 'The password you entered is incorrect. Please check your password or click "Forgot password?".');
-        $response->assertSessionHasErrors(['password']);
+        $response->assertSessionHas('error', 'These credentials do not match our records. Please check your e-mail and password, or click "Forgot password?".');
+        $response->assertSessionHasErrors(['email']);
         $this->assertGuest();
 
         // Follow redirect to verify single clean alert banner renders on login page
         $followResponse = $this->get('/login');
         $followResponse->assertStatus(200);
-        $followResponse->assertSee('The password you entered is incorrect. Please check your password or click &quot;Forgot password?&quot;.', false);
+        $followResponse->assertSee('These credentials do not match our records. Please check your e-mail and password, or click &quot;Forgot password?&quot;.', false);
     }
 
     public function test_unknown_email_shows_invalid_credentials_error(): void
     {
         $response = $this->from('/login')->post('/login', [
             'email' => 'unknown.user@campfreedive.ph',
-            'password' => 'SomePassword123!',
+            'password' => 'Some-Synthetic-Pass-2',
         ]);
 
         $response->assertRedirect('/login');
-        $response->assertSessionHas('error', 'These credentials do not match our records. Please check your email address and password.');
+        $response->assertSessionHas('error', 'These credentials do not match our records. Please check your e-mail and password, or click "Forgot password?".');
         $response->assertSessionHasErrors(['email']);
         $this->assertGuest();
     }

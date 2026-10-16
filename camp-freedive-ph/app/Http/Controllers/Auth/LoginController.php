@@ -8,6 +8,7 @@ use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -58,10 +59,11 @@ class LoginController extends Controller
             ]);
         }
 
-        // If the user exists but is inactive, stop here
+        // If the user exists but is inactive, stop here. Only say so after the right password,
+        // so the message can't be used to find out which e-mails have accounts.
         $user = User::where('email', $request->input('email'))->first();
 
-        if ($user && !$user->isActive()) {
+        if ($user && !$user->isActive() && Hash::check((string) $request->input('password'), $user->password)) {
             RateLimiter::hit($throttleKey);
             AuditLogger::log('LOGIN_DEACTIVATED_BLOCKED', "Login blocked for deactivated account: {$user->email} (Role: {$user->role})", $user, $user->name, $request);
 
@@ -72,7 +74,7 @@ class LoginController extends Controller
         // Try to log in
         $remember = $request->boolean('remember');
 
-        if (Auth::attempt($credentials, $remember)) {
+        if ((!$user || $user->isActive()) && Auth::attempt($credentials, $remember)) {
             RateLimiter::clear($throttleKey);
             $request->session()->regenerate();
 
@@ -106,17 +108,10 @@ class LoginController extends Controller
         RateLimiter::hit($throttleKey);
         AuditLogger::log('LOGIN_FAILED', "Failed login attempt for email: {$request->input('email')}", $user, $request->input('email'), $request);
 
-        $errorMessage = $user 
-            ? 'The password you entered is incorrect. Please check your password or click "Forgot password?".'
-            : 'These credentials do not match our records. Please check your email address and password.';
-
-        $fieldErrors = $user
-            ? ['password' => 'Incorrect password entered.']
-            : ['email' => 'These credentials do not match our records.'];
-
+        // Same message whether or not the e-mail has an account
         return back()->withInput($request->only('email', 'remember'))
-            ->with('error', $errorMessage)
-            ->withErrors($fieldErrors);
+            ->with('error', 'These credentials do not match our records. Please check your e-mail and password, or click "Forgot password?".')
+            ->withErrors(['email' => 'These credentials do not match our records.']);
     }
 
     /**

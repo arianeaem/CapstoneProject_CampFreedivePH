@@ -14,6 +14,7 @@ class AuditLog extends Model
 
     protected $fillable = [
         'user_id',
+        'actor_id',
         'actor_name',
         'action',
         'description',
@@ -26,9 +27,16 @@ class AuditLog extends Model
         'created_at' => 'datetime',
     ];
 
+    /** The account the entry is about (target). */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** The logged-in account that performed the action (null for guests and older entries). */
+    public function actor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'actor_id');
     }
 
     public function getActionBadgeAttribute(): array

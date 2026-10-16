@@ -56,9 +56,8 @@ class PasswordResetController extends Controller
                 Log::warning("Failed sending password reset email to {$user->email}: " . $e->getMessage());
             }
 
+            // Never log the link itself: it is a working credential for 60 minutes
             AuditLogger::log('PASSWORD_RESET_LINK_SENT', "Password reset link requested for: {$user->email}", $user, $user->name, $request);
-
-            Log::info("Password Reset Link for {$user->email}: {$resetUrl}");
         }
 
         $redirect = back()->with('status', 'If an active account exists with that email, we have sent a password reset link.');
@@ -103,8 +102,10 @@ class PasswordResetController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
-            return back()->withErrors(['email' => 'Unable to find user with that email address.']);
+        // Links sent before an account was deactivated or removed must not work afterwards
+        if (!$user || !$user->isActive()) {
+            DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+            return back()->withErrors(['email' => 'This password reset token is invalid or has expired.']);
         }
 
         $user->update([

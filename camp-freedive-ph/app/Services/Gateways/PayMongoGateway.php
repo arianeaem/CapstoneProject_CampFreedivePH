@@ -6,6 +6,7 @@ use App\Contracts\PaymentGatewayInterface;
 use App\Models\Booking;
 use App\Services\PayMongoService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 
 class PayMongoGateway implements PaymentGatewayInterface
 {
@@ -38,8 +39,8 @@ class PayMongoGateway implements PaymentGatewayInterface
             ],
         ];
 
-        $defaultSuccessUrl = route('paymongo.success', ['booking' => $booking->id]);
-        $defaultCancelUrl = route('paymongo.cancel', ['booking' => $booking->id]);
+        $defaultSuccessUrl = self::signedReturnUrl('paymongo.success', $booking);
+        $defaultCancelUrl = self::signedReturnUrl('paymongo.cancel', $booking);
 
         $sessionOptions = [
             'reference_number' => $booking->booking_number,
@@ -81,6 +82,17 @@ class PayMongoGateway implements PaymentGatewayInterface
     public function refundPayment(string $paymentId, float $amount, string $reason = 'requested_by_customer', ?string $notes = null): array
     {
         return $this->service->refund($paymentId, $amount, $reason, $notes);
+    }
+
+    /**
+     * Signed, expiring return URL for PayMongo. The signature covers the path only
+     * (checked with 'signed:relative'), so it still works behind the Azure proxy.
+     */
+    public static function signedReturnUrl(string $routeName, Booking $booking): string
+    {
+        $hours = (int) config('paymongo.return_url_ttl_hours', 48);
+
+        return url(URL::temporarySignedRoute($routeName, now()->addHours($hours), ['booking' => $booking->id], false));
     }
 
     /**

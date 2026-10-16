@@ -57,18 +57,13 @@ class BookingController extends Controller
         $initialStep = 1;
 
         if ($request->has('confirmed')) {
-            $bookingNumber = $request->query('confirmed');
-            $pin = $request->query('pin');
+            // Only shown to the person whose session owns the booking (set after payment
+            // or a booking number + PIN lookup). The booking number alone is not enough.
+            $confirmedBooking = Booking::with(['participants', 'priceAdjustments', 'payments'])
+                ->where('booking_number', (string) $request->query('confirmed'))
+                ->first();
 
-            $bookingQuery = Booking::with(['participants', 'priceAdjustments', 'payments'])
-                ->where('booking_number', $bookingNumber);
-
-            if ($pin) {
-                $bookingQuery->where('pin', $pin);
-            }
-
-            $confirmedBooking = $bookingQuery->first();
-            if ($confirmedBooking) {
+            if ($confirmedBooking && session('auth_booking_id') === $confirmedBooking->id) {
                 $initialStep = 5;
                 $downpaymentPaid = (float) $confirmedBooking->payments()
                     ->where('status', 'paid')
@@ -95,7 +90,6 @@ class BookingController extends Controller
                         'first_name' => explode(' ', $p->name)[0] ?? $p->name,
                         'last_name' => substr(strstr($p->name, ' '), 1) ?: '',
                         'age' => $p->age,
-                        'health_condition' => $p->health_condition,
                         'swimmer_status' => $p->swimmer_status,
                     ])->toArray(),
                     'adjustments' => $confirmedBooking->priceAdjustments->map(fn($adj) => [
@@ -435,7 +429,7 @@ class BookingController extends Controller
 
                 // 4-digit PIN so the participant can look up the booking without an account
                 $bookingNumber = 'CFP-' . date('Y') . '-' . strtoupper(Str::random(5));
-                $pin = str_pad((string) mt_rand(0, 9999), 4, '0', STR_PAD_LEFT);
+                $pin = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
 
                 // Save everything in one transaction. If the PayMongo session fails,
                 // nothing gets saved.

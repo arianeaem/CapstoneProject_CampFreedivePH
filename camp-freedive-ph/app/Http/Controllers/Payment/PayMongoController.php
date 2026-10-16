@@ -42,6 +42,11 @@ class PayMongoController extends Controller
      */
     public function checkout(Request $request, Booking $booking): JsonResponse|RedirectResponse
     {
+        // Only the participant who opened this booking with its number + PIN can pay for it
+        if (session('auth_booking_id') !== $booking->id) {
+            return redirect()->route('manage.index')->with('info', 'Please enter your booking number and PIN first.');
+        }
+
         // 1. Get the downpayment amount
         $amount = (float) ($booking->downpayment_amount ?? $booking->total_price ?? 3000);
 
@@ -112,35 +117,51 @@ class PayMongoController extends Controller
     /**
      * Participant comes back after paying.
      *
-     * GET /booking/{booking}/paymongo/success
+     * GET /booking/{booking}/paymongo/success (signed URL, see PayMongoGateway::signedReturnUrl)
+     *
+     * The signed link proves the visitor came back from this booking's checkout, but not
+     * that they paid. The booking is only confirmed when PayMongo reports a paid payment
+     * (or the webhook already recorded it); otherwise the webhook confirms it later.
      */
     public function success(Request $request, Booking $booking): RedirectResponse
     {
+        // Log the participant in to the Manage Booking page (no PIN in the URL)
+        session([
+            'auth_booking_id' => $booking->id,
+            'auth_booking_pin' => $booking->pin,
+        ]);
+
+        $payment = Payment::where('booking_id', $booking->id)
+            ->where('payment_type', 'downpayment')
+            ->latest()
+            ->first();
+
+        $paymongo = app(\App\Services\PayMongoService::class);
+        $paidPayment = null;
+
+        if ($payment && $payment->status === 'paid') {
+            $verified = true; // the webhook got here first
+        } elseif ($payment && $payment->paymongo_resource_id && $paymongo->isSimulated()) {
+            $verified = !app()->isProduction(); // simulated checkout without API keys (local/testing)
+        } elseif ($payment && $payment->paymongo_resource_id) {
+            $paidPayment = $paymongo->paidPaymentForCheckout($payment->paymongo_resource_id);
+            $verified = $paidPayment !== null;
+        } else {
+            $verified = false;
+        }
+
+        if (!$verified) {
+            Log::info("PayMongo success return without a confirmed payment for Booking #{$booking->booking_number}; waiting for the webhook.");
+
+            return redirect()->route('manage.show', ['booking_number' => $booking->booking_number])
+                ->with('info', "We're still waiting for PayMongo to confirm your payment. Your booking will be confirmed automatically and we'll e-mail you once it arrives.");
+        }
+
         try {
-            DB::transaction(function () use ($booking) {
-                // Get the latest pending downpayment
-                $payment = Payment::where('booking_id', $booking->id)
-                    ->where('payment_type', 'downpayment')
-                    ->latest()
-                    ->first();
-
-                $paymongoPaymentId = null;
-                $feeAmount = 0.00;
-                $paymentMethodType = 'paymongo';
-
-                // Get the checkout session from PayMongo to see the payment details
-                if ($payment && $payment->paymongo_resource_id) {
-                    $sessionData = app(\App\Services\PayMongoService::class)->getCheckoutSession($payment->paymongo_resource_id);
-                    $paymentsList = $sessionData['data']['attributes']['payments'] ?? [];
-                    if (!empty($paymentsList)) {
-                        $firstPaid = $paymentsList[0] ?? null;
-                        if ($firstPaid) {
-                            $paymongoPaymentId = $firstPaid['id'] ?? null;
-                            $paymentMethodType = $firstPaid['attributes']['source']['type'] ?? $firstPaid['attributes']['payment_method_type'] ?? 'paymongo';
-                            $feeAmount = ($firstPaid['attributes']['fee'] ?? 0) / 100;
-                        }
-                    }
-                }
+            DB::transaction(function () use ($booking, $payment, $paidPayment) {
+                $paymongoPaymentId = $paidPayment['id'] ?? null;
+                $feeAmount = ($paidPayment['attributes']['fee'] ?? 0) / 100;
+                $paymentMethodType = $paidPayment['attributes']['source']['type'] ?? $paidPayment['attributes']['payment_method_type'] ?? 'paymongo';
 
                 if ($payment && $payment->status !== 'paid') {
                     $payment->update([
@@ -196,36 +217,21 @@ class PayMongoController extends Controller
                 Log::warning("Email send failed for booking #{$booking->booking_number}: " . $e->getMessage());
             }
 
-            // Log the participant in to the Manage Booking page
-            session([
-                'auth_booking_id' => $booking->id,
-                'auth_booking_pin' => $booking->pin,
-            ]);
-
-            return redirect()->route('booking.create', [
-                'confirmed' => $booking->booking_number,
-                'pin' => $booking->pin,
-            ])->with('success', 'Your downpayment has been received via PayMongo! Your 2D1N freediving camp slot is now confirmed.');
+            return redirect()->route('booking.create', ['confirmed' => $booking->booking_number])
+                ->with('success', 'Your downpayment has been received via PayMongo! Your 2D1N freediving camp slot is now confirmed.');
 
         } catch (Exception $e) {
             Log::error("PayMongo Success Handler Exception for Booking #{$booking->booking_number}: " . $e->getMessage());
-            
-            session([
-                'auth_booking_id' => $booking->id,
-                'auth_booking_pin' => $booking->pin,
-            ]);
 
-            return redirect()->route('booking.create', [
-                'confirmed' => $booking->booking_number,
-                'pin' => $booking->pin,
-            ])->with('success', 'Payment received. Your booking is confirmed.');
+            return redirect()->route('booking.create', ['confirmed' => $booking->booking_number])
+                ->with('success', 'Payment received. Your booking is confirmed.');
         }
     }
 
     /**
      * Participant cancelled the checkout.
      *
-     * GET /booking/{booking}/paymongo/cancel
+     * GET /booking/{booking}/paymongo/cancel (signed URL, see PayMongoGateway::signedReturnUrl)
      */
     public function cancel(Request $request, Booking $booking): RedirectResponse
     {
@@ -234,10 +240,7 @@ class PayMongoController extends Controller
             'auth_booking_pin' => $booking->pin,
         ]);
 
-        return redirect()->route('manage.show', [
-            'booking_number' => $booking->booking_number,
-            'pin' => $booking->pin,
-        ])->with('error', 'Payment checkout was cancelled. You can retry paying your reservation downpayment anytime.');
+        return redirect()->route('manage.show', ['booking_number' => $booking->booking_number])->with('error','Payment checkout was cancelled. You can retry paying your reservation downpayment anytime.');
     }
 
     /**

@@ -394,6 +394,9 @@ class AvailabilityController extends Controller
         $batch = Batch::findOrFail($request->input('batch_id'));
         $diveDate = Carbon::parse($request->input('dive_date'))->startOfDay();
 
+        // Only coaches on this batch (with participants or on the coach team) can ask to be released
+        abort_unless($batch->assigned_coaches->pluck('id')->contains($coach->id), 403, 'You are not assigned to this batch.');
+
         // Is there already a pending request?
         $existing = AssignmentReleaseRequest::where('coach_id', $coach->id)
             ->where('batch_id', $batch->id)

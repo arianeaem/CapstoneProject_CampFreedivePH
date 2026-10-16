@@ -41,6 +41,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // /up answers 500 while database migrations are pending, so a migration that failed during
+        // deploy fails the deploy workflow and Azure's health check instead of going unnoticed.
+        // The message is generic: /up is public and the message is written to the log.
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Foundation\Events\DiagnosingHealth::class, function () {
+            $migrator = $this->app->make('migrator');
+            $files = $migrator->getMigrationFiles(array_merge([database_path('migrations')], $migrator->paths()));
+            $pending = array_diff(array_keys($files), $migrator->getRepository()->getRan());
+
+            if ($pending !== []) {
+                throw new \RuntimeException(count($pending) . ' database migration(s) pending.');
+            }
+        });
+
+        // One password rule for staff accounts: create, admin reset, forced change and forgot-password
+        \Illuminate\Validation\Rules\Password::defaults(
+            fn () => \Illuminate\Validation\Rules\Password::min(12)->letters()->mixedCase()->numbers()
+        );
+
         \Illuminate\Pagination\Paginator::defaultView('vendor.pagination.custom');
         \Illuminate\Pagination\Paginator::defaultSimpleView('vendor.pagination.custom');
 

@@ -48,6 +48,7 @@ Route::post('/book', [BookingController::class, 'store'])->name('booking.store')
 
 Route::get('/manage-booking', [ManageBookingController::class, 'index'])->name('manage.index');
 Route::post('/manage-booking/search', [ManageBookingController::class, 'search'])->name('manage.search')->middleware('throttle:manage_lookup');
+// PIN guesses are rate limited inside show(), so returning customers are not throttled
 Route::get('/manage-booking/{booking_number}', [ManageBookingController::class, 'show'])->name('manage.show');
 Route::post('/manage-booking/{booking_number}/reschedule', [ManageBookingController::class, 'reschedule'])->name('manage.reschedule')->middleware('throttle:manage_requests');
 Route::post('/manage-booking/{booking_number}/cancel', [ManageBookingController::class, 'cancel'])->name('manage.cancel')->middleware('throttle:manage_requests');
@@ -58,8 +59,9 @@ Route::get('/api/weather/preview', [\App\Http\Controllers\Api\WeatherPreviewCont
 
 // PayMongo checkout
 Route::post('/booking/{booking}/paymongo/checkout', [\App\Http\Controllers\Payment\PayMongoController::class, 'checkout'])->name('paymongo.checkout')->middleware('throttle:paymongo_checkout');
-Route::get('/booking/{booking}/paymongo/success', [\App\Http\Controllers\Payment\PayMongoController::class, 'success'])->name('paymongo.success');
-Route::get('/booking/{booking}/paymongo/cancel', [\App\Http\Controllers\Payment\PayMongoController::class, 'cancel'])->name('paymongo.cancel');
+// Return URLs are signed by PayMongoGateway, so only the person sent back by PayMongo can open them
+Route::get('/booking/{booking}/paymongo/success', [\App\Http\Controllers\Payment\PayMongoController::class, 'success'])->name('paymongo.success')->middleware('signed:relative');
+Route::get('/booking/{booking}/paymongo/cancel', [\App\Http\Controllers\Payment\PayMongoController::class, 'cancel'])->name('paymongo.cancel')->middleware('signed:relative');
 
 // PayMongo webhook
 Route::post('/api/webhooks/paymongo', [\App\Http\Controllers\Payment\PayMongoController::class, 'webhook'])->name('paymongo.webhook.api')->middleware('throttle:paymongo_webhook');
@@ -92,11 +94,22 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/force-password-change', [ForcePasswordChangeController::class, 'update'])->name('password.force_change.update')->middleware('throttle:password_reset');
 });
 
-// My Profile (profile photo) for every staff role
+
+// My Profile for every staff role
 Route::middleware(['auth', 'active', 'must_change_password', 'role:owner,admin,coach'])->group(function () {
-    Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'show'])->name('profile.show');
-    Route::post('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'updatePhoto'])->name('profile.photo.update');
-    Route::delete('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'destroyPhoto'])->name('profile.photo.destroy');
+    Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'show'])
+        ->name('profile.show');
+
+    Route::post('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'updatePhoto'])
+        ->name('profile.photo.update');
+
+    Route::delete('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'destroyPhoto'])
+        ->name('profile.photo.destroy');
+
+    // Self-service password change
+    Route::post('/profile/password', [\App\Http\Controllers\ProfileController::class, 'updatePassword'])
+        ->middleware('throttle:password_reset')
+        ->name('profile.password.update');
 });
 
 // ---------------------------------------------------------------

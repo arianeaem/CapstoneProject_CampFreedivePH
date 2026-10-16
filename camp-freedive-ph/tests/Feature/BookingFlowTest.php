@@ -224,7 +224,7 @@ class BookingFlowTest extends TestCase
             'booking_number' => 'CFP-2026-9999',
             'pin'            => '1234',
         ]);
-        $searchSuccess->assertRedirect(route('manage.show', ['booking_number' => 'CFP-2026-9999', 'pin' => '1234']));
+        $searchSuccess->assertRedirect(route('manage.show', ['booking_number' => 'CFP-2026-9999']));
 
         // Show detail page
         $showResponse = $this->get('/manage-booking/CFP-2026-9999?pin=1234');

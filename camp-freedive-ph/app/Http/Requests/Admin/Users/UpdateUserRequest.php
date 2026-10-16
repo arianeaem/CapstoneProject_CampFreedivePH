@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin\Users;
 use App\Http\Requests\Concerns\BuildsPersonName;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 
 /** Validation for Admin/UserManagementController::update(). Admins may only edit coach accounts (UserPolicy). */
 class UpdateUserRequest extends FormRequest
@@ -28,7 +29,7 @@ class UpdateUserRequest extends FormRequest
             'phone' => ['required', 'string', 'max:50'],
             'role' => ['required', Rule::in($this->allowedRoles())],
             'status' => ['required', 'in:active,inactive'],
-            'new_password' => ['nullable', 'string', 'min:8'],
+            'new_password' => ['nullable', 'string', Password::defaults()],
         ];
     }
 

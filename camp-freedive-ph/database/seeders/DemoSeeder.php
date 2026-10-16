@@ -28,8 +28,13 @@ use Illuminate\Support\Facades\Schema;
  */
 class DemoSeeder extends Seeder
 {
+    use Concerns\RefusesProduction;
+    use Concerns\GeneratesDemoPassword;
+
     public function run(): void
     {
+        $this->refuseInProduction();
+
         $this->clearDemoTables();
 
         $staff = $this->createStaff();
@@ -85,7 +90,7 @@ class DemoSeeder extends Seeder
      */
     private function createStaff(): array
     {
-        $password = Hash::make('CampFreedive2026!');
+        $password = $this->demoPasswordHash();
         $makeUser = function (string $name, string $email, string $role) use ($password): User {
             return User::create([
                 'name' => $name,

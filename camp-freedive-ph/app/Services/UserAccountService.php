@@ -20,6 +20,35 @@ use Illuminate\Support\Facades\Mail;
  */
 class UserAccountService
 {
+    public const LAST_OWNER_MESSAGE = 'There must always be at least one active Camp Owner. Make another account an active Owner first.';
+
+    /**
+     * Run $change unless it would leave no active owner. $remainsActiveOwner says whether
+     * $target is still an active owner after the change.
+     *
+     * The active owner rows are locked first (SELECT ... FOR UPDATE), so two owners demoting
+     * each other at the same time are handled one after the other and the second one is refused.
+     *
+     * @return bool false when the change was refused
+     */
+    public function withOwnerGuard(User $target, bool $remainsActiveOwner, callable $change): bool
+    {
+        return DB::transaction(function () use ($target, $remainsActiveOwner, $change) {
+            $activeOwnerIds = User::where('role', 'owner')
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->pluck('id');
+
+            if (!$remainsActiveOwner && $activeOwnerIds->contains($target->id) && $activeOwnerIds->count() <= 1) {
+                return false;
+            }
+
+            $change();
+
+            return true;
+        });
+    }
+
     /**
      * Upcoming batches a coach is still responsible for. Each item:
      * ['batch' => Batch, 'students' => int (assigned participants), 'team_only' => bool (on the coach team, no participants yet)]

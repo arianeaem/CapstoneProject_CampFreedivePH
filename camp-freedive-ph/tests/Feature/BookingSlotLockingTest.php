@@ -177,8 +177,21 @@ class BookingSlotLockingTest extends TestCase
         $this->slotService->acquireHold($startDate, $booking->booking_number, 1, 900);
         $this->assertEquals(1, $this->slotService->getActiveHoldPaxCount($startDate));
 
-        // Simulate payment success callback
-        $response = $this->get(route('paymongo.success', ['booking' => $booking->id]));
+        // Pending downpayment created at checkout (simulated PayMongo session in testing)
+        Payment::create([
+            'booking_id' => $booking->id,
+            'payment_type' => 'downpayment',
+            'status' => 'pending',
+            'payment_method' => 'paymongo',
+            'transaction_id' => 'TXN-SLOT-TEST',
+            'paymongo_resource_id' => 'cs_test_slot_lock',
+            'amount' => 3000,
+            'fee_amount' => 0,
+            'net_amount' => 3000,
+        ]);
+
+        // Simulate payment success callback (signed return URL, as PayMongo sends it)
+        $response = $this->get(\App\Services\Gateways\PayMongoGateway::signedReturnUrl('paymongo.success', $booking));
         $response->assertStatus(302);
 
         // Booking is now confirmed in DB

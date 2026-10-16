@@ -21,7 +21,7 @@ class OwnerPortalRoutingTest extends TestCase
     {
         $response = $this->post('/login', [
             'email' => 'owner@campfreedive.ph',
-            'password' => 'Password123!',
+            'password' => $this->demoPassword,
         ]);
 
         $response->assertRedirect('/owner');

@@ -10,9 +10,11 @@ use App\Models\CancellationRequest;
 use App\Models\RescheduleRequest;
 use App\Services\BookingPolicyEngine;
 use App\Services\WeatherSafetyService;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 use App\Http\Requests\ManageBooking\FindBookingRequest;
@@ -58,11 +60,16 @@ class ManageBookingController extends Controller
      */
     public function search(FindBookingRequest $request): RedirectResponse
     {
-        $booking = Booking::where('booking_number', strtoupper(trim($request->booking_number)))
+        $bookingNumber = strtoupper(trim($request->booking_number));
+        $this->ensureNotGuessingPins($request, $bookingNumber);
+
+        $booking = Booking::where('booking_number', $bookingNumber)
             ->where('pin', trim($request->pin))
             ->first();
 
         if (!$booking) {
+            $this->recordFailedPin($request, $bookingNumber);
+
             return back()
                 ->withInput()
                 ->with('error', 'Booking not found - please check your details.');
@@ -73,10 +80,38 @@ class ManageBookingController extends Controller
             'auth_booking_pin' => $booking->pin,
         ]);
 
-        return redirect()->route('manage.show', [
-            'booking_number' => $booking->booking_number,
-            'pin' => $booking->pin,
-        ]);
+        return redirect()->route('manage.show', ['booking_number' => $booking->booking_number]);
+    }
+
+    /**
+     * Wrong-PIN limits: per IP, and per booking number so one booking can't be guessed
+     * from many IPs. Only failed attempts count, so returning participants are never blocked.
+     */
+    private function pinLimiterKeys(Request $request, string $bookingNumber): array
+    {
+        $max = (int) config('rate_limits.manage_lookup.max_attempts', 10);
+
+        return [
+            'manage-pin:ip:' . $request->ip() => $max,
+            'manage-pin:booking:' . $bookingNumber => $max * 2,
+        ];
+    }
+
+    private function ensureNotGuessingPins(Request $request, string $bookingNumber): void
+    {
+        foreach ($this->pinLimiterKeys($request, $bookingNumber) as $key => $max) {
+            if (RateLimiter::tooManyAttempts($key, $max)) {
+                throw new ThrottleRequestsException('Too many PIN attempts.', null, ['Retry-After' => RateLimiter::availableIn($key)]);
+            }
+        }
+    }
+
+    private function recordFailedPin(Request $request, string $bookingNumber): void
+    {
+        $decaySeconds = 60 * (int) config('rate_limits.manage_lookup.decay_minutes', 15);
+        foreach (array_keys($this->pinLimiterKeys($request, $bookingNumber)) as $key) {
+            RateLimiter::hit($key, $decaySeconds);
+        }
     }
 
     /**
@@ -145,10 +180,17 @@ class ManageBookingController extends Controller
                 ->with('error', 'Booking not found - please check your details.');
         }
 
-        $pin = $request->query('pin', session('auth_booking_pin'));
+        $isAuthenticated = session('auth_booking_id') === $booking->id;
 
-        $isAuthenticated = (session('auth_booking_id') === $booking->id)
-            || ($pin !== null && $pin !== '' && (string) $booking->pin === (string) $pin);
+        // Older e-mails link here with ?pin=, so that still works but counts towards the wrong-PIN limit
+        $pin = (string) $request->query('pin', '');
+        if (!$isAuthenticated && $pin !== '') {
+            $this->ensureNotGuessingPins($request, $booking->booking_number);
+            $isAuthenticated = hash_equals((string) $booking->pin, $pin);
+            if (!$isAuthenticated) {
+                $this->recordFailedPin($request, $booking->booking_number);
+            }
+        }
 
         if (!$isAuthenticated) {
             $msg = $request->has('pin')
@@ -229,7 +271,7 @@ class ManageBookingController extends Controller
 
         app(\App\Services\AdminNotificationService::class)->customerRequest('reschedule', $booking, $rescheduleRequest->reason);
 
-        return redirect()->route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin])
+        return redirect()->route('manage.show', ['booking_number' => $booking->booking_number])
             ->with('success', "Your reschedule request has been sent to the camp for approval. You'll be notified once it's confirmed.");
     }
 
@@ -285,7 +327,7 @@ class ManageBookingController extends Controller
 
         app(\App\Services\AdminNotificationService::class)->customerRequest('cancellation', $booking, $cancellationRequest->reason);
 
-        return redirect()->route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin])
+        return redirect()->route('manage.show', ['booking_number' => $booking->booking_number])
             ->with('success', "Your cancellation request has been submitted for camp review. You'll be notified once processed.");
     }
 }
