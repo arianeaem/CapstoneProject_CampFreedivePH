@@ -94,11 +94,22 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('/force-password-change', [ForcePasswordChangeController::class, 'update'])->name('password.force_change.update')->middleware('throttle:password_reset');
 });
 
-// My Profile (profile photo) for every staff role
+
+// My Profile for every staff role
 Route::middleware(['auth', 'active', 'must_change_password', 'role:owner,admin,coach'])->group(function () {
-    Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'show'])->name('profile.show');
-    Route::post('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'updatePhoto'])->name('profile.photo.update');
-    Route::delete('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'destroyPhoto'])->name('profile.photo.destroy');
+    Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'show'])
+        ->name('profile.show');
+
+    Route::post('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'updatePhoto'])
+        ->name('profile.photo.update');
+
+    Route::delete('/profile/photo', [\App\Http\Controllers\ProfileController::class, 'destroyPhoto'])
+        ->name('profile.photo.destroy');
+
+    // Self-service password change
+    Route::post('/profile/password', [\App\Http\Controllers\ProfileController::class, 'updatePassword'])
+        ->middleware('throttle:password_reset')
+        ->name('profile.password.update');
 });
 
 // ---------------------------------------------------------------

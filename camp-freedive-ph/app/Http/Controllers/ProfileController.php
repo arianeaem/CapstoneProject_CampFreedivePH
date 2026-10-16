@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Auth\ProfilePasswordChangeRequest;
+use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\View\View;
 
 /**
- * "My Profile" for coaches, admins and owners: upload or remove a profile photo.
+ * "My Profile" for coaches, admins and owners: upload or remove a profile photo, change password.
  *
  * The browser crops and resizes the photo to a small square before uploading, and it is
  * saved in the database (files in storage/ are wiped by every Azure deploy).
@@ -49,5 +52,38 @@ class ProfileController extends Controller
         $request->user()->update(['avatar' => null]);
 
         return back()->with('success', 'Profile photo removed. Your initials will be shown instead.');
+    }
+
+    /**
+     * Change the signed-in staff member's own password.
+     *
+     * Other sessions are signed out by EnsureSessionPasswordIsCurrent on their next request, and
+     * "remember me" cookies by User::booted(); this session receives the new fingerprint and stays signed in.
+     */
+    public function updatePassword(ProfilePasswordChangeRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        if (!Hash::check($request->input('current_password'), $user->password)) {
+            return back()->withErrors([
+                'current_password' => 'Your current password is incorrect.',
+            ], 'changePassword');
+        }
+
+        if (Hash::check($request->input('password'), $user->password)) {
+            return back()->withErrors([
+                'password' => 'Your new password must be different from your current password.',
+            ], 'changePassword');
+        }
+
+        $user->update(['password' => Hash::make($request->input('password'))]);
+
+        $request->session()->regenerate();
+
+        AuditLogger::log('PASSWORD_CHANGED', "Password changed through profile by staff user ID: {$user->id}", $user, $user->name, $request);
+
+        return redirect()
+            ->route('profile.show')
+            ->with('password_changed', 'Your password has been changed successfully.');
     }
 }

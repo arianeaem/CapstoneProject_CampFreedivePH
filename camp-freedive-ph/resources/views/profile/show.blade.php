@@ -81,5 +81,74 @@
             </form>
         @endif
     </div>
+
+    <!-- Change Password -->
+    <div class="bg-white rounded-2xl border border-[#E5E5EA] p-5 sm:p-6 space-y-5">
+        <div>
+            <h2 class="text-lg font-bold text-[#1D1D1F]">Change Password</h2>
+            <p class="text-sm text-[#6E6E73] mt-1">
+                Update your account password. Your current password is required.
+            </p>
+        </div>
+
+        @if(session('password_changed'))
+            <div class="banner banner-success" role="status">
+                {{ session('password_changed') }}
+            </div>
+        @endif
+
+        @if($errors->changePassword->any())
+            <div class="banner banner-error" role="alert">
+                @foreach($errors->changePassword->all() as $message)
+                    <p>{{ $message }}</p>
+                @endforeach
+            </div>
+        @endif
+
+        <form action="{{ route('profile.password.update') }}"
+              method="POST"
+              class="space-y-4"
+              data-native>
+            @csrf
+
+            <label class="block">
+                <span class="block font-bold text-[#1D1D1F] mb-1.5">
+                    Current Password
+                </span>
+                <input type="password"
+                       name="current_password"
+                       autocomplete="current-password"
+                       required
+                       class="w-full rounded-xl border border-[#D1D1D6] px-4 py-3">
+            </label>
+
+            <label class="block">
+                <span class="block font-bold text-[#1D1D1F] mb-1.5">
+                    New Password
+                </span>
+                <input type="password"
+                       name="password"
+                       autocomplete="new-password"
+                       required
+                       class="w-full rounded-xl border border-[#D1D1D6] px-4 py-3">
+            </label>
+
+            <label class="block">
+                <span class="block font-bold text-[#1D1D1F] mb-1.5">
+                    Confirm New Password
+                </span>
+                <input type="password"
+                       name="password_confirmation"
+                       autocomplete="new-password"
+                       required
+                       class="w-full rounded-xl border border-[#D1D1D6] px-4 py-3">
+            </label>
+
+            <button type="submit"
+                    class="btn-primary min-h-[44px] px-5 py-2 rounded-xl text-sm font-bold">
+                Update Password
+            </button>
+        </form>
+    </div>
 </div>
 @endsection
