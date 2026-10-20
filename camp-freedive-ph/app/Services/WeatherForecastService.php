@@ -319,8 +319,7 @@ class WeatherForecastService
         $classification = $result['overall_classification'] ?? 'Safe';
         if (in_array($classification, ['High Risk', 'Critical Risk'], true)) {
             $assessedBatch = $batch->fresh();
-            app(\App\Services\AdminNotificationService::class)->risk($assessedBatch, $classification);
-            // Less than 18 hours before the dive: email participants and admins (Critical = reschedule/refund, High = heads-up)
+            // Only less than 18 hours before the dive: email participants and admins once (Critical = reschedule/refund, High = heads-up)
             app(\App\Services\WeatherRiskNotifier::class)->handle($assessedBatch, $classification);
         }
 

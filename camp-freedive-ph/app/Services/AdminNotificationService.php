@@ -52,21 +52,6 @@ class AdminNotificationService
         );
     }
 
-    public function risk(Batch $batch, string $classification): void
-    {
-        $key = "admin:risk-alert:{$batch->id}:{$classification}:" . now()->format('Y-m-d-H');
-        if (!Cache::add($key, true, now()->addHours(2))) {
-            return;
-        }
-
-        $this->notify(
-            "{$classification} weather alert",
-            "Batch {$batch->batch_code} has been classified as {$classification}. Review the weather assessment and operational action.",
-            ['Batch' => $batch->batch_code, 'Schedule' => "{$batch->start_date?->format('M d, Y')} - {$batch->end_date?->format('M d, Y')}", 'Classification' => $classification],
-            $classification === 'Critical Risk' ? 'critical' : 'high',
-        );
-    }
-
     /** Hours from now until the first dive of the batch (6:30 AM on day 1, Manila time). */
     public static function hoursUntilDive(Batch $batch): int
     {

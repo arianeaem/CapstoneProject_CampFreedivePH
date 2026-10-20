@@ -2,11 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Mail\AdminOperationalNotificationMail;
+use App\Mail\WeatherRiskNoticeMail;
 use App\Models\Batch;
+use App\Models\Booking;
+use App\Models\User;
 use App\Services\WeatherForecastService;
 use App\Services\WeatherSafetyService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -30,8 +35,11 @@ class RuleBasedSafetyPipelineTest extends TestCase
         Mail::fake();
     }
 
-    /** @param float $currentKmh Open-Meteo's ocean_current_velocity (km/h) */
-    private function fakeOpenMeteo(float $currentKmh = 0.3): void
+    /**
+     * @param float $currentKmh Open-Meteo's ocean_current_velocity (km/h)
+     * @param float $gustKmh Open-Meteo's wind_gusts_10m (km/h); 48+ is the Critical hard gate
+     */
+    private function fakeOpenMeteo(float $currentKmh = 0.3, float $gustKmh = 12.0): void
     {
         $today = Carbon::today(WeatherForecastService::TIMEZONE);
         $times = [];
@@ -64,7 +72,7 @@ class RuleBasedSafetyPipelineTest extends TestCase
                 'showers' => $all(0.0),
                 'pressure_msl' => $all(1013.0),
                 'wind_speed_10m' => $all(8.0),
-                'wind_gusts_10m' => $all(12.0),
+                'wind_gusts_10m' => $all($gustKmh),
                 'wind_direction_10m' => $all(45.0),
             ]]),
         ]);
@@ -104,6 +112,77 @@ class RuleBasedSafetyPipelineTest extends TestCase
 
         $this->assertSame('High Risk', $result['day1']['classification']);
         $this->assertSame('High Risk', $result['overall_classification']);
+    }
+
+    /** A batch with one admin and one paid participant, checked from 3:00 PM the day before. */
+    private function batchWithRecipients(int $daysAway): Batch
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-10 15:00', WeatherForecastService::TIMEZONE));
+        User::factory()->create(['role' => 'admin', 'status' => 'active', 'email' => 'admin@example.com']);
+        $batch = $this->batchStartingIn($daysAway);
+        Booking::create([
+            'batch_id' => $batch->id, 'booking_number' => 'BK-WX-1', 'pin' => '1234',
+            'class_type' => 'discovery', 'status' => 'confirmed', 'total_amount' => 4250, 'downpayment_amount' => 2125,
+            'balance_amount' => 2125, 'contact_name' => 'Guest', 'contact_email' => 'guest@example.com', 'contact_phone' => '09123456789',
+            'start_date' => $batch->start_date, 'end_date' => $batch->end_date,
+        ]);
+
+        return $batch;
+    }
+
+    /** Re-run the scheduled assessment once an hour, like weather:assess-batches. */
+    private function assessHourly(Batch $batch, int $times): array
+    {
+        foreach (range(1, $times) as $_) {
+            Carbon::setTestNow(now()->addHour()); // also expires the 60-minute forecast cache
+            $result = app(WeatherForecastService::class)->assessBatch($batch->fresh());
+        }
+
+        return $result;
+    }
+
+    public function test_hourly_rechecks_of_a_high_risk_batch_days_away_send_no_email(): void
+    {
+        $batch = $this->batchWithRecipients(3);
+        $this->fakeOpenMeteo(currentKmh: 2.5);
+
+        $result = $this->assessHourly($batch, 3);
+
+        $this->assertSame('High Risk', $result['overall_classification']);
+        Mail::assertNothingSent();
+    }
+
+    public function test_hourly_rechecks_within_18_hours_send_each_recipient_one_notice(): void
+    {
+        $batch = $this->batchWithRecipients(1); // dive at 6:30 AM tomorrow: 14.5 to 12.5 hours away
+        $this->fakeOpenMeteo(currentKmh: 2.5);
+
+        $result = $this->assessHourly($batch, 3);
+
+        $this->assertSame('High Risk', $result['overall_classification']);
+        Mail::assertSent(WeatherRiskNoticeMail::class, 1);
+        Mail::assertSent(WeatherRiskNoticeMail::class, fn ($mail) => $mail->hasTo('guest@example.com') && $mail->level === 'high');
+        Mail::assertSent(AdminOperationalNotificationMail::class, 1);
+        Mail::assertSent(AdminOperationalNotificationMail::class, fn ($mail) => $mail->hasTo('admin@example.com')
+            && str_starts_with($mail->eventTitle, 'High Risk'));
+    }
+
+    public function test_high_to_critical_escalation_sends_one_notice_per_level(): void
+    {
+        $batch = $this->batchWithRecipients(1);
+        $this->fakeOpenMeteo(currentKmh: 2.5);
+        $this->assertSame('High Risk', $this->assessHourly($batch, 2)['overall_classification']);
+
+        // Http::fake() appends stubs and the first match wins, so start a fresh fake for the gusty forecast
+        Http::swap(new HttpFactory);
+        $this->fakeOpenMeteo(currentKmh: 2.5, gustKmh: 60.0);
+        $this->assertSame('Critical Risk', $this->assessHourly($batch, 2)['overall_classification']);
+
+        Mail::assertSent(WeatherRiskNoticeMail::class, 2);
+        Mail::assertSent(WeatherRiskNoticeMail::class, fn ($mail) => $mail->level === 'high');
+        Mail::assertSent(WeatherRiskNoticeMail::class, fn ($mail) => $mail->level === 'critical');
+        Mail::assertSent(AdminOperationalNotificationMail::class, 2);
+        Mail::assertSent(AdminOperationalNotificationMail::class, fn ($mail) => str_starts_with($mail->eventTitle, 'URGENT: Critical Risk'));
     }
 
     public function test_current_between_0_50_and_0_65_is_moderate(): void
