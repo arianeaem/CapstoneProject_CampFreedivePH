@@ -63,6 +63,13 @@ Route::post('/booking/{booking}/paymongo/checkout', [\App\Http\Controllers\Payme
 Route::get('/booking/{booking}/paymongo/success', [\App\Http\Controllers\Payment\PayMongoController::class, 'success'])->name('paymongo.success')->middleware('signed:relative');
 Route::get('/booking/{booking}/paymongo/cancel', [\App\Http\Controllers\Payment\PayMongoController::class, 'cancel'])->name('paymongo.cancel')->middleware('signed:relative');
 
+// Checkout-intent return pages: signed per intent (no booking number, PIN or database id in the URL). They work
+// even if the checkout flag is turned off later, so payments that were already started are never orphaned.
+Route::get('/checkout/{reference}/return', [\App\Http\Controllers\Payment\CheckoutReturnController::class, 'show'])->name('checkout.return')
+    ->where('reference', 'CHK-[A-Z0-9]{12}')->middleware(['signed:relative', 'throttle:paymongo_checkout']);
+Route::get('/checkout/{reference}/cancel', [\App\Http\Controllers\Payment\CheckoutReturnController::class, 'cancel'])->name('checkout.cancel')
+    ->where('reference', 'CHK-[A-Z0-9]{12}')->middleware(['signed:relative', 'throttle:paymongo_checkout']);
+
 // PayMongo webhook
 Route::post('/api/webhooks/paymongo', [\App\Http\Controllers\Payment\PayMongoController::class, 'webhook'])->name('paymongo.webhook.api')->middleware('throttle:paymongo_webhook');
 Route::post('/webhooks/paymongo', [\App\Http\Controllers\Payment\PayMongoController::class, 'webhook'])->name('paymongo.webhook')->middleware('throttle:paymongo_webhook');

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Payment;
 use App\Services\AuditLogger;
+use App\Services\Checkout\CheckoutWebhookHandler;
 use App\Services\Gateways\PayMongoGateway;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -263,6 +264,15 @@ class PayMongoController extends Controller
 
         $eventType = $processed['event_type'];
         $eventData = $processed['data'];
+
+        // Checkout-intent events go to their own handler before the de-duplication below: their processing is
+        // idempotent, and a "retry later" answer must reach PayMongo's next delivery instead of being dropped as
+        // a duplicate. Events with booking_id never match, so legacy bookings are handled exactly as before.
+        if (is_array($eventData) && ($intentLink = CheckoutWebhookHandler::intentMetadata($eventData)) !== null) {
+            [$status, $body] = app(CheckoutWebhookHandler::class)->handle((string) $eventType, $eventData, $intentLink, $processed['raw']['data']['id'] ?? null);
+
+            return response()->json($body, $status);
+        }
 
         // PayMongo can send the same event more than once.
         // Cache::add() only returns true the first time, so we skip repeats for 24 hours.

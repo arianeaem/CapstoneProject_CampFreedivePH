@@ -82,10 +82,6 @@ class PayMongoGateway implements PaymentGatewayInterface
         $classLabel = ucfirst((string) $intent->class_type);
         $dates = $intent->start_date->format('M d') . ' - ' . $intent->end_date->format('M d, Y');
 
-        // Signed per-intent return pages come with payment finalization (Batch 2). Until then the
-        // customer returns to the plain booking page; nothing about the checkout is in the URL.
-        $returnUrl = route('booking.create');
-
         return $this->service->createCheckoutSession([
             [
                 'name' => "Camp FreedivePH - {$classLabel} Downpayment",
@@ -97,8 +93,8 @@ class PayMongoGateway implements PaymentGatewayInterface
         ], [
             'reference_number' => $intent->reference,
             'description' => "Downpayment for checkout {$intent->reference}",
-            'success_url' => $returnUrl,
-            'cancel_url' => $returnUrl,
+            'success_url' => self::signedIntentUrl('checkout.return', $intent),
+            'cancel_url' => self::signedIntentUrl('checkout.cancel', $intent),
             'billing' => [
                 'name' => $contact['name'],
                 'email' => $contact['email'],
@@ -139,6 +135,14 @@ class PayMongoGateway implements PaymentGatewayInterface
         $hours = (int) config('paymongo.return_url_ttl_hours', 48);
 
         return url(URL::temporarySignedRoute($routeName, now()->addHours($hours), ['booking' => $booking->id], false));
+    }
+
+    /** Same as signedReturnUrl() for a checkout intent, identified by its random reference (never its database id). */
+    public static function signedIntentUrl(string $routeName, CheckoutIntent $intent): string
+    {
+        $hours = (int) config('paymongo.return_url_ttl_hours', 48);
+
+        return url(URL::temporarySignedRoute($routeName, now()->addHours($hours), ['reference' => $intent->reference], false));
     }
 
     /**
