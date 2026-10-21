@@ -2,18 +2,26 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\ValidatesListFilters;
 use App\Http\Controllers\Controller;
 use App\Models\Batch;
 use App\Models\Booking;
 use App\Models\User;
+use App\Services\Analytics\AnalyticsService;
 use App\Services\BatchManagementService;
 use App\Services\DemandForecastService;
+use App\Services\Exports\ManagementListExporter;
+use App\Support\Xlsx\XlsxWorkbook;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 use App\Http\Requests\Admin\Batches\StoreBatchRequest;
 use App\Http\Requests\Admin\Batches\AssignParticipantRequest;
 use App\Http\Requests\Admin\Batches\UpdateBatchStatusRequest;
@@ -28,6 +36,8 @@ use App\Http\Requests\Admin\Batches\MoveBookingRequest;
  */
 class BatchManagementController extends Controller
 {
+    use ValidatesListFilters;
+
     public function __construct(
         protected BatchManagementService $batchService,
         protected DemandForecastService $forecastService
@@ -43,6 +53,126 @@ class BatchManagementController extends Controller
      */
     public function index(Request $request): View
     {
+        $batches = $this->filteredBatches($request);
+
+        // Number of batches that need attention
+        $attentionCount = $batches->filter(fn($b) => $b->needs_attention)->count();
+
+        // Confirmed bookings with no batch yet (newest first)
+        $unbatchedBookings = Booking::whereNull('batch_id')
+            ->where('status', 'confirmed')
+            ->with('participants')
+            ->orderBy('created_at', 'desc')
+            ->get();
+        $unbatchedCount = $unbatchedBookings->count();
+        $unbatchedPaxCount = $unbatchedBookings->sum(fn($b) => $b->participants->count());
+
+        // Paginate
+        $page = (int) $request->input('page', 1);
+        $perPage = max(4, min(100, (int) $request->input('per_page', 12)));
+        $total = $batches->count();
+        $batches = new \Illuminate\Pagination\LengthAwarePaginator(
+            $batches->forPage($page, $perPage)->values(),
+            $total,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        $coachOptions = User::where('role', 'coach')
+            ->where('status', '!=', 'archived')
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return view('admin.batches.index', compact(
+            'coachOptions',
+            'batches',
+            'attentionCount',
+            'unbatchedBookings',
+            'unbatchedCount',
+            'unbatchedPaxCount'
+        ));
+    }
+
+    public const LIST_SORTS = [
+        'date_asc' => 'Dive date (earliest first)',
+        'date_desc' => 'Dive date (latest first)',
+        'batch_asc' => 'Batch code (A–Z)',
+        'batch_desc' => 'Batch code (Z–A)',
+        'capacity_desc' => 'Most participants first',
+        'capacity_asc' => 'Fewest participants first',
+        'created_desc' => 'Newest batch first',
+        'created_asc' => 'Oldest batch first',
+    ];
+
+    protected const LIST_FILTERS = ['search', 'status', 'coach', 'staffing', 'date_from', 'date_to', 'sort'];
+
+    /**
+     * Excel copy of the batch list (all pages). No contact details.
+     */
+    public function export(Request $request, ManagementListExporter $exporter): Response
+    {
+        $ratio = AnalyticsService::coachRatio();
+        $rows = $this->filteredBatches($request)->map(fn (Batch $b) => [
+            $b->batch_number,
+            $b->batch_code ?? '',
+            $b->start_date ?: '',
+            $b->end_date ?: '',
+            $b->status_badge['label'],
+            $b->total_participants_count,
+            $b->computed_capacity,
+            $b->occupancy_percentage === null ? '' : [(float) $b->occupancy_percentage, XlsxWorkbook::PERCENT],
+            $b->assigned_coaches->pluck('name')->implode(', '),
+            $b->assigned_coaches_count,
+            AnalyticsService::coachesNeeded($b->total_participants_count, $ratio),
+            AnalyticsService::staffingLabel($b, $ratio),
+            $b->needs_attention ? 'Yes' : 'No',
+            $b->risk_badge['label'],
+        ]);
+
+        return $exporter->download($request, 'batches', 'Batch schedule', $this->listFilterSummary($request, $ratio), ManagementListExporter::auditFilters($request, self::LIST_FILTERS),
+            ['Batch', 'Code', 'Starts', 'Ends', 'Status', 'Participants', 'Slots', 'Occupancy %', 'Assigned coaches', 'Coach count', 'Coaches needed', 'Enough coaches?', 'Needs attention', 'Sea safety'],
+            [12, 30, 13, 13, 18, 12, 9, 12, 36, 11, 14, 18, 15, 18],
+            $rows);
+    }
+
+    /**
+     * Printable batch schedule (A4 landscape).
+     */
+    public function printList(Request $request, ManagementListExporter $exporter): Response
+    {
+        $batches = $this->filteredBatches($request); // validates the filters first
+        $ratio = AnalyticsService::coachRatio();
+
+        return $exporter->print('Batch schedule', true, $this->listFilterSummary($request, $ratio), [
+            ['Batch', 'nowrap font-semibold'], ['Dates', 'nowrap'], ['Status', ''], ['Participants / capacity', 'num'],
+            ['Assigned instructors', ''], ['Enough coaches?', ''], ['Sea safety', ''],
+        ], $batches, fn (Batch $b) => [
+            $b->batch_number,
+            $b->formatted_date_range,
+            $b->status_badge['label'],
+            $b->total_participants_count . ' / ' . $b->computed_capacity,
+            $b->assigned_coaches->pluck('name')->implode(', ') ?: 'None yet',
+            AnalyticsService::staffingLabel($b, $ratio),
+            $b->risk_badge['label'],
+        ], portal_route('batches.index', $request->except(['page', 'per_page'])));
+    }
+
+    /**
+     * Filters, search and sort shared by the list, the Excel export and the printout.
+     */
+    protected function filteredBatches(Request $request): Collection
+    {
+        $this->validateListFilters($request, [
+            'search' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', 'string', Rule::in(['open', 'confirmed', 'full', 'rescheduled', 'completed', 'cancelled', 'cancelled_by_camp'])],
+            'coach' => ['nullable', 'integer', 'min:1'],
+            'staffing' => ['nullable', 'string', Rule::in(['pending', 'staffed'])],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+            'sort' => ['nullable', 'string', Rule::in(array_keys(self::LIST_SORTS))],
+        ]);
+
         $query = Batch::with(['bookings.participants', 'activeParticipantAssignments.coach']);
 
         // Filter by status
@@ -113,43 +243,22 @@ class BatchManagementController extends Controller
             $batches = $batches->sortBy(fn($b) => $b->total_participants_count)->values();
         }
 
-        // Number of batches that need attention
-        $attentionCount = $batches->filter(fn($b) => $b->needs_attention)->count();
+        return $batches->values();
+    }
 
-        // Confirmed bookings with no batch yet (newest first)
-        $unbatchedBookings = Booking::whereNull('batch_id')
-            ->where('status', 'confirmed')
-            ->with('participants')
-            ->orderBy('created_at', 'desc')
-            ->get();
-        $unbatchedCount = $unbatchedBookings->count();
-        $unbatchedPaxCount = $unbatchedBookings->sum(fn($b) => $b->participants->count());
-
-        // Paginate
-        $page = (int) $request->input('page', 1);
-        $perPage = max(4, min(100, (int) $request->input('per_page', 12)));
-        $total = $batches->count();
-        $batches = new \Illuminate\Pagination\LengthAwarePaginator(
-            $batches->forPage($page, $perPage)->values(),
-            $total,
-            $perPage,
-            $page,
-            ['path' => $request->url(), 'query' => $request->query()]
-        );
-
-        $coachOptions = User::where('role', 'coach')
-            ->where('status', '!=', 'archived')
-            ->orderBy('name')
-            ->get(['id', 'name']);
-
-        return view('admin.batches.index', compact(
-            'coachOptions',
-            'batches', 
-            'attentionCount', 
-            'unbatchedBookings', 
-            'unbatchedCount', 
-            'unbatchedPaxCount'
-        ));
+    /** Readable list of the filters in use, for the export summary and the printout. */
+    protected function listFilterSummary(Request $request, int $ratio): array
+    {
+        return array_filter([
+            'Search' => $request->filled('search') ? self::searchLabel($request->input('search')) : null,
+            'Status' => $request->filled('status') ? Str::headline($request->input('status')) : 'All',
+            'Coach' => $request->filled('coach') ? (User::where('role', 'coach')->find((int) $request->input('coach'))?->name ?? 'Unknown coach') : null,
+            'Staffing' => ['pending' => 'Needs a coach', 'staffed' => 'Has a coach'][$request->input('staffing')] ?? null,
+            'Dive date from' => $request->input('date_from'),
+            'Dive date to' => $request->input('date_to'),
+            'Sorted by' => self::LIST_SORTS[$request->input('sort') ?: 'date_asc'],
+            'Coach rule' => "1 coach for every {$ratio} participants",
+        ]);
     }
 
 

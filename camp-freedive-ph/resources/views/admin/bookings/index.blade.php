@@ -12,6 +12,8 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
+            @include('admin.lists.partials.actions', ['module' => 'bookings', 'printLabel' => 'Print Booking Register'])
+
             <a href="{{ route('admin.bookings.requests') }}" class="btn-secondary px-3.5 py-2 text-sm sm:text-sm font-semibold flex items-center gap-2">
                 <span>Pending Requests</span>
                 @if($pendingRequestsCount > 0)

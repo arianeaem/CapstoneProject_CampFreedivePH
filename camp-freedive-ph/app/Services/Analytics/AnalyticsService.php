@@ -70,6 +70,32 @@ class AnalyticsService
         };
     }
 
+    /** Participants per coach (Settings > Camp operations). */
+    public static function coachRatio(): int
+    {
+        return (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
+    }
+
+    public static function coachesNeeded(int $participants, int $ratio): int
+    {
+        return $participants > 0 ? (int) ceil($participants / $ratio) : 0;
+    }
+
+    /** "Enough coaches?" text used in the reports and the batch list exports. */
+    public static function staffingLabel(Batch $batch, int $ratio): string
+    {
+        if (in_array($batch->status, self::BATCH_GROUPS['cancelled'], true)) {
+            return '—';
+        }
+        $pax = $batch->total_participants_count;
+        if ($pax === 0) {
+            return 'No participants yet';
+        }
+        $missing = self::coachesNeeded($pax, $ratio) - $batch->assigned_coaches->count();
+
+        return $missing <= 0 ? 'Yes' : "Needs {$missing} more";
+    }
+
     public static function swimLabel(?string $status): string
     {
         return match (self::swimGroup($status)) {
@@ -572,7 +598,7 @@ class AnalyticsService
         $fullCapacityBatches = $runningBatches->filter(fn($b) => ($b->occupancy_percentage ?? 0) >= 90)->count();
 
         // Coach to participant ratio
-        $coachRatio = (int) (app(\App\Services\SystemSettingService::class)->get('camp_operations.coach_student_ratio', 4) ?? 4);
+        $coachRatio = self::coachRatio();
         $compliantBatches = $runningBatches->filter(function ($b) use ($coachRatio) {
             $pax = $b->total_participants_count;
             if ($pax === 0) return true;

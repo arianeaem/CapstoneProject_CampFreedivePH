@@ -343,8 +343,6 @@ class ExportService
                     $pax = $batch->total_participants_count;
                     $cap = $batch->computed_capacity;
                     $coaches = $batch->assigned_coaches;
-                    $needed = $pax > 0 ? (int) ceil($pax / $ratio) : 0;
-                    $cancelled = in_array($batch->status, AnalyticsService::BATCH_GROUPS['cancelled'], true);
 
                     return [
                         $batch->batch_number,
@@ -356,8 +354,8 @@ class ExportService
                         [$cap > 0 ? round($pax / $cap * 100, 1) : 0, X::PERCENT],
                         $coaches->pluck('name')->implode(', ') ?: 'None yet',
                         $coaches->count(),
-                        $needed,
-                        $cancelled ? '—' : ($pax === 0 ? 'No participants yet' : ($coaches->count() >= $needed ? 'Yes' : 'Needs ' . ($needed - $coaches->count()) . ' more')),
+                        AnalyticsService::coachesNeeded($pax, $ratio),
+                        AnalyticsService::staffingLabel($batch, $ratio),
                         ucwords(str_replace('_', ' ', (string) ($batch->risk_classification ?? 'Not checked'))),
                     ];
                 })

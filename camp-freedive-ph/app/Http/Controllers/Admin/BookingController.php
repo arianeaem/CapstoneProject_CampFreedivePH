@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Requests\Admin\Bookings\UpdateBookingRequest;
 use App\Http\Requests\Admin\Bookings\StoreBookingRequest;
+use App\Http\Controllers\Concerns\ValidatesListFilters;
 use App\Http\Controllers\Controller;
 use App\Mail\BookingDetailsUpdatedMail;
 use App\Models\Booking;
@@ -11,33 +12,157 @@ use App\Models\BookingParticipant;
 use App\Models\BookingStatusLog;
 use App\Models\NotificationLog;
 use App\Models\Payment;
+use App\Services\Analytics\AnalyticsService;
 use App\Services\AuditLogger;
 use App\Services\BatchManagementService;
 use App\Services\BookingPolicyEngine;
+use App\Services\Exports\ManagementListExporter;
 use App\Services\WeatherSafetyService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 use App\Http\Requests\Admin\Bookings\UpdateBookingStatusRequest;
 
 class BookingController extends Controller
 {
+    use ValidatesListFilters;
+
     public function __construct(
         protected WeatherSafetyService $weatherService,
         protected BookingPolicyEngine $policyEngine,
         protected BatchManagementService $batchService
     ) {}
 
+    public const LIST_SORTS = [
+        'created_desc' => 'Newest booking first',
+        'created_asc' => 'Oldest booking first',
+        'dive_date_asc' => 'Dive date (earliest first)',
+        'dive_date_desc' => 'Dive date (latest first)',
+        'amount_desc' => 'Highest booking amount',
+        'amount_asc' => 'Lowest booking amount',
+        'guest_asc' => 'Guest name (A–Z)',
+        'guest_desc' => 'Guest name (Z–A)',
+        'status' => 'Status',
+    ];
+
     /**
      * Booking list.
      */
     public function index(Request $request): View
     {
+        $query = $this->listQuery($request);
+
+        $perPage = max(5, min(100, (int) $request->input('per_page', 10)));
+        $bookings = $query->paginate($perPage)->withQueryString();
+
+        $stats = [
+            'total' => Booking::where('status', '!=', 'pending_downpayment')->count(),
+            'confirmed' => Booking::where('status', 'confirmed')->count(),
+            'rescheduled' => Booking::where('status', 'rescheduled')->count(),
+            'completed' => Booking::where('status', 'completed')->count(),
+            'no_show' => Booking::where('status', 'no_show')->count(),
+            'cancelled' => Booking::whereIn('status', ['cancelled_by_camp', 'cancelled_by_guest'])->count(),
+        ];
+
+        $pendingRequestsCount = \App\Models\RescheduleRequest::where('status', 'pending')->count()
+            + \App\Models\CancellationRequest::where('status', 'pending')->count();
+
+        return view('admin.bookings.index', compact('bookings', 'stats', 'pendingRequestsCount'));
+    }
+
+    /**
+     * Excel copy of the booking list (all pages). Money columns are for owners only.
+     */
+    public function export(Request $request, ManagementListExporter $exporter): Response
+    {
+        $isOwner = $request->user()->isOwner();
+        $bookings = $this->listQuery($request)->get();
+
+        $columns = ['Booking #', 'Booked on', 'Contact name', 'Guest phone', 'Class', 'Dive start', 'Dive end', 'Participants', 'Pickup / transport', 'Boat dive', 'Batch', 'Booking status', 'Payment status'];
+        $widths = [18, 13, 26, 16, 14, 13, 13, 12, 16, 10, 30, 22, 26];
+        if ($isOwner) {
+            array_push($columns, 'Total', 'Paid', 'Balance');
+            array_push($widths, 14, 14, 14);
+        }
+
+        $rows = $bookings->map(function (Booking $b) use ($isOwner) {
+            $row = [
+                $b->booking_number,
+                $b->created_at?->copy()->timezone('Asia/Manila'),
+                $b->contact_name,
+                $b->contact_phone,
+                $b->formatted_class_type,
+                $b->start_date,
+                $b->end_date,
+                $b->participants->count(),
+                $b->pickup_option === 'carpool' ? 'Carpool' : 'Own Transpo',
+                $b->boat_dive ? 'Yes' : 'No',
+                $b->batch?->batch_code ?? 'Not assigned',
+                $b->status_badge['label'],
+                $b->payment_status_badge['label'],
+            ];
+            if ($isOwner) {
+                // Paid = completed payments (same rule as Reports); balance_amount is not kept up to date after full payment
+                $paid = (float) $b->payments->whereIn('status', ['completed', 'paid'])->sum('amount');
+                array_push($row, (float) $b->total_amount, $paid, max(0, (float) $b->total_amount - $paid));
+            }
+
+            return $row;
+        });
+
+        return $exporter->download($request, 'bookings', 'Booking register', $this->listFilterSummary($request), ManagementListExporter::auditFilters($request, self::LIST_FILTERS), $columns, $widths, $rows);
+    }
+
+    /**
+     * Printable booking register (A4 landscape). No contact details or amounts.
+     */
+    public function printList(Request $request, ManagementListExporter $exporter): Response
+    {
+        $bookings = $this->listQuery($request)->get();
+
+        return $exporter->print('Booking register', true, $this->listFilterSummary($request), [
+            ['#', 'text-[#6E6E73]'], ['Booking #', 'nowrap font-semibold'], ['Contact name', ''], ['Class', 'min-110'], ['Dive dates', 'nowrap'],
+            ['Participants', 'num'], ['Batch', ''], ['Booking status', ''], ['Payment status', ''],
+        ], $bookings, fn (Booking $b, int $i) => [
+            $i + 1,
+            $b->booking_number,
+            $b->contact_name,
+            $b->formatted_class_type,
+            $b->start_date->format('M d') . ' – ' . $b->end_date->format('M d, Y'),
+            $b->participants->count(),
+            $b->batch?->batch_code ?? 'Not assigned',
+            $b->status_badge['label'],
+            $b->payment_status_badge['label'],
+        ], portal_route('bookings.index', $request->except(['page', 'per_page'])));
+    }
+
+    protected const LIST_FILTERS = ['search', 'status', 'class_type', 'batch_status', 'date_from', 'date_to', 'payment_status', 'sort'];
+
+    /**
+     * Filters and sort shared by the list, the Excel export and the printout.
+     */
+    protected function listQuery(Request $request): Builder
+    {
+        $this->validateListFilters($request, [
+            'search' => ['nullable', 'string', 'max:100'],
+            'status' => ['nullable', 'string', Rule::in(array_merge(...array_values(AnalyticsService::BOOKING_GROUPS)))],
+            'class_type' => ['nullable', 'string', Rule::in(['discovery', 'fundive', 'refinement'])],
+            'batch_status' => ['nullable', 'string', Rule::in(['assigned', 'unassigned'])],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+            'payment_status' => ['nullable', 'string', Rule::in(['paid', 'refunded'])],
+            'sort' => ['nullable', 'string', Rule::in(array_keys(self::LIST_SORTS))],
+        ]);
+
         $query = Booking::with('participants', 'payments', 'batch');
 
         // Hide unpaid draft bookings unless asked for
@@ -105,22 +230,22 @@ class BookingController extends Controller
             default => $query->latest('created_at'),
         };
 
-        $perPage = max(5, min(100, (int) $request->input('per_page', 10)));
-        $bookings = $query->paginate($perPage)->withQueryString();
+        return $query;
+    }
 
-        $stats = [
-            'total' => Booking::where('status', '!=', 'pending_downpayment')->count(),
-            'confirmed' => Booking::where('status', 'confirmed')->count(),
-            'rescheduled' => Booking::where('status', 'rescheduled')->count(),
-            'completed' => Booking::where('status', 'completed')->count(),
-            'no_show' => Booking::where('status', 'no_show')->count(),
-            'cancelled' => Booking::whereIn('status', ['cancelled_by_camp', 'cancelled_by_guest'])->count(),
-        ];
-
-        $pendingRequestsCount = \App\Models\RescheduleRequest::where('status', 'pending')->count()
-            + \App\Models\CancellationRequest::where('status', 'pending')->count();
-
-        return view('admin.bookings.index', compact('bookings', 'stats', 'pendingRequestsCount'));
+    /** Readable list of the filters in use, for the export summary and the printout. */
+    protected function listFilterSummary(Request $request): array
+    {
+        return array_filter([
+            'Search' => $request->filled('search') ? self::searchLabel($request->input('search')) : null,
+            'Booking status' => $request->filled('status') ? Str::headline($request->input('status')) : 'All except unpaid drafts (default)',
+            'Class' => $request->filled('class_type') ? ucfirst($request->input('class_type')) : null,
+            'Batch' => ['assigned' => 'Assigned to a batch', 'unassigned' => 'Not assigned to a batch'][$request->input('batch_status')] ?? null,
+            'Dive date from' => $request->input('date_from'),
+            'Dive date to' => $request->input('date_to'),
+            'Payment' => ['paid' => 'Has a completed payment', 'refunded' => 'Has a refunded payment'][$request->input('payment_status')] ?? null,
+            'Sorted by' => self::LIST_SORTS[$request->input('sort') ?: 'created_desc'],
+        ]);
     }
 
     /**

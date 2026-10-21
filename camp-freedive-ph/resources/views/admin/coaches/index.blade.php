@@ -12,6 +12,8 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
+            @include('admin.lists.partials.actions', ['module' => 'coaches', 'printLabel' => 'Print Instructor Roster'])
+
             <!-- Coach Requests Shortcut -->
             <a href="{{ route('admin.coaches.requests') }}" 
                class="btn-secondary px-3.5 py-2 text-sm sm:text-sm font-semibold flex items-center gap-1.5">
@@ -132,21 +134,11 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
         @forelse($coaches as $coach)
         @php
-            $upcomingCount = $coach->assignedParticipants()
-                ->where('status', 'assigned')
-                ->where('dive_date', '>=', now()->toDateString())
-                ->distinct('dive_date')
-                ->count('dive_date');
-
-            $nextAssignment = $coach->assignedParticipants()
-                ->where('status', 'assigned')
-                ->where('dive_date', '>=', now()->toDateString())
-                ->with('batch')
-                ->orderBy('dive_date', 'asc')
-                ->first();
-
-            $loadOnNext = $nextAssignment ? $coach->assignedCountForDate($nextAssignment->dive_date) : 0;
-            $markedAvailableCount = $coach->coachAvailabilities->where('status', 'available')->where('date', '>=', now()->toDateString())->count();
+            // Worked out for the whole page in CoachWorkloadService
+            $upcomingCount = $workload[$coach->id]['upcoming_days'];
+            $nextDiveDate = $workload[$coach->id]['next_dive_date'];
+            $loadOnNext = $workload[$coach->id]['load_on_next'];
+            $markedAvailableCount = $workload[$coach->id]['open_dates'];
         @endphp
         
         <div tabindex="0" 
@@ -197,14 +189,14 @@
                     <div>
                         <span class="text-xs font-bold uppercase tracking-wider text-[#8E8E93] block">NEXT DIVE BATCH</span>
                         <span class="text-sm font-semibold text-[#1D1D1F] block mt-0.5">
-                            {{ $nextAssignment ? \Carbon\Carbon::parse($nextAssignment->dive_date)->format('M d, Y') : 'None' }}
+                            {{ $nextDiveDate ? $nextDiveDate->format('M d, Y') : 'None' }}
                         </span>
                     </div>
 
                     <div>
                         <span class="text-xs font-bold uppercase tracking-wider text-[#8E8E93] block">NEXT BATCH LOAD</span>
-                        <span class="text-sm font-semibold block mt-0.5 {{ $loadOnNext > ($coach->max_ratio ?? 4) ? 'text-rose-700 font-bold' : ($nextAssignment ? 'text-[#1D1D1F]' : 'text-[#8E8E93]') }}">
-                            {{ $nextAssignment ? $loadOnNext . ' / ' . ($coach->max_ratio ?? 4) . ' Participants' : '0 / ' . ($coach->max_ratio ?? 4) . ' Participants' }}
+                        <span class="text-sm font-semibold block mt-0.5 {{ $loadOnNext > ($coach->max_ratio ?? 4) ? 'text-rose-700 font-bold' : ($nextDiveDate ? 'text-[#1D1D1F]' : 'text-[#8E8E93]') }}">
+                            {{ $nextDiveDate ? $loadOnNext . ' / ' . ($coach->max_ratio ?? 4) . ' Participants' : '0 / ' . ($coach->max_ratio ?? 4) . ' Participants' }}
                         </span>
                     </div>
                 </div>

@@ -121,6 +121,8 @@ $registerBackofficeRoutes = function (string $portalRole) {
     // Bookings
     Route::get('/bookings', [AdminBookingController::class, 'index'])->name('bookings.index');
     Route::get('/bookings/create', [AdminBookingController::class, 'create'])->name('bookings.create');
+    Route::get('/bookings/export', [AdminBookingController::class, 'export'])->name('bookings.export');
+    Route::get('/bookings/print', [AdminBookingController::class, 'printList'])->name('bookings.print');
     Route::post('/bookings', [AdminBookingController::class, 'store'])->name('bookings.store');
 
     // Participant Directory (each person's history across bookings)
@@ -152,6 +154,8 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::get('/batches/create', [BatchManagementController::class, 'create'])->name('batches.create');
     Route::post('/batches', [BatchManagementController::class, 'store'])->name('batches.store');
     Route::get('/batches/unbatched-bookings', [BatchManagementController::class, 'unbatchedBookings'])->name('batches.unbatched_bookings');
+    Route::get('/batches/export', [BatchManagementController::class, 'export'])->name('batches.export');
+    Route::get('/batches/print', [BatchManagementController::class, 'printList'])->name('batches.print');
     Route::get('/batches/{batch}', [BatchManagementController::class, 'show'])->name('batches.show');
     Route::get('/batches/{batch}/attendance-sheet', [BatchManagementController::class, 'attendanceSheet'])->name('batches.attendance');
     Route::post('/batches/{batch}/status', [BatchManagementController::class, 'updateStatus'])->name('batches.update_status');
@@ -171,6 +175,8 @@ $registerBackofficeRoutes = function (string $portalRole) {
 
     // Coaches
     Route::get('/coaches', [CoachRosterController::class, 'index'])->name('coaches.index');
+    Route::get('/coaches/export', [CoachRosterController::class, 'export'])->name('coaches.export');
+    Route::get('/coaches/print', [CoachRosterController::class, 'printList'])->name('coaches.print');
     Route::get('/coaches/matching', [CoachMatchingController::class, 'matching'])->name('coaches.matching');
     Route::post('/coaches/matching/assign', [CoachMatchingController::class, 'assign'])->name('coaches.matching.assign');
     Route::post('/coaches/matching/unassign', [CoachMatchingController::class, 'unassign'])->name('coaches.matching.unassign');
