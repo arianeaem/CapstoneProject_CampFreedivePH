@@ -12,9 +12,9 @@
         </div>
 
         <!-- Right side: Download Excel & Print summary -->
-        <div class="flex items-center gap-2.5 flex-wrap" x-data="{ exportOpen: false, isPrinting: false, printReport() {
+        <div class="flex items-center gap-2.5 flex-wrap" x-data="{ exportOpen: false, printOpen: false, isPrinting: false, printReport(printUrl) {
+            this.printOpen = false;
             this.isPrinting = true;
-            const printUrl = '{{ (auth()->user()->isOwner() ? route('owner.reports.print') : route('admin.reports.print')) . '?' . http_build_query(['preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')]) }}';
             let iframe = document.getElementById('print_summary_frame');
             if (!iframe) {
                 iframe = document.createElement('iframe');
@@ -73,11 +73,38 @@
                 </div>
             </div>
 
-            <!-- Print summary (one print dialog: the hidden frame does not print itself) -->
-            <button type="button" @click="printReport()" :disabled="isPrinting"
-                    class="btn-secondary min-h-[40px] px-3.5 py-2 text-sm font-bold inline-flex items-center gap-2 cursor-pointer disabled:opacity-60">
-                <span x-text="isPrinting ? 'Preparing...' : 'Print summary'"></span>
-            </button>
+            <!-- Print summary menu (one print dialog: the hidden frame does not print itself) -->
+            @php
+                $printBase = (auth()->user()->isOwner() ? route('owner.reports.print') : route('admin.reports.print'));
+                $prints = array_filter([
+                    'overall' => ['Overall summary', $isOwner ? 'Money, bookings, batches and coaches' : 'Bookings, batches and coaches'],
+                    'revenue' => $isOwner ? ['Revenue', 'Money collected, refunds and income per package'] : null,
+                    'bookings' => ['Bookings', 'Booking status, group sizes and lead times'],
+                    'operations' => ['Batches & Coaches', 'Batch capacity and coach coverage'],
+                ]);
+            @endphp
+            <div class="relative" @keydown.escape.window="printOpen = false">
+                <button type="button" @click="printOpen = !printOpen" :aria-expanded="printOpen" :disabled="isPrinting"
+                        class="btn-secondary min-h-[40px] px-3.5 py-2 text-sm font-bold inline-flex items-center gap-2 cursor-pointer disabled:opacity-60">
+                    <span x-text="isPrinting ? 'Preparing...' : 'Print summary'"></span>
+                    <svg class="w-3.5 h-3.5 text-[#8E8E93] transition-transform" :class="printOpen ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+
+                <div x-show="printOpen" @click.outside="printOpen = false" x-cloak
+                     x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0"
+                     class="menu-panel absolute right-0 mt-2 w-72">
+                    <p class="px-3 pt-1.5 pb-1 text-[11px] font-bold uppercase tracking-wider text-[#8E8E93]">{{ $range['label'] }}</p>
+                    @foreach($prints as $type => [$label, $hint])
+                        @php $printUrl = $printBase . '?' . http_build_query(['type' => $type] + $exportQuery); @endphp
+                        <a href="{{ $printUrl }}" target="_blank" @click.prevent="printReport(@js($printUrl))" class="menu-item">
+                            <span>
+                                {{ $label }}
+                                <span class="menu-item-hint">{{ $hint }}</span>
+                            </span>
+                        </a>
+                    @endforeach
+                </div>
+            </div>
 
         </div>
     </div>

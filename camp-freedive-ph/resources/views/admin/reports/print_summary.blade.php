@@ -5,20 +5,35 @@
     $co = $data['coaches'] ?? [];
     $peso = fn ($v) => '₱' . number_format((float) $v, 2);
     $total = (int) ($b['total_bookings'] ?? 0);
-    $pct = fn ($n, $of) => $of > 0 ? round($n / $of * 100) . '%' : '0%';
+    // One decimal, like the Excel export (0.0%)
+    $pct1 = fn ($v) => number_format((float) $v, 1) . '%';
+    $pct = fn ($n, $of) => $pct1($of > 0 ? round($n / $of * 100, 1) : 0);
     $ratio = (int) ($op['coach_ratio'] ?? 4);
     $period = $range['start']->year === $range['end']->year
         ? $range['start']->format('M d') . ' – ' . $range['end']->format('M d, Y')
         : $range['start']->format('M d, Y') . ' – ' . $range['end']->format('M d, Y');
     $section = 0;
     $g = $b['status_groups'] ?? [];
+    $type ??= 'overall';
+    $overall = $type === 'overall';
+    // Revenue is owner-only; the controller already blocks admins, this is a second guard
+    $showMoney = $isOwner && in_array($type, ['overall', 'revenue'], true);
+    $showBookings = in_array($type, ['overall', 'bookings'], true);
+    $showOperations = in_array($type, ['overall', 'operations'], true);
+    [$title, $subtitle, $tab] = match ($type) {
+        'revenue' => ['Revenue summary', 'Money collected, refunds and income per package', 'financial'],
+        'bookings' => ['Bookings summary', 'Booking status, group sizes, swimming ability and lead times', 'bookings'],
+        'operations' => ['Batches & coaches summary', 'Batch capacity, coach coverage and coach workload', 'operations'],
+        default => ['Reports summary', $isOwner ? 'Money, bookings, batches and coaches' : 'Bookings, batches and coaches', null],
+    };
+    $delta = fn ($v) => ($v > 0 ? '+' : '') . $v . '% vs previous period';
 @endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reports Summary - Camp FreedivePH</title>
+    <title>{{ $overall ? 'Reports Summary' : $title }} - Camp FreedivePH</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -32,10 +47,15 @@
         .rpt .num { text-align: right; white-space: nowrap; }
         @media print {
             .no-print { display: none !important; }
-            @page { margin: 1.2cm; size: portrait; }
+            @page { margin: 1.2cm; size: A4 portrait; }
             body { background: #FFFFFF !important; padding: 0 !important; }
             .report-card { box-shadow: none !important; padding: 0 !important; }
             .avoid-break { break-inside: avoid; }
+            /* Long tables: repeat the header on each page, never split a row, keep headings with their content */
+            .rpt thead { display: table-header-group; }
+            .rpt tr { break-inside: avoid; }
+            h2, h2 + p, h3 { break-after: avoid; }
+            .report-footer { break-inside: avoid; }
         }
     </style>
 </head>
@@ -43,7 +63,7 @@
 <body class="bg-[#F8F8FA] text-[#1D1D1F] p-4 sm:p-8" onload="if (window.self === window.top) window.print()">
 
     <div class="no-print max-w-4xl mx-auto mb-6 flex items-center justify-between gap-4">
-        <a href="{{ (auth()->user()->isOwner() ? route('owner.reports.index') : route('admin.reports.index')) . '?' . http_build_query(['preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d')]) }}"
+        <a href="{{ (auth()->user()->isOwner() ? route('owner.reports.index') : route('admin.reports.index')) . '?' . http_build_query(array_filter(['preset' => $range['preset'], 'start_date' => $range['start']->format('Y-m-d'), 'end_date' => $range['end']->format('Y-m-d'), 'tab' => $tab])) }}"
            class="btn-secondary px-4 py-2 rounded-xl text-sm font-bold">&larr; Back to Reports</a>
         <button type="button" onclick="window.print()" class="btn-primary px-4 py-2 rounded-xl text-sm font-bold">Print / Save as PDF</button>
     </div>
@@ -55,8 +75,8 @@
             <div class="flex items-center gap-3">
                 <img src="{{ asset('images/logo.png') }}" alt="Camp FreedivePH" class="w-11 h-11 rounded-full object-contain shrink-0">
                 <div>
-                    <h1 class="text-xl font-black text-[#780000] tracking-tight">Reports summary</h1>
-                    <p class="text-xs text-[#6E6E73]">Camp FreedivePH &middot; {{ $isOwner ? 'Money, bookings, batches and coaches' : 'Bookings, batches and coaches' }}</p>
+                    <h1 class="text-xl font-black text-[#780000] tracking-tight">{{ $title }}</h1>
+                    <p class="text-xs text-[#6E6E73]">Camp FreedivePH &middot; {{ $subtitle }}</p>
                 </div>
             </div>
             <div class="text-right text-xs text-[#6E6E73]">
@@ -69,15 +89,36 @@
         <!-- At a glance -->
         <section class="space-y-3 avoid-break">
             <h2 class="text-base font-extrabold text-[#1D1D1F]">{{ ++$section }}. At a glance</h2>
-            <div class="grid grid-cols-2 {{ $isOwner ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-2.5">
-                @php
-                    $glance = [];
-                    if ($isOwner) $glance[] = ['Money kept', $peso($fin['net_revenue'] ?? 0), 'After refunds'];
-                    $glance[] = ['Bookings made', $total, ($b['paid_bookings'] ?? 0) . ' paid the downpayment'];
-                    $glance[] = ['Participants', $b['total_participants'] ?? 0, 'In those bookings'];
-                    $glance[] = ['How full batches are', ($op['avg_occupancy'] ?? 0) . '%', ($op['total_booked_pax'] ?? 0) . ' of ' . ($op['total_capacity_slots'] ?? 0) . ' slots'];
-                    $glance[] = ['Enough coaches', ($op['safety_compliance_rate'] ?? 100) . '%', ($op['compliant_batches_count'] ?? 0) . ' of ' . ($op['running_batches_count'] ?? 0) . ' batches'];
-                @endphp
+            @php
+                $glance = match ($type) {
+                    'revenue' => [
+                        ['Money kept', $peso($fin['net_revenue'] ?? 0), $delta($fin['revenue_delta'] ?? 0)],
+                        ['Money collected', $peso($fin['gross_revenue'] ?? 0), 'Before refunds'],
+                        ['Refunded', $peso($fin['refunds_processed'] ?? 0), 'Returned to participants'],
+                        ['Still to collect', $peso($fin['outstanding_receivables'] ?? 0), 'From active bookings'],
+                    ],
+                    'bookings' => [
+                        ['Bookings made', $total, $delta($b['booking_delta'] ?? 0)],
+                        ['Participants', $b['total_participants'] ?? 0, ($b['confirmed_participants'] ?? 0) . ' paid & going or finished'],
+                        ['Paid the downpayment', $pct1($b['conversion_rate'] ?? 0), ($b['paid_bookings'] ?? 0) . ' of ' . $total . ' bookings'],
+                        ['Cancelled', $pct1($b['cancellation_rate'] ?? 0), ($b['cancelled_bookings'] ?? 0) . ' of ' . $total . ' bookings'],
+                    ],
+                    'operations' => [
+                        ['Batches', $op['total_batches'] ?? 0, ($op['active_batches'] ?? 0) . ' still to run'],
+                        ['How full batches are', ($op['avg_occupancy'] ?? 0) . '%', ($op['total_booked_pax'] ?? 0) . ' of ' . ($op['total_capacity_slots'] ?? 0) . ' slots'],
+                        ['Enough coaches', ($op['safety_compliance_rate'] ?? 100) . '%', ($op['compliant_batches_count'] ?? 0) . ' of ' . ($op['running_batches_count'] ?? 0) . ' batches'],
+                        ['Active coaches', $co['total_active_coaches'] ?? 0, ($co['total_dive_days'] ?? 0) . ' dive days in total'],
+                    ],
+                    default => array_values(array_filter([
+                        $isOwner ? ['Money kept', $peso($fin['net_revenue'] ?? 0), 'After refunds'] : null,
+                        ['Bookings made', $total, ($b['paid_bookings'] ?? 0) . ' paid the downpayment'],
+                        ['Participants', $b['total_participants'] ?? 0, 'In those bookings'],
+                        ['How full batches are', ($op['avg_occupancy'] ?? 0) . '%', ($op['total_booked_pax'] ?? 0) . ' of ' . ($op['total_capacity_slots'] ?? 0) . ' slots'],
+                        ['Enough coaches', ($op['safety_compliance_rate'] ?? 100) . '%', ($op['compliant_batches_count'] ?? 0) . ' of ' . ($op['running_batches_count'] ?? 0) . ' batches'],
+                    ])),
+                };
+            @endphp
+            <div class="grid grid-cols-2 {{ count($glance) === 5 ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-2.5">
                 @foreach($glance as [$label, $value, $hint])
                     <div class="rounded-xl bg-[#F8EAEA]/50 p-3">
                         <span class="block text-[10px] font-bold uppercase tracking-wider text-[#6E6E73]">{{ $label }}</span>
@@ -88,12 +129,12 @@
             </div>
         </section>
 
-        @if($isOwner)
+        @if($showMoney)
             <!-- Money -->
-            <section class="space-y-3 avoid-break">
+            <section class="space-y-3">
                 <h2 class="text-base font-extrabold text-[#1D1D1F]">{{ ++$section }}. Money</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <table class="rpt w-full">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 avoid-break">
+                    <table class="rpt w-full {{ $overall ? 'sm:col-span-2' : '' }}">
                         <thead><tr><th>What</th><th class="num">Amount</th></tr></thead>
                         <tbody>
                             <tr><td>Money collected</td><td class="num">{{ $peso($fin['gross_revenue'] ?? 0) }}</td></tr>
@@ -105,22 +146,35 @@
                             <tr><td>Average per participant</td><td class="num">{{ $peso($fin['arpd'] ?? 0) }}</td></tr>
                         </tbody>
                     </table>
-                    <table class="rpt w-full">
-                        <thead><tr><th>Package</th><th class="num">Bookings</th><th class="num">Participants</th><th class="num">Money</th><th class="num">Share</th></tr></thead>
-                        <tbody>
-                            @foreach($fin['packages'] ?? [] as $pkg)
-                                <tr><td>{{ $pkg['name'] }}</td><td class="num">{{ $pkg['bookings_count'] }}</td><td class="num">{{ $pkg['pax_count'] }}</td><td class="num">{{ $peso($pkg['revenue']) }}</td><td class="num">{{ $pkg['share_percentage'] }}%</td></tr>
-                            @endforeach
-                            @php $pk = collect($fin['packages'] ?? []); @endphp
-                            <tr class="total"><td>Total</td><td class="num">{{ $pk->sum('bookings_count') }}</td><td class="num">{{ $pk->sum('pax_count') }}</td><td class="num">{{ $peso($pk->sum('revenue')) }}</td><td class="num">{{ round($pk->sum('share_percentage'), 1) }}%</td></tr>
-                            <tr><td>Carpool (estimate)</td><td class="num">{{ $fin['carpool']['bookings_count'] ?? 0 }}</td><td class="num">{{ $fin['carpool']['pax_count'] ?? 0 }}</td><td class="num">{{ $peso($fin['carpool']['estimated_revenue'] ?? 0) }}</td><td></td></tr>
-                            <tr><td>Boat dive (estimate)</td><td class="num">{{ $fin['boat_dive']['bookings_count'] ?? 0 }}</td><td class="num">{{ $fin['boat_dive']['pax_count'] ?? 0 }}</td><td class="num">{{ $peso($fin['boat_dive']['estimated_revenue'] ?? 0) }}</td><td></td></tr>
-                        </tbody>
-                    </table>
+                    @unless($overall)
+                        @php $dp = $fin['dynamic_pricing'] ?? []; @endphp
+                        <table class="rpt w-full self-start">
+                            <thead><tr><th>Price changes from pricing rules</th><th class="num">Amount</th></tr></thead>
+                            <tbody>
+                                <tr><td>Extra from higher prices</td><td class="num">{{ $peso($dp['positive_yield'] ?? 0) }}</td></tr>
+                                <tr><td>Discounts given</td><td class="num">{{ $peso($dp['discounts_given'] ?? 0) }}</td></tr>
+                                <tr class="total"><td>Net change ({{ $dp['adjustments_count'] ?? 0 }} {{ Str::plural('change', $dp['adjustments_count'] ?? 0) }})</td><td class="num">{{ $peso($dp['net_lift'] ?? 0) }}</td></tr>
+                            </tbody>
+                        </table>
+                    @endunless
                 </div>
+                {{-- Full width: five columns do not fit in half of an A4 page --}}
+                <table class="rpt rpt-packages w-full avoid-break">
+                    <thead><tr><th>Package</th><th class="num">Bookings</th><th class="num">Participants</th><th class="num">Money</th><th class="num">Share</th></tr></thead>
+                    <tbody>
+                        @foreach($fin['packages'] ?? [] as $pkg)
+                            <tr><td>{{ $pkg['name'] }}</td><td class="num">{{ $pkg['bookings_count'] }}</td><td class="num">{{ $pkg['pax_count'] }}</td><td class="num">{{ $peso($pkg['revenue']) }}</td><td class="num">{{ $pkg['share_percentage'] }}%</td></tr>
+                        @endforeach
+                        @php $pk = collect($fin['packages'] ?? []); @endphp
+                        <tr class="total"><td>Total</td><td class="num">{{ $pk->sum('bookings_count') }}</td><td class="num">{{ $pk->sum('pax_count') }}</td><td class="num">{{ $peso($pk->sum('revenue')) }}</td><td class="num">{{ round($pk->sum('share_percentage'), 1) }}%</td></tr>
+                        <tr><td>Carpool (estimate)</td><td class="num">{{ $fin['carpool']['bookings_count'] ?? 0 }}</td><td class="num">{{ $fin['carpool']['pax_count'] ?? 0 }}</td><td class="num">{{ $peso($fin['carpool']['estimated_revenue'] ?? 0) }}</td><td></td></tr>
+                        <tr><td>Boat dive (estimate)</td><td class="num">{{ $fin['boat_dive']['bookings_count'] ?? 0 }}</td><td class="num">{{ $fin['boat_dive']['pax_count'] ?? 0 }}</td><td class="num">{{ $peso($fin['boat_dive']['estimated_revenue'] ?? 0) }}</td><td></td></tr>
+                    </tbody>
+                </table>
             </section>
         @endif
 
+        @if($showBookings)
         <!-- Bookings -->
         <section class="space-y-3">
             <h2 class="text-base font-extrabold text-[#1D1D1F]">{{ ++$section }}. Bookings</h2>
@@ -168,7 +222,9 @@
             </div>
             <p class="text-xs text-[#6E6E73]">{{ $b['reschedule_count'] ?? 0 }} reschedule {{ Str::plural('request', $b['reschedule_count'] ?? 0) }} and {{ $b['cancellation_count'] ?? 0 }} cancel {{ Str::plural('request', $b['cancellation_count'] ?? 0) }} were made in this period.</p>
         </section>
+        @endif
 
+        @if($showOperations)
         <!-- Batches & coaches -->
         <section class="space-y-3">
             <h2 class="text-base font-extrabold text-[#1D1D1F]">{{ ++$section }}. Batches &amp; coaches</h2>
@@ -201,7 +257,10 @@
                 </tbody>
             </table>
 
-            <table class="rpt w-full avoid-break">
+            {{-- Own heading, kept with the table, so it still makes sense when it starts a new page --}}
+            <div class="space-y-2 avoid-break">
+            <h3 class="text-sm font-extrabold text-[#1D1D1F]">Coach workload and assignments</h3>
+            <table class="rpt w-full">
                 <thead><tr><th>Coach</th><th>Account</th><th class="num">Batches</th><th class="num">Dive days</th><th class="num">Asked to be released</th></tr></thead>
                 <tbody>
                     @forelse($co['coaches'] ?? [] as $c)
@@ -212,9 +271,11 @@
                     <tr class="total"><td>Total</td><td></td><td class="num">{{ $co['total_assignments_period'] ?? 0 }}</td><td class="num">{{ $co['total_dive_days'] ?? 0 }}</td><td class="num">{{ collect($co['coaches'] ?? [])->sum('releases_count') }}</td></tr>
                 </tbody>
             </table>
+            </div>
         </section>
+        @endif
 
-        <div class="pt-5 border-t border-[#F2F2F7] flex items-center justify-between text-[11px] text-[#8E8E93]">
+        <div class="report-footer pt-5 border-t border-[#F2F2F7] flex items-center justify-between text-[11px] text-[#8E8E93]">
             <span>Camp FreedivePH &copy; {{ date('Y') }} &middot; For internal use only</span>
             <span>Made by {{ $user->name }} ({{ ucfirst($user->role) }})</span>
         </div>
