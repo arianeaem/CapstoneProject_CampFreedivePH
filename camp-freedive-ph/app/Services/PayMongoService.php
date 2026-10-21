@@ -482,6 +482,67 @@ class PayMongoService
     }
 
     /**
+     * Read a checkout session straight from PayMongo for payment verification.
+     *
+     * Never cached (a cached "unpaid" answer must not hide a newer payment), no client-side
+     * retries (callers retry), and TLS verification stays on. Uses the documented
+     * GET /v1/checkout_sessions/{id}. Response bodies are never logged.
+     *
+     * @return array{outcome: 'ok'|'not_configured'|'unavailable'|'not_found'|'rejected'|'malformed', session?: array, http_status?: int}
+     */
+    public function fetchCheckoutSessionForVerification(string $checkoutId): array
+    {
+        if ($this->isSimulated()) {
+            return ['outcome' => 'not_configured'];
+        }
+
+        try {
+            $response = $this->apiClient->execute('paymongo', 'GET', 'https://api.paymongo.com/v1/checkout_sessions/' . rawurlencode($checkoutId), [
+                'basic_auth' => [$this->secretKey, ''],
+                'timeout' => 10,
+                'max_retries' => 0,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('PayMongo checkout session could not be read for verification.', ['exception' => class_basename($e)]);
+
+            return ['outcome' => 'unavailable'];
+        }
+
+        $status = $response->status();
+        if ($status === 404) {
+            return ['outcome' => 'not_found', 'http_status' => 404];
+        }
+        if ($status === 429 || $status >= 500) {
+            return ['outcome' => 'unavailable', 'http_status' => $status];
+        }
+        if (! $response->successful()) {
+            return ['outcome' => 'rejected', 'http_status' => $status]; // e.g. 401: key or environment problem
+        }
+
+        $data = $response->json('data');
+        if (! is_array($data) || ! is_string($data['id'] ?? null) || ! is_array($data['attributes'] ?? null)) {
+            return ['outcome' => 'malformed', 'http_status' => $status];
+        }
+
+        return ['outcome' => 'ok', 'session' => $data, 'http_status' => $status];
+    }
+
+    /**
+     * Whether the configured secret key is a live key (sk_live_), a test key (sk_test_), or unknown (null).
+     * Key prefixes as documented by PayMongo (API keys).
+     */
+    public function configuredLivemode(): ?bool
+    {
+        $key = (string) $this->secretKey;
+
+        return match (true) {
+            str_starts_with($key, 'sk_live_') => true,
+            str_starts_with($key, 'sk_test_') => false,
+            default => null,
+        };
+    }
+
+    /**
      * Get a checkout session by id (cached).
      */
     public function getCheckoutSession(string $checkoutId): ?array

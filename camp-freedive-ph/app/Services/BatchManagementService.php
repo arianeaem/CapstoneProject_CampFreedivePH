@@ -102,6 +102,37 @@ class BatchManagementService
      */
     public function findOrCreateBatchForDates(Carbon|string|\DateTimeInterface $startDate, Carbon|string|\DateTimeInterface|null $endDate = null, ?User $creator = null): Batch
     {
+        ['batch' => $batch, 'created' => $created] = $this->findOrCreateBatchRecord($startDate, $endDate, $creator);
+
+        if (! $created) {
+            return $batch;
+        }
+
+        $this->resequenceBatches();
+        $batch->refresh();
+
+        BatchStatusLog::create([
+            'batch_id' => $batch->id,
+            'old_status' => null,
+            'new_status' => 'confirmed',
+            'changed_by' => $batch->created_by,
+            'note' => "Auto-created {$batch->batch_code} for dive date {$batch->start_date->format('M d, Y')}.",
+        ]);
+
+        $this->assessBatchWeather($batch, $creator);
+
+        return $batch;
+    }
+
+    /**
+     * Database-only part of findOrCreateBatchForDates(): the open/confirmed batch for the start date,
+     * or a new one with a temporary code. No renumbering, status log, or external calls, so it is
+     * safe inside a database transaction (checkout finalization).
+     *
+     * @return array{batch: Batch, created: bool}
+     */
+    public function findOrCreateBatchRecord(Carbon|string|\DateTimeInterface $startDate, Carbon|string|\DateTimeInterface|null $endDate = null, ?User $creator = null): array
+    {
         $startDate = Carbon::parse($startDate)->startOfDay();
         $endDate = $endDate ? Carbon::parse($endDate)->startOfDay() : $startDate->copy()->addDay();
 
@@ -111,7 +142,7 @@ class BatchManagementService
             ->first();
 
         if ($existing) {
-            return $existing;
+            return ['batch' => $existing, 'created' => false];
         }
 
         $creatorId = $creator?->id ?? \Illuminate\Support\Facades\Auth::id() ?? null;
@@ -128,25 +159,21 @@ class BatchManagementService
             'created_by' => $creatorId,
         ]);
 
-        $this->resequenceBatches();
-        $batch->refresh();
+        return ['batch' => $batch, 'created' => true];
+    }
 
-        BatchStatusLog::create([
-            'batch_id' => $batch->id,
-            'old_status' => null,
-            'new_status' => 'confirmed',
-            'changed_by' => $creatorId,
-            'note' => "Auto-created {$batch->batch_code} for dive date {$startDate->format('M d, Y')}.",
-        ]);
-
+    /**
+     * Weather check for a newly created batch. Best effort: calls the weather service (network), so
+     * never call it inside a database transaction.
+     */
+    public function assessBatchWeather(Batch $batch, ?User $creator = null): void
+    {
         try {
             $weatherService = app(\App\Services\WeatherForecastService::class);
             $weatherService->assessBatch($batch, null, $creator);
         } catch (\Throwable $e) {
             // It's fine if the weather check fails (more than 16 days away or API down)
         }
-
-        return $batch;
     }
 
     /**

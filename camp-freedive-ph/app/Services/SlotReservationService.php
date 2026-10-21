@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Models\BookingParticipant;
+use App\Models\CheckoutIntent;
 use Carbon\Carbon;
+use Illuminate\Cache\Lock;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -22,6 +25,9 @@ class SlotReservationService
      * How long to hold the slots during checkout (15 minutes).
      */
     public const DEFAULT_HOLD_TTL_SECONDS = 900;
+
+    /** Exception code thrown by assertLockStillHeld() when the capacity lock lease was lost. */
+    public const LOCK_LOST = 4091;
 
     public function __construct(
         protected ?SystemSettingService $settingService = null
@@ -53,6 +59,48 @@ class SlotReservationService
         $lock = Cache::lock($lockKey, $lockSeconds);
 
         return $lock->block($blockSeconds, $callback);
+    }
+
+    /**
+     * Same date lock as withLock() (so it excludes the booking form and checkout start), but the
+     * callback receives the lock, so it can check before each commit that the lease is still held
+     * (assertLockStillHeld). The lease can run out; it is not trusted on its own.
+     *
+     * @throws \Illuminate\Contracts\Cache\LockTimeoutException when the lock is not free within $blockSeconds
+     */
+    public function withCapacityLock(string $startDate, callable $callback, int $leaseSeconds, int $blockSeconds): mixed
+    {
+        $date = Carbon::parse($startDate)->format('Y-m-d');
+        $lock = Cache::lock("slot_allocation_lock:{$date}", $leaseSeconds);
+
+        return $lock->block($blockSeconds, fn () => $callback($lock));
+    }
+
+    /**
+     * Call first inside a capacity-changing transaction. On PostgreSQL this takes a transaction-scoped
+     * advisory lock for the date: it is held until commit/rollback and cannot expire, so two such
+     * transactions for the same date never overlap even if the cache lease runs out.
+     * SQLite has no row/advisory locks; it serialises all writes to the database instead.
+     */
+    public function lockDateInTransaction(string $startDate): void
+    {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
+        $key = crc32('checkout_capacity:' . Carbon::parse($startDate)->format('Y-m-d'));
+        DB::select('select pg_advisory_xact_lock(?)', [$key]);
+    }
+
+    /**
+     * Throws (RuntimeException with code LOCK_LOST) when the cache lease was lost (expired or taken
+     * over), so the caller rolls back instead of committing.
+     */
+    public function assertLockStillHeld(Lock $lock): void
+    {
+        if (! $lock->isOwnedByCurrentProcess()) {
+            throw new \RuntimeException('The capacity lock lease was lost before commit.', self::LOCK_LOST);
+        }
     }
 
     /**
@@ -107,25 +155,46 @@ class SlotReservationService
     }
 
     /**
-     * Total taken slots (confirmed in DB + held in cache).
+     * People held by unpaid checkout intents for a date. Read from the database, not a cache index:
+     * a pending intent counts only until its hold_expires_at, even if the cleanup job has not run.
      *
      * @param string $startDate YYYY-MM-DD
      * @return int
      */
-    public function getEffectiveCommittedPax(string $startDate): int
+    public function getCheckoutIntentHoldPaxCount(string $startDate, ?int $excludingIntentId = null): int
     {
-        return $this->getConfirmedPaxCount($startDate) + $this->getActiveHoldPaxCount($startDate);
+        $date = Carbon::parse($startDate)->format('Y-m-d');
+
+        return (int) CheckoutIntent::holdingCapacity()
+            ->whereDate('start_date', $date)
+            ->when($excludingIntentId, fn ($q) => $q->whereKeyNot($excludingIntentId))
+            ->sum('pax_count');
+    }
+
+    /**
+     * Total taken slots: confirmed in DB + checkout-intent holds + older cache holds.
+     * Intents never create cache holds and the older flow never creates intents, so nothing is counted twice.
+     *
+     * @param string $startDate YYYY-MM-DD
+     * @return int
+     */
+    public function getEffectiveCommittedPax(string $startDate, ?int $excludingIntentId = null): int
+    {
+        return $this->getConfirmedPaxCount($startDate)
+            + $this->getCheckoutIntentHoldPaxCount($startDate, $excludingIntentId)
+            + $this->getActiveHoldPaxCount($startDate);
     }
 
     /**
      * Slots left for a date.
      *
      * @param string $startDate YYYY-MM-DD
+     * @param int|null $excludingIntentId leave this checkout intent's own hold out (used when finalizing it)
      * @return int
      */
-    public function getAvailableSlots(string $startDate): int
+    public function getAvailableSlots(string $startDate, ?int $excludingIntentId = null): int
     {
-        return max(0, $this->getMaxCapacity() - $this->getEffectiveCommittedPax($startDate));
+        return max(0, $this->getMaxCapacity() - $this->getEffectiveCommittedPax($startDate, $excludingIntentId));
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Services\Gateways;
 
 use App\Contracts\PaymentGatewayInterface;
 use App\Models\Booking;
+use App\Models\CheckoutIntent;
 use App\Services\PayMongoService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
@@ -66,6 +67,51 @@ class PayMongoGateway implements PaymentGatewayInterface
         ];
 
         return $this->service->createCheckoutSession($lineItems, $sessionOptions);
+    }
+
+    /**
+     * Create a checkout session for a checkout intent (no booking exists yet).
+     *
+     * The amount is the intent's server-calculated downpayment. Identity goes in `billing`;
+     * the metadata only links the payment back to the intent (no booking id, no health details).
+     *
+     * @param array{name: string, email: string, phone: string} $contact
+     */
+    public function createCheckoutSessionForIntent(CheckoutIntent $intent, array $contact): array
+    {
+        $classLabel = ucfirst((string) $intent->class_type);
+        $dates = $intent->start_date->format('M d') . ' - ' . $intent->end_date->format('M d, Y');
+
+        // Signed per-intent return pages come with payment finalization (Batch 2). Until then the
+        // customer returns to the plain booking page; nothing about the checkout is in the URL.
+        $returnUrl = route('booking.create');
+
+        return $this->service->createCheckoutSession([
+            [
+                'name' => "Camp FreedivePH - {$classLabel} Downpayment",
+                'amount' => (int) round((float) $intent->downpayment_amount * 100),
+                'quantity' => 1,
+                'currency' => $intent->currency,
+                'description' => "Checkout {$intent->reference} ({$intent->pax_count} pax) - {$dates}",
+            ],
+        ], [
+            'reference_number' => $intent->reference,
+            'description' => "Downpayment for checkout {$intent->reference}",
+            'success_url' => $returnUrl,
+            'cancel_url' => $returnUrl,
+            'billing' => [
+                'name' => $contact['name'],
+                'email' => $contact['email'],
+                'phone' => $contact['phone'],
+            ],
+            'metadata' => [
+                'checkout_intent_id' => (string) $intent->id,
+                'checkout_reference' => $intent->reference,
+                'student_count' => (string) $intent->pax_count,
+                'class_type' => (string) $intent->class_type,
+                'type' => 'downpayment',
+            ],
+        ]);
     }
 
     /**

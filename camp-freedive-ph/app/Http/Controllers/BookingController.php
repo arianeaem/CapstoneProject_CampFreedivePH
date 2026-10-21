@@ -358,6 +358,11 @@ class BookingController extends Controller
         $endDate = Carbon::parse($validated['end_date'])->format('Y-m-d');
         $isCertified = !empty($validated['is_certified_diver']);
 
+        // New flow (Option B, behind a rollout flag): an unpaid checkout creates a checkout intent, never a booking
+        if (config('checkout.intents_enabled')) {
+            return $this->startCheckoutIntent($request, $validated, $contactName, $paxCount, $startDate, $endDate, $isCertified);
+        }
+
         try {
             return $this->slotReservationService->withLock($startDate, function () use (
                 $validated,
@@ -379,50 +384,15 @@ class BookingController extends Controller
                     ], 422);
                 }
 
-                // Charge the price the guest was shown (locked for 15 minutes).
-                // Without a valid lock, use today's price, but if it differs from what
-                // the guest saw, stop and ask them to confirm the new price first.
-                $quote = $this->lockedQuote($validated['quote_token'] ?? null, $validated['class_type'], $startDate, $isCertified, $paxCount);
-
-                if (! $quote) {
-                    $quote = $this->pricingRuleEngine->evaluate($validated['class_type'], $startDate, $isCertified, $paxCount);
-                    $shownPrice = $validated['quoted_price_per_pax'] ?? null;
-
-                    if ($shownPrice !== null && abs((float) $shownPrice - $quote['adjusted_price_per_pax']) >= 0.01) {
-                        return response()->json([
-                            'success' => false,
-                            'price_changed' => true,
-                            'message' => 'The price for this date changed from ₱' . number_format((float) $shownPrice, 2)
-                                . ' to ₱' . number_format($quote['adjusted_price_per_pax'], 2) . ' per person. Please confirm the new price to continue.',
-                            'quote' => $this->issueQuoteToken($quote),
-                        ], 409);
-                    }
+                $charges = $this->calculateCharges($validated, $startDate, $isCertified, $paxCount);
+                if ($charges instanceof JsonResponse) {
+                    return $charges; // price changed: the guest confirms the new price first
                 }
-
-                $classPrice = $quote['adjusted_price_per_pax'];
-                $subtotal = $quote['subtotal'];
-
-                // Fees:
-                $settingService = app(\App\Services\SystemSettingService::class);
-                $lguFeeRate = (float) ($settingService->get('addons.lgu_tourism_pass_fee', 300.00) ?? 300.00);
-                $envFeeRate = (float) ($settingService->get('addons.environmental_fee', 50.00) ?? 50.00);
-                $carpoolFeeRate = (float) ($settingService->get('addons.carpool_fee_per_head', 1200.00) ?? 1200.00);
-                $boatDiveFeeRate = (float) ($settingService->get('addons.boat_dive_fee_per_head', 600.00) ?? 600.00);
-
-                $lguFee = $lguFeeRate * $paxCount;
-                $envFee = $envFeeRate * $paxCount;
-                $carpoolFee = ($validated['pickup_option'] === 'carpool') ? ($carpoolFeeRate * $paxCount) : 0.00;
-                $boatDiveFee = (!empty($validated['boat_dive']) && $validated['boat_dive']) ? ($boatDiveFeeRate * $paxCount) : 0.00;
-
-                $totalAmount = $subtotal + $lguFee + $envFee + $carpoolFee + $boatDiveFee;
-                
-                // Downpayment (default: carpool P3,000/head, own transport P2,000/head):
-                $dpCarpool = (float) ($settingService->get('program_pricing.downpayment_carpool', 3000.00) ?? 3000.00);
-                $dpOwn = (float) ($settingService->get('program_pricing.downpayment_own_transpo', 2000.00) ?? 2000.00);
-
-                $downpaymentPerHead = ($validated['pickup_option'] === 'carpool') ? $dpCarpool : $dpOwn;
-                $downpaymentAmount = min($totalAmount, $downpaymentPerHead * $paxCount);
-                $balanceAmount = max(0, $totalAmount - $downpaymentAmount);
+                [
+                    'quote' => $quote, 'class_price' => $classPrice, 'subtotal' => $subtotal,
+                    'lgu_fee' => $lguFee, 'environmental_fee' => $envFee, 'carpool_fee' => $carpoolFee, 'boat_dive_fee' => $boatDiveFee,
+                    'total_amount' => $totalAmount, 'downpayment_amount' => $downpaymentAmount, 'balance_amount' => $balanceAmount,
+                ] = $charges;
 
                 // Put the booking in the batch for these dates
                 $batch = app(\App\Services\BatchManagementService::class)->findOrCreateBatchForDates($startDate, $endDate);
@@ -462,28 +432,8 @@ class BookingController extends Controller
                     ] + $request->guardianFields());
 
                     // Save each participant's health info
-                    foreach ($validated['participants'] as $pData) {
-                        $pfn = trim($pData['first_name'] ?? '');
-                        $pmn = (!empty($pData['no_middle_name'])) ? '' : trim($pData['middle_name'] ?? '');
-                        $pln = trim($pData['last_name'] ?? '');
-                        $psuf = trim($pData['suffix'] ?? '');
-                        if ($psuf === 'None' || $psuf === 'none') {
-                            $psuf = '';
-                        }
-                        $assembledPName = implode(' ', array_filter([$pfn, $pmn, $pln, $psuf]));
-                        $pName = !empty($pData['name']) ? $pData['name'] : $assembledPName;
-
-                        $booking->participants()->create([
-                            'name' => $pName ?: 'Participant',
-                            'birthdate' => !empty($pData['birthdate']) ? $pData['birthdate'] : null,
-                            'gender' => $pData['gender'] ?? null,
-                            'age' => !empty($pData['birthdate'])
-                                ? Carbon::parse($pData['birthdate'])->age
-                                : (int) $pData['age'],
-                            'health_condition' => $pData['health_condition'] ?? 'None',
-                            'swimmer_status' => $pData['swimmer_status'] ?? 'beginner',
-                            'price_per_person' => $classPrice,
-                        ]);
+                    foreach ($this->participantRecords($validated['participants'], $classPrice) as $participant) {
+                        $booking->participants()->create($participant);
                     }
 
                     // Save the discounts used at checkout, so later rule changes
@@ -583,5 +533,188 @@ class BookingController extends Controller
                 'message' => 'The booking system is currently processing high-volume simultaneous checkouts. Please retry in a few moments.',
             ], 429);
         }
+    }
+
+    /**
+     * Checkout-intent flow: price the booking, hold the slots on a checkout intent and send the guest
+     * to PayMongo. No booking number or PIN exists yet; those come only after the payment is verified.
+     */
+    private function startCheckoutIntent(StorePublicBookingRequest $request, array $validated, string $contactName, int $paxCount, string $startDate, string $endDate, bool $isCertified): JsonResponse
+    {
+        $charges = $this->calculateCharges($validated, $startDate, $isCertified, $paxCount);
+        if ($charges instanceof JsonResponse) {
+            return $charges; // price changed: the guest confirms the new price first
+        }
+
+        $quote = $charges['quote'];
+        $contact = [
+            'name' => $contactName ?: 'Participant',
+            'first_name' => trim($validated['contact_first_name'] ?? ''),
+            'middle_name' => !empty($validated['contact_no_middle_name']) ? '' : trim($validated['contact_middle_name'] ?? ''),
+            'last_name' => trim($validated['contact_last_name'] ?? ''),
+            'suffix' => trim($validated['contact_suffix'] ?? ''),
+            'email' => $validated['contact_email'],
+            'phone' => $validated['contact_phone'],
+            'facebook' => $validated['contact_facebook'] ?? null,
+        ];
+
+        $result = app(\App\Services\Checkout\CheckoutService::class)->start([
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'pax_count' => $paxCount,
+            'class_type' => $validated['class_type'],
+            'pickup_option' => $validated['pickup_option'],
+            'total_amount' => $charges['total_amount'],
+            'downpayment_amount' => $charges['downpayment_amount'],
+        ], [
+            'booking' => [
+                'class_type' => $validated['class_type'],
+                'is_certified_diver' => $isCertified,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'pickup_option' => $validated['pickup_option'],
+                'pickup_location' => $validated['pickup_location'] ?? null,
+                'boat_dive' => !empty($validated['boat_dive']),
+            ],
+            'contact' => $contact,
+            'guardian' => $request->guardianFields(),
+            'participants' => $this->participantRecords($validated['participants'], $charges['class_price']),
+            // The quote that is charged; becomes the booking's price-adjustment rows after payment
+            'pricing' => [
+                'pricing_version' => 1,
+                'quote_source' => $charges['quote_locked'] ? 'locked_quote' : 'live_evaluation',
+                'quoted_at' => now()->toIso8601String(),
+                'base_price_per_pax' => $quote['base_price_per_pax'],
+                'adjusted_price_per_pax' => $quote['adjusted_price_per_pax'],
+                'delta_per_pax' => $quote['delta_per_pax'] ?? null,
+                'subtotal' => $quote['subtotal'],
+                'was_clamped' => $quote['was_clamped'] ?? null,
+                'adjustments' => array_values(array_map(fn ($adj) => [
+                    'rule_id' => $adj['rule_id'],
+                    'rule_name' => $adj['rule_name'],
+                    'rule_type' => $adj['rule_type'],
+                    'condition_summary' => $adj['condition_summary'],
+                    'delta_per_pax' => $adj['delta_per_pax'],
+                    'base_price' => $quote['base_price_per_pax'],
+                    'adjusted_price' => $quote['adjusted_price_per_pax'],
+                ], $quote['adjustments'])),
+                'fees' => [
+                    'lgu' => $charges['lgu_fee'],
+                    'environmental' => $charges['environmental_fee'],
+                    'carpool' => $charges['carpool_fee'],
+                    'boat_dive' => $charges['boat_dive_fee'],
+                ],
+                'total_amount' => $charges['total_amount'],
+                'downpayment_amount' => $charges['downpayment_amount'],
+                'balance_amount' => $charges['balance_amount'],
+                'currency' => 'PHP',
+            ],
+        ]);
+
+        if (! $result['ok']) {
+            return response()->json(['success' => false, 'message' => $result['message']], $result['status']);
+        }
+
+        // No booking number, PIN, booking id or manage link before payment
+        return response()->json([
+            'success' => true,
+            'is_paymongo_redirect' => true,
+            'checkout_reference' => $result['intent']->reference,
+            'checkout_url' => $result['checkout_url'],
+            'downpayment_due' => (float) $charges['downpayment_amount'],
+            'balance_due' => (float) $charges['balance_amount'],
+        ]);
+    }
+
+    /**
+     * Price, fees and downpayment, all worked out on the server (amounts sent by the browser are ignored).
+     * Charges the price the guest was shown (locked for 15 minutes). Without a valid lock, uses today's
+     * price, but if it differs from what the guest saw, returns a 409 so they confirm the new price first.
+     */
+    private function calculateCharges(array $validated, string $startDate, bool $isCertified, int $paxCount): array|JsonResponse
+    {
+        $quote = $this->lockedQuote($validated['quote_token'] ?? null, $validated['class_type'], $startDate, $isCertified, $paxCount);
+        $quoteLocked = (bool) $quote;
+
+        if (! $quote) {
+            $quote = $this->pricingRuleEngine->evaluate($validated['class_type'], $startDate, $isCertified, $paxCount);
+            $shownPrice = $validated['quoted_price_per_pax'] ?? null;
+
+            if ($shownPrice !== null && abs((float) $shownPrice - $quote['adjusted_price_per_pax']) >= 0.01) {
+                return response()->json([
+                    'success' => false,
+                    'price_changed' => true,
+                    'message' => 'The price for this date changed from ₱' . number_format((float) $shownPrice, 2)
+                        . ' to ₱' . number_format($quote['adjusted_price_per_pax'], 2) . ' per person. Please confirm the new price to continue.',
+                    'quote' => $this->issueQuoteToken($quote),
+                ], 409);
+            }
+        }
+
+        $classPrice = $quote['adjusted_price_per_pax'];
+        $subtotal = $quote['subtotal'];
+
+        // Fees:
+        $settingService = app(\App\Services\SystemSettingService::class);
+        $lguFeeRate = (float) ($settingService->get('addons.lgu_tourism_pass_fee', 300.00) ?? 300.00);
+        $envFeeRate = (float) ($settingService->get('addons.environmental_fee', 50.00) ?? 50.00);
+        $carpoolFeeRate = (float) ($settingService->get('addons.carpool_fee_per_head', 1200.00) ?? 1200.00);
+        $boatDiveFeeRate = (float) ($settingService->get('addons.boat_dive_fee_per_head', 600.00) ?? 600.00);
+
+        $lguFee = $lguFeeRate * $paxCount;
+        $envFee = $envFeeRate * $paxCount;
+        $carpoolFee = ($validated['pickup_option'] === 'carpool') ? ($carpoolFeeRate * $paxCount) : 0.00;
+        $boatDiveFee = (!empty($validated['boat_dive']) && $validated['boat_dive']) ? ($boatDiveFeeRate * $paxCount) : 0.00;
+
+        $totalAmount = $subtotal + $lguFee + $envFee + $carpoolFee + $boatDiveFee;
+
+        // Downpayment (default: carpool P3,000/head, own transport P2,000/head):
+        $dpCarpool = (float) ($settingService->get('program_pricing.downpayment_carpool', 3000.00) ?? 3000.00);
+        $dpOwn = (float) ($settingService->get('program_pricing.downpayment_own_transpo', 2000.00) ?? 2000.00);
+
+        $downpaymentPerHead = ($validated['pickup_option'] === 'carpool') ? $dpCarpool : $dpOwn;
+        $downpaymentAmount = min($totalAmount, $downpaymentPerHead * $paxCount);
+
+        return [
+            'quote' => $quote,
+            'quote_locked' => $quoteLocked,
+            'class_price' => $classPrice,
+            'subtotal' => $subtotal,
+            'lgu_fee' => $lguFee,
+            'environmental_fee' => $envFee,
+            'carpool_fee' => $carpoolFee,
+            'boat_dive_fee' => $boatDiveFee,
+            'total_amount' => $totalAmount,
+            'downpayment_amount' => $downpaymentAmount,
+            'balance_amount' => max(0, $totalAmount - $downpaymentAmount),
+        ];
+    }
+
+    /** Participant rows (name, age, health info and price) for the booking form's participants. */
+    private function participantRecords(array $participants, float $classPrice): array
+    {
+        return array_map(function (array $pData) use ($classPrice) {
+            $pfn = trim($pData['first_name'] ?? '');
+            $pmn = (!empty($pData['no_middle_name'])) ? '' : trim($pData['middle_name'] ?? '');
+            $pln = trim($pData['last_name'] ?? '');
+            $psuf = trim($pData['suffix'] ?? '');
+            if ($psuf === 'None' || $psuf === 'none') {
+                $psuf = '';
+            }
+            $assembledPName = implode(' ', array_filter([$pfn, $pmn, $pln, $psuf]));
+            $pName = !empty($pData['name']) ? $pData['name'] : $assembledPName;
+
+            return [
+                'name' => $pName ?: 'Participant',
+                'birthdate' => !empty($pData['birthdate']) ? $pData['birthdate'] : null,
+                'gender' => $pData['gender'] ?? null,
+                'age' => !empty($pData['birthdate'])
+                    ? Carbon::parse($pData['birthdate'])->age
+                    : (int) $pData['age'],
+                'health_condition' => $pData['health_condition'] ?? 'None',
+                'swimmer_status' => $pData['swimmer_status'] ?? 'beginner',
+                'price_per_person' => $classPrice,
+            ];
+        }, $participants);
     }
 }
