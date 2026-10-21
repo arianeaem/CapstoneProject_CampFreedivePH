@@ -153,6 +153,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::post('/batches', [BatchManagementController::class, 'store'])->name('batches.store');
     Route::get('/batches/unbatched-bookings', [BatchManagementController::class, 'unbatchedBookings'])->name('batches.unbatched_bookings');
     Route::get('/batches/{batch}', [BatchManagementController::class, 'show'])->name('batches.show');
+    Route::get('/batches/{batch}/attendance-sheet', [BatchManagementController::class, 'attendanceSheet'])->name('batches.attendance');
     Route::post('/batches/{batch}/status', [BatchManagementController::class, 'updateStatus'])->name('batches.update_status');
     Route::post('/batches/{batch}/move-booking', [BatchManagementController::class, 'moveBooking'])->name('batches.move_booking');
     Route::post('/batches/{batch}/assign-participant', [BatchManagementController::class, 'assignParticipant'])->name('batches.assign_participant');

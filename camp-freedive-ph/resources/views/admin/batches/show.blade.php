@@ -44,6 +44,9 @@
         </div>
 
         <div class="flex items-center gap-2.5">
+            <a href="{{ portal_route('batches.attendance', $batch) }}" target="_blank" rel="noopener"
+               class="btn-secondary min-h-[44px] inline-flex items-center px-4 font-bold">Print attendance sheet</a>
+
             <button type="button"
                     @click="{{ $isActive ? 'openCompleteModal' : 'openReactivateModal' }} = true"
                     class="btn-primary min-h-[44px] flex-1 px-4 font-bold sm:flex-initial">

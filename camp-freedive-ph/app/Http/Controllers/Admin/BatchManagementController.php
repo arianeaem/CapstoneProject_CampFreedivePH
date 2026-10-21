@@ -332,6 +332,38 @@ class BatchManagementController extends Controller
     }
 
     /**
+     * Printable attendance sheet: participants in active bookings, their coach, a box per dive day.
+     * Leaves out health notes, PINs, contact and payment details on purpose.
+     */
+    public function attendanceSheet(Batch $batch): View
+    {
+        $batch->load([
+            'bookings' => fn ($q) => $q->whereNotIn('status', Batch::INACTIVE_BOOKING_STATUSES)->with('participants.activeAssignment.coach'),
+            'activeParticipantAssignments.coach',
+        ]);
+
+        // Coach is the same for every day (one active assignment per participant); unassigned people last
+        $participants = $batch->bookings
+            ->flatMap(fn ($booking) => $booking->participants->map(fn ($p) => [
+                'name' => $p->name,
+                'class' => ucfirst((string) $booking->class_type),
+                'coach' => $p->activeAssignment?->coach?->name,
+            ]))
+            ->sortBy(fn ($p) => [$p['coach'] === null, $p['coach'], strtolower($p['name'])])
+            ->values();
+
+        $lastDay = $batch->end_date?->gte($batch->start_date) ? $batch->end_date : $batch->start_date;
+        $days = $batch->start_date ? collect(\Carbon\CarbonPeriod::create($batch->start_date, $lastDay)) : collect();
+
+        return view('admin.batches.attendance_sheet', [
+            'batch' => $batch,
+            'coaches' => $batch->assigned_coaches,
+            'participants' => $participants,
+            'days' => $days,
+        ]);
+    }
+
+    /**
      * Quickly assign a participant to one of the batch's coaches.
      */
     public function assignParticipant(AssignParticipantRequest $request, Batch $batch): RedirectResponse
