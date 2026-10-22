@@ -38,14 +38,14 @@ class PayMongoService
     /**
      * Send a request to PayMongo through ExternalApiClient.
      */
-    protected function request(string $method, string $url, array $payload = [], int $timeout = 15)
+    protected function request(string $method, string $url, array $payload = [], int $timeout = 15, array $extra = [])
     {
-        return $this->apiClient->execute('paymongo', $method, $url, [
+        return $this->apiClient->execute('paymongo', $method, $url, array_merge([
             'json' => $payload,
             'basic_auth' => [$this->secretKey ?? '', ''],
             'timeout' => $timeout,
             'without_verifying' => true,
-        ]);
+        ], $extra));
     }
 
     /**
@@ -109,8 +109,12 @@ class PayMongoService
                 ],
             ];
 
+            // Creating a session is never retried automatically: after a timeout or 5xx PayMongo may already have
+            // created it, and a blind retry would leave a second session for the same checkout.
+            $noRetry = ['max_retries' => 0];
+
             // Use the v2 checkout_sessions endpoint
-            $response = $this->request('POST', "https://api.paymongo.com/v2/checkout_sessions", $payload);
+            $response = $this->request('POST', "https://api.paymongo.com/v2/checkout_sessions", $payload, 15, $noRetry);
 
             if ($response->successful()) {
                 $data = $response->json();
@@ -124,9 +128,19 @@ class PayMongoService
 
             // Log the v2 error
             Log::warning('PayMongo Create v2 Checkout Session Failed: ' . $response->body());
-            
+
+            // Only a definite rejection (a 4xx that is not a timeout, conflict or rate limit) proves no session was
+            // created, so only then is v1 tried. After a 5xx or 408/409/429 the session may exist: report failure.
+            $status = $response->status();
+            if ($status < 400 || $status >= 500 || in_array($status, [408, 409, 429], true)) {
+                return [
+                    'success' => false,
+                    'error' => $response->json() ?? $response->body(),
+                ];
+            }
+
             // Try v1 instead
-            $responseV1 = $this->request('POST', "https://api.paymongo.com/v1/checkout_sessions", $payload);
+            $responseV1 = $this->request('POST', "https://api.paymongo.com/v1/checkout_sessions", $payload, 15, $noRetry);
             if ($responseV1->successful()) {
                 $dataV1 = $responseV1->json();
                 return [
@@ -525,6 +539,51 @@ class PayMongoService
         }
 
         return ['outcome' => 'ok', 'session' => $data, 'http_status' => $status];
+    }
+
+    /**
+     * Ask PayMongo to close (expire) a checkout session, using the documented POST /v1/checkout_sessions/{id}/expire.
+     * Verified in test mode (Batch 2C.2.2A) for unpaid v1- and v2-created sessions.
+     *
+     * The answer of this call is never proof on its own: callers must re-read the session (fresh GET) and decide
+     * from its status and payments. TLS verification stays on, there is no automatic retry, and bodies are not logged.
+     *
+     * @return array{outcome: 'accepted'|'rejected'|'unavailable'|'not_configured', http_status?: int}
+     *  - accepted:       PayMongo answered 2xx (still re-read the session)
+     *  - rejected:       a 4xx, or an invalid session id (nothing sent); e.g. the session cannot be expired
+     *  - unavailable:    timeout, connection error, 429 or 5xx: state unknown
+     *  - not_configured: no usable secret key (simulated mode)
+     */
+    public function expireCheckoutSession(string $checkoutId): array
+    {
+        if ($this->isSimulated()) {
+            return ['outcome' => 'not_configured'];
+        }
+        if (! preg_match('/^cs_[A-Za-z0-9_]{1,64}$/', $checkoutId)) { // nothing that could change the URL path
+            return ['outcome' => 'rejected'];
+        }
+
+        try {
+            $response = $this->apiClient->execute('paymongo', 'POST', 'https://api.paymongo.com/v1/checkout_sessions/' . $checkoutId . '/expire', [
+                'basic_auth' => [$this->secretKey, ''],
+                'timeout' => 10,
+                'max_retries' => 0,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('PayMongo checkout session could not be expired.', ['exception' => class_basename($e)]);
+
+            return ['outcome' => 'unavailable'];
+        }
+
+        $status = $response->status();
+        if ($response->successful()) {
+            return ['outcome' => 'accepted', 'http_status' => $status];
+        }
+        if ($status === 429 || $status >= 500) {
+            return ['outcome' => 'unavailable', 'http_status' => $status];
+        }
+
+        return ['outcome' => 'rejected', 'http_status' => $status];
     }
 
     /**

@@ -3,6 +3,8 @@
 namespace App\Services\Checkout;
 
 use App\Models\CheckoutIntent;
+use App\Services\PayMongoService;
+use Carbon\CarbonImmutable;
 
 /**
  * One entry point for the customer return page and the PayMongo webhook: verify the payment with PayMongo
@@ -17,6 +19,7 @@ class CheckoutPaymentProcessor
     public function __construct(
         protected PaymentVerifier $verifier,
         protected BookingFinalizer $finalizer,
+        protected PayMongoService $paymongo,
     ) {
     }
 
@@ -36,5 +39,45 @@ class CheckoutPaymentProcessor
         }
 
         return $this->finalizer->finalize($intent, $this->verifier->verify($intent, $claimedSessionId), $source);
+    }
+
+    /**
+     * Finish a `paid` intent (payment verified and saved, booking not created yet) from the evidence saved when
+     * it was verified, without asking PayMongo again. Falls back to a fresh verification when the saved evidence
+     * is incomplete, does not match the intent, or was verified in a different PayMongo mode (test vs live) than
+     * the one configured now; the fresh verification then sends a mode mismatch to review instead of finalizing.
+     * The finalizer re-checks payment id, amount, currency and capacity.
+     */
+    public function resumeFromEvidence(CheckoutIntent $intent, string $source): FinalizationResult
+    {
+        $e = $intent->verification ?? [];
+        $usable = $intent->status === CheckoutIntent::STATUS_PAID
+            && is_string($e['payment_id'] ?? null) && $e['payment_id'] === $intent->paymongo_payment_id
+            && is_string($e['checkout_session_id'] ?? null) && $e['checkout_session_id'] === $intent->paymongo_checkout_session_id
+            && is_int($e['amount_centavos'] ?? null) && is_string($e['currency'] ?? null)
+            && is_bool($e['livemode'] ?? null) && $e['livemode'] === $this->paymongo->configuredLivemode()
+            && is_string($e['verified_at'] ?? null);
+
+        if (! $usable) {
+            return $this->process($intent, $source);
+        }
+
+        $payment = new VerifiedPayment(
+            checkoutIntentId: $intent->id,
+            checkoutSessionId: $e['checkout_session_id'],
+            paymentId: $e['payment_id'],
+            amountCentavos: $e['amount_centavos'],
+            currency: $e['currency'],
+            status: 'paid',
+            livemode: $e['livemode'],
+            verifiedAt: CarbonImmutable::parse($e['verified_at']),
+            sessionRecovered: (bool) ($e['session_recovered'] ?? false),
+            paidAt: is_string($e['paid_at'] ?? null) ? CarbonImmutable::parse($e['paid_at']) : null,
+            paymentMethod: is_string($e['payment_method'] ?? null) ? $e['payment_method'] : null,
+            paymentIntentId: is_string($e['payment_intent_id'] ?? null) ? $e['payment_intent_id'] : null,
+            feeCentavos: is_int($e['fee_centavos'] ?? null) ? $e['fee_centavos'] : null,
+        );
+
+        return $this->finalizer->finalize($intent, PaymentVerificationResult::verified($payment), $source);
     }
 }

@@ -54,6 +54,19 @@ Schedule::command('forecast:archive-accuracy')
  */
 
 /**
+ * Checkout payment reconciliation: recovers payments whose return page and webhook were both missed.
+ * Registered but inactive until CHECKOUT_RECONCILE_ENABLED is deliberately turned on (the command checks it too).
+ * onOneServer() needs a shared cache store (database/redis) when several app instances run the scheduler.
+ */
+Schedule::command('checkout:reconcile')
+    ->everyFiveMinutes()
+    ->when(fn () => (bool) config('checkout.reconcile_enabled'))
+    ->withoutOverlapping(10)
+    ->onOneServer()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/checkout_reconcile.log'));
+
+/**
  * Participant data retention, on the 1st of each month: health notes cleared 12 months
  * after the last dive, records anonymised 3 years after it (see the Participants page).
  */
