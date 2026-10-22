@@ -11,6 +11,7 @@ use App\Services\Checkout\FinalizationResult;
 use App\Services\WeatherForecastService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -32,6 +33,11 @@ use Tests\TestCase;
  *   - the server has none of the roles managed providers create (Supabase, Azure, RDS, Cloud SQL).
  * Uncertain identity fails the test before any destructive step. Not pgsql: skipped before any setup.
  *
+ * Same-process isolation: DatabaseTruncation only empties tables BEFORE each test, and these tests commit real rows
+ * (also through the second connection), so the last test's rows stay behind. Later RefreshDatabase tests skip
+ * migrate:fresh while RefreshDatabaseState::$migrated is true and would run on top of them (CI runs the whole suite
+ * in one process). tearDownAfterClass() therefore clears that flag, so the next database test rebuilds the database.
+ *
  * Concurrency limits: each test uses a second PostgreSQL connection (a separate server session) from the same
  * PHP process. That shows a lock BLOCKS (until lock_timeout); it does not establish genuine two-process
  * interleaving. A multi-process race test is still to be written (Batch 2B.2 or later).
@@ -48,12 +54,27 @@ class BookingFinalizerPgsqlTest extends TestCase
 
     private int $seq = 0;
 
+    /** Set once a test of this class has passed the guard and may have committed rows. */
+    private static bool $committedRows = false;
+
     /** Runs inside parent::setUp(), after the app boots and before DatabaseTruncation touches the database. */
     protected function setUpTraits()
     {
         $this->guardDisposableDatabase();
+        self::$committedRows = true;
 
         return parent::setUpTraits();
+    }
+
+    /** Make the next database test in this PHP process migrate:fresh instead of inheriting this class's committed rows. */
+    public static function tearDownAfterClass(): void
+    {
+        if (self::$committedRows) {
+            RefreshDatabaseState::$migrated = false;
+            self::$committedRows = false;
+        }
+
+        parent::tearDownAfterClass();
     }
 
     private function guardDisposableDatabase(): void
