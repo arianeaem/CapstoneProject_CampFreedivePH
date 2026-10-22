@@ -13,7 +13,8 @@ use Carbon\CarbonImmutable;
  * Read-only: it never creates bookings, changes the intent, or calls refunds. The finalizer
  * (Batch 2B) acts on the result. The decision always uses a fresh PayMongo read, and only fields
  * documented on PayMongo's Checkout Session and Payment resources:
- *   session: id, attributes.livemode, attributes.metadata, attributes.payments[]
+ *   session: id, attributes.livemode, attributes.metadata, attributes.payments[],
+ *            attributes.payment_intent.attributes.status (only when nothing is paid or pending)
  *   payment: id (pay_), attributes.status (pending|failed|paid), amount (centavos), currency (PHP),
  *            livemode, paid_at, payment_intent_id, fee, source.type
  * Payment-level metadata is not documented, so ownership is checked on the session metadata only.
@@ -117,7 +118,7 @@ class PaymentVerifier
             return PaymentVerificationResult::needsReview('multiple_paid_payments', $details + ['paid_count' => count($paid)]);
         }
         if ($paid === []) {
-            return PaymentVerificationResult::notPaid($pending ? 'payment_pending' : 'no_successful_payment', $details);
+            return PaymentVerificationResult::notPaid($pending ? 'payment_pending' : $this->unpaidReason($attributes), $details);
         }
 
         $payment = $paid[0];
@@ -176,5 +177,22 @@ class PaymentVerifier
             paymentIntentId: is_string($pay['payment_intent_id'] ?? null) ? $pay['payment_intent_id'] : null,
             feeCentavos: is_int($pay['fee'] ?? null) ? $pay['fee'] : null,
         ));
+    }
+
+    /**
+     * No paid or pending payment on the session: what its payment intent says. An open GCash authorization shows only
+     * here (payments[] stays empty, status awaiting_next_action; observed in test mode, Batch 2C.2.7A), and PayMongo
+     * accepts closing the session in that state (2C.2.7B), so only an explicit "nothing started" is reported as unpaid.
+     */
+    private function unpaidReason(array $attributes): string
+    {
+        $status = $attributes['payment_intent']['attributes']['status'] ?? null;
+
+        return match ($status) {
+            'awaiting_payment_method' => 'no_successful_payment',     // nothing started: the session may be closed
+            'cancelled' => 'payment_intent_cancelled',                // already closed (e.g. an earlier expiry)
+            'awaiting_next_action', 'processing' => 'payment_authorizing',
+            default => 'payment_state_unconfirmed',                   // missing, malformed, unknown or succeeded without a payment
+        };
     }
 }

@@ -105,7 +105,11 @@ trait FakesPayMongo
         return $this->sessionBody($intent, [$payment], $sessionOverrides, $sessionId);
     }
 
-    /** A checkout-session body for the intent with the given payment objects. */
+    /**
+     * A checkout-session body for the intent with the given payment objects. The nested payment intent defaults to
+     * awaiting_payment_method (nothing started; observed at creation in test mode, Batch 2C.2.7A); override
+     * attributes.payment_intent.attributes.status, or set attributes.payment_intent to null to leave it out.
+     */
     protected function sessionBody(\App\Models\CheckoutIntent $intent, array $payments, array $sessionOverrides = [], ?string $sessionId = null): array
     {
         return ['data' => array_replace_recursive([
@@ -119,6 +123,11 @@ trait FakesPayMongo
                     'checkout_reference' => $intent->reference,
                 ],
                 'payments' => $payments,
+                'payment_intent' => [
+                    'id' => 'pi_test_' . $intent->id,
+                    'type' => 'payment_intent',
+                    'attributes' => ['status' => 'awaiting_payment_method', 'payments' => [], 'next_action' => null],
+                ],
             ],
         ], $sessionOverrides)];
     }

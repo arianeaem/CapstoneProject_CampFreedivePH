@@ -25,6 +25,8 @@ return [
         'expire_after_hours' => 24,        // unpaid this long (hold over, PayMongo shows no payment) -> close the PayMongo session
         'post_close_days' => 7,            // after PayMongo confirmed the session closed: keep re-checking this long
         'unclosed_days' => 90,             // session never confirmed closed: keep checking this long, then flag for staff
+        'unresolved_flag_hours' => 72,     // payment still in progress/unconfirmed this long after checkout creation: flag for
+                                           // staff (never closed because of this; still checked until unclosed_days)
         'review_retry_hours' => 72,        // retry transient payment reviews this long
         // Minutes between attempts per checkout, decaying with age: [age limit in hours => interval in minutes]
         'pacing' => [1 => 5, 24 => 30, 168 => 360, 720 => 1440, PHP_INT_MAX => 10080],
