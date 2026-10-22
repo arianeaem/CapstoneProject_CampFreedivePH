@@ -36,15 +36,17 @@ class PayMongoService
     }
 
     /**
-     * Send a request to PayMongo through ExternalApiClient.
+     * Send a request to PayMongo through ExternalApiClient. TLS certificate and hostname verification always stay
+     * on: requests carry the secret key, so there is no option to turn verification off.
      */
     protected function request(string $method, string $url, array $payload = [], int $timeout = 15, array $extra = [])
     {
+        unset($extra['without_verifying']);
+
         return $this->apiClient->execute('paymongo', $method, $url, array_merge([
             'json' => $payload,
             'basic_auth' => [$this->secretKey ?? '', ''],
             'timeout' => $timeout,
-            'without_verifying' => true,
         ], $extra));
     }
 
