@@ -349,12 +349,30 @@
                   title="Cancel this batch"
                   :description="$batch->display_name . ' · ' . $batch->formatted_date_range">
         <div class="banner banner-warning">
-            All bookings in this batch become <strong>Cancelled by Camp</strong>, get a <strong>100% refund</strong>, and each participant receives a cancellation email.
+            All bookings in this batch become <strong>Cancelled by Camp</strong> and each participant is emailed their options (move to another date for free, or a refund). Paid bookings get a <strong>refund case</strong>: nothing is refunded until the guest chooses and an amount is approved.
         </div>
 
         <form id="cancel-batch-form" action="{{ route('admin.batches.update_status', $batch) }}" method="POST" class="space-y-4">
             @csrf
             <input type="hidden" name="status" value="cancelled_by_camp">
+
+            <div>
+                <label for="cancel-batch-category" class="form-label form-label-required">Why is the camp cancelling?</label>
+                <select id="cancel-batch-category" name="cancellation_reason_category" required class="form-select">
+                    <option value="weather_pre_dive">Weather, before diving starts (guest: free move or downpayment back)</option>
+                    <option value="camp_operational">Camp reason: coach, boat, too few guests (guest: free move or all money back)</option>
+                </select>
+                <span class="form-hint">Weather that turns bad after the camp has started is not a cancellation (no refund applies): don't use this form for it.</span>
+            </div>
+
+            <div>
+                <label for="cancel-batch-started" class="form-label form-label-required">Has the camp activity already started?</label>
+                <select id="cancel-batch-started" name="activity_started" required class="form-select">
+                    <option value="no">No, it has not started</option>
+                    <option value="unknown">Not sure (refunds wait for review)</option>
+                    <option value="yes">Yes, it has started</option>
+                </select>
+            </div>
 
             <div>
                 <label for="cancel-batch-note" class="form-label form-label-required">Reason for cancelling</label>

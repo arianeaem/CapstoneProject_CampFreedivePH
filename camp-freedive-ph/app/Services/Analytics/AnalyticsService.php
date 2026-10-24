@@ -11,6 +11,7 @@ use App\Models\Coach;
 use App\Models\Payment;
 use App\Models\RescheduleRequest;
 use App\Models\User;
+use App\Services\Refunds\FinancialTotals;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -265,27 +266,16 @@ class AnalyticsService
      */
     protected function getFinancialMetrics(Carbon $start, Carbon $end, Carbon $priorStart, Carbon $priorEnd): array
     {
-        // Payment totals for this period and the one before, in one query
-        $paid = "status IN ('completed', 'paid')";
-        $paymentTotals = Payment::query()->selectRaw("
-                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? THEN amount END), 0) AS gross,
-                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? AND payment_type = 'downpayment' THEN amount END), 0) AS downpayment,
-                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? AND payment_type IN ('balance_settlement', 'full') THEN amount END), 0) AS balance,
-                COALESCE(SUM(CASE WHEN status = 'refunded' AND updated_at BETWEEN ? AND ? THEN amount_refunded END), 0) AS refunded,
-                COALESCE(SUM(CASE WHEN {$paid} AND created_at BETWEEN ? AND ? THEN amount END), 0) AS prior_gross,
-                COALESCE(SUM(CASE WHEN status = 'refunded' AND updated_at BETWEEN ? AND ? THEN amount_refunded END), 0) AS prior_refunded
-            ", [$start, $end, $start, $end, $start, $end, $start, $end, $priorStart, $priorEnd, $priorStart, $priorEnd])->first();
-
-        $grossRevenue = (float) $paymentTotals->gross;
-        $downpaymentRevenue = (float) $paymentTotals->downpayment;
-        $balanceRevenue = (float) $paymentTotals->balance;
-        $refundsProcessed = (float) $paymentTotals->refunded;
-
-        if ($refundsProcessed === 0.0) {
-            $refundsProcessed = (float) CancellationRequest::where('status', 'approved')
-                ->whereBetween('reviewed_at', [$start, $end])
-                ->sum('calculated_refund_amount');
-        }
+        // Paid = receipts before refunds; refunds = confirmed refunds only (approved-but-unpaid cancellations are not
+        // refunds). Same definitions everywhere: FinancialTotals.
+        $grossRevenue = FinancialTotals::paid([$start, $end]);
+        $downpaymentRevenue = FinancialTotals::paid([$start, $end], 'downpayment');
+        $balanceRevenue = FinancialTotals::paid([$start, $end], 'balance');
+        $refundsProcessed = FinancialTotals::refunded([$start, $end]);
+        $paymentTotals = (object) [
+            'prior_gross' => FinancialTotals::paid([$priorStart, $priorEnd]),
+            'prior_refunded' => FinancialTotals::refunded([$priorStart, $priorEnd]),
+        ];
 
         $netRevenue = max(0, $grossRevenue - $refundsProcessed);
 

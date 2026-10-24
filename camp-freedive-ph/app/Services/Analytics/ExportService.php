@@ -88,14 +88,11 @@ class ExportService
     {
         $fin = $data['financials'];
         [$start, $end, $pStart, $pEnd] = [$range['start'], $range['end'], $range['prior_start'], $range['prior_end']];
-        $paid = ['completed', 'paid'];
+        $paid = Payment::RECEIPT_STATUSES; // receipts before refunds (FinancialTotals)
 
-        $prior = Payment::query()->selectRaw("
-                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') THEN amount END), 0) AS gross,
-                COALESCE(SUM(CASE WHEN status = 'refunded' THEN amount_refunded END), 0) AS refunded
-            ")->whereBetween('created_at', [$pStart, $pEnd])->first();
-        $priorGross = (float) $prior->gross;
-        $priorRefunded = (float) $prior->refunded;
+        // Same definitions as the dashboard and analytics (FinancialTotals)
+        $priorGross = \App\Services\Refunds\FinancialTotals::paid([$pStart, $pEnd]);
+        $priorRefunded = \App\Services\Refunds\FinancialTotals::refunded([$pStart, $pEnd]);
         $priorNet = max(0, $priorGross - $priorRefunded);
         $priorBookings = Booking::whereBetween('created_at', [$pStart, $pEnd])->count();
 
@@ -171,10 +168,11 @@ class ExportService
 
         // Payments list
         $payments = Payment::with('booking')
-            ->whereIn('status', array_merge($paid, ['refunded', 'partially_refunded']))
+            ->whereIn('status', Payment::RECEIPT_STATUSES)
             ->whereBetween('created_at', [$start, $end])
             ->latest('created_at')
             ->get();
+        $refundedByPayment = \App\Services\Refunds\FinancialTotals::refundedByPayment($payments->pluck('id')->all());
         $book->addSheet('Payments')
             ->widths([20, 16, 26, 14, 16, 16, 16, 14, 16])
             ->section('Overall Historical Transaction List for Payments and Refunds', 'Every payment and refund in this period')
@@ -187,9 +185,14 @@ class ExportService
                     ucfirst($p->booking?->class_type ?? ''),
                     match ($p->payment_type) { 'downpayment' => 'Deposit', 'full' => 'Paid in full', 'balance_settlement' => 'Balance', default => ucwords(str_replace('_', ' ', (string) $p->payment_type)) },
                     (float) $p->amount,
-                    (float) ($p->amount_refunded ?? 0),
+                    $refundedByPayment[$p->id] ?? 0.0,
                     ucwords(str_replace('_', ' ', (string) ($p->payment_method ?? ''))),
-                    match ($p->status) { 'completed', 'paid' => 'Paid', 'refunded' => 'Refunded', 'partially_refunded' => 'Partly refunded', default => ucfirst($p->status) },
+                    match (true) {
+                        ($refundedByPayment[$p->id] ?? 0) >= (float) $p->amount => 'Refunded',
+                        ($refundedByPayment[$p->id] ?? 0) > 0 => 'Partly refunded',
+                        $p->status === 'forfeited' || $p->is_forfeited => 'Forfeited',
+                        default => 'Paid',
+                    },
                 ])
             );
     }

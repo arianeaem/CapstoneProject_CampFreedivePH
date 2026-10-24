@@ -177,6 +177,19 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::post('/payments/refunds/{refundRequest}/approve', [AdminRefundController::class, 'approve'])->name('payments.refunds.approve');
     Route::post('/payments/refunds/{refundRequest}/reject', [AdminRefundController::class, 'reject'])->name('payments.refunds.reject');
     Route::post('/payments/refunds/{refundRequest}/forfeit', [AdminRefundController::class, 'forfeit'])->name('payments.refunds.forfeit');
+    // Refund cases (Batch 3-I): approval and payout are separate, audited steps
+    Route::get('/payments/refund-cases', [\App\Http\Controllers\Admin\RefundCaseController::class, 'index'])->name('refund_cases.index');
+    Route::get('/payments/refund-cases/{refundCase}', [\App\Http\Controllers\Admin\RefundCaseController::class, 'show'])->name('refund_cases.show');
+    Route::middleware('throttle:30,1')->group(function () {
+        Route::post('/payments/refund-cases/{refundCase}/classify', [\App\Http\Controllers\Admin\RefundCaseController::class, 'classify'])->name('refund_cases.classify');
+        Route::post('/payments/refund-cases/{refundCase}/choice', [\App\Http\Controllers\Admin\RefundCaseController::class, 'choice'])->name('refund_cases.choice');
+        Route::post('/payments/refund-cases/{refundCase}/historical', [\App\Http\Controllers\Admin\RefundCaseController::class, 'historical'])->name('refund_cases.historical');
+        Route::post('/payments/refund-cases/{refundCase}/approve', [\App\Http\Controllers\Admin\RefundCaseController::class, 'approve'])->name('refund_cases.approve');
+        Route::post('/payments/refund-cases/{refundCase}/execute', [\App\Http\Controllers\Admin\RefundCaseController::class, 'execute'])->name('refund_cases.execute');
+        Route::post('/payments/refund-cases/{refundCase}/close', [\App\Http\Controllers\Admin\RefundCaseController::class, 'close'])->name('refund_cases.close');
+        Route::post('/payments/refund-cases/{refundCase}/attempts/{refundAttempt}/verify', [\App\Http\Controllers\Admin\RefundCaseController::class, 'verifyAttempt'])->name('refund_cases.attempts.verify');
+        Route::post('/payments/refund-cases/{refundCase}/attempts/{refundAttempt}/offline', [\App\Http\Controllers\Admin\RefundCaseController::class, 'confirmOffline'])->name('refund_cases.attempts.offline');
+    });
     // Checkout payments that need staff review (paid but no room, payment review, unresolved); no money movement
     Route::get('/payments/checkout-review', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'index'])->name('payments.checkout_review');
     Route::get('/payments/checkout-review/{checkoutIntent}', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'show'])->name('payments.checkout_review.show');

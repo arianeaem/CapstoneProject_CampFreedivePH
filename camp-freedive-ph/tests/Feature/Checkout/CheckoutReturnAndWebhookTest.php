@@ -520,7 +520,7 @@ class CheckoutReturnAndWebhookTest extends TestCase
         $event = ['data' => ['id' => 'evt_legacy_1', 'type' => 'event', 'attributes' => ['type' => 'checkout_session.payment.paid', 'data' => [
             'id' => 'cs_legacy_1', 'type' => 'checkout_session', 'attributes' => ['amount' => 400000, 'fee' => 0, 'payment_method_type' => 'gcash',
                 'metadata' => ['booking_id' => $booking->id, 'booking_number' => $booking->booking_number, 'checkout_intent_id' => '1'],
-                'payments' => [['id' => 'pay_legacy_1', 'attributes' => ['status' => 'paid']]]]]]]];
+                'payments' => [['id' => 'pay_legacy_1', 'attributes' => ['status' => 'paid', 'amount' => 400000, 'currency' => 'PHP', 'livemode' => false]]]]]]]];
 
         $this->postSignedPayMongoWebhook($event)->assertOk()->assertJson(['received' => true]);
 

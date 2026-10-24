@@ -48,14 +48,18 @@
 
             <div class="status-box">
                 <strong>Status: Cancellation Pending Camp Review</strong><br>
-                Calculated Policy Refund: <strong>₱{{ number_format($cancellationRequest->calculated_refund_amount, 2) }}</strong>
+                @if((float) $cancellationRequest->calculated_refund_amount > 0)
+                    Refund quoted under the applicable terms: <strong>₱{{ number_format($cancellationRequest->calculated_refund_amount, 2) }}</strong> (to be reviewed)
+                @else
+                    Refund: <strong>none</strong> (the downpayment is non-refundable when you cancel; you can move to another date instead)
+                @endif
                 @if($cancellationRequest->force_majeure_flag)
                     <br><span style="font-size: 13px; color: #991B1B;">(Force Majeure / Marine Safety Advisory applied)</span>
                 @endif
             </div>
 
             <p style="font-size: 14px; color: #1D1D1F; line-height: 1.6;">
-                Our finance and booking team is reviewing your request according to the camp cancellation policy. Approved refunds are processed back via GCash or original payment channel within 3-5 banking days.
+                Our booking team is reviewing your request according to the camp cancellation policy. No refund has been sent. If a refund is approved, we will email you, and again once it has been sent back to your original payment method.
             </p>
 
             @if($cancellationRequest->reason)

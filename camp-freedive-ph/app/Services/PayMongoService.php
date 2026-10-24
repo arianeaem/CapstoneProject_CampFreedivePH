@@ -340,100 +340,117 @@ class PayMongoService
     }
 
     /**
-     * Refund a PayMongo payment.
+     * Send ONE refund to PayMongo (POST /v1/refunds). Never retried: if the answer is lost the refund may still have
+     * been created, so a second POST could pay twice. No idempotency header is relied on (not established for this
+     * account). Only a verifiable answer is believed:
+     *  - 2xx whose data is a "ref_" refund for exactly this payment and amount (PHP): succeeded / provider_pending /
+     *    failed from its status; anything else in a 2xx is "unknown";
+     *  - 4xx (except 429): PayMongo rejected it, nothing was refunded: "failed" (incl. 404, "already refunded",
+     *    "above maximum"; never mapped to success);
+     *  - 429, 5xx, timeouts, connection errors: "unknown" (staff resolve it; it is never re-sent automatically).
+     * No refund id is ever made up. Logs carry the outcome and error code only.
      *
-     * @param string $paymentId PayMongo payment id (pay_xxx)
-     * @param float $amountInPesos
-     * @param string $reason requested_by_customer, duplicate, fraudulent or others
-     * @param string|null $notes
-     * @return array
+     * @return array{outcome: string, provider_refund_id?: string, provider_status?: string, error_code?: string, http_status?: int}
      */
-    public function refund(string $paymentId, float $amountInPesos, string $reason = 'requested_by_customer', ?string $notes = null): array
+    public function submitRefund(string $paymentId, int $amountCentavos, string $notes): array
     {
-        $amountInCentavos = (int) round($amountInPesos * 100);
-
-        // We have a secret key and it's a real PayMongo payment id
-        if (!empty($this->secretKey) && !str_contains($this->secretKey, 'your_secret_key') && str_starts_with($paymentId, 'pay_')) {
-            try {
-                $response = $this->request('POST', "{$this->baseUrl}/refunds", [
-                    'data' => [
-                        'attributes' => [
-                            'amount' => $amountInCentavos,
-                            'payment_id' => $paymentId,
-                            'reason' => $reason,
-                            'notes' => $notes ?: 'Camp FreedivePH Admin Approved Refund',
-                        ],
-                    ],
-                ]);
-
-                if ($response->successful()) {
-                    $responseData = $response->json();
-                    return [
-                        'success' => true,
-                        'refund_id' => $responseData['data']['id'] ?? ('ref_' . bin2hex(random_bytes(10))),
-                        'status' => $responseData['data']['attributes']['status'] ?? 'succeeded',
-                        'data' => $responseData,
-                    ];
-                }
-
-                $errorBody = $response->json();
-                $errorDetail = $errorBody['errors'][0]['detail'] ?? 'PayMongo refund API returned an error.';
-                $errorCode = $errorBody['errors'][0]['code'] ?? 'unknown_error';
-
-                Log::warning("PayMongo Refund API Error for payment {$paymentId}: {$errorDetail} (Code: {$errorCode})");
-
-                // Already refunded on PayMongo, get the existing refund
-                if (str_contains(strtolower($errorDetail), 'refundable') || str_contains(strtolower($errorDetail), 'refunded') || $errorCode === 'parameter_above_maximum') {
-                    $paymentData = $this->getPayment($paymentId);
-                    $existingRefunds = $paymentData['data']['attributes']['refunds'] ?? [];
-                    if (!empty($existingRefunds)) {
-                        $latestRef = end($existingRefunds);
-                        return [
-                            'success' => true,
-                            'refund_id' => $latestRef['id'] ?? ('ref_' . bin2hex(random_bytes(10))),
-                            'status' => $latestRef['attributes']['status'] ?? 'succeeded',
-                            'data' => $latestRef,
-                            'already_refunded' => true,
-                            'message' => 'Payment was already refunded on PayMongo.',
-                        ];
-                    }
-                }
-
-                // Payment not found on PayMongo (e.g. seeder data), do an offline refund
-                if ($errorCode === 'resource_not_found' || str_contains(strtolower($errorDetail), 'not found')) {
-                    $simulatedRefundId = 'ref_offline_' . strtolower(bin2hex(random_bytes(8)));
-                    return [
-                        'success' => true,
-                        'refund_id' => $simulatedRefundId,
-                        'status' => 'succeeded',
-                        'simulated' => true,
-                        'message' => 'Payment was recorded offline or in local seeder; refund recorded locally.',
-                    ];
-                }
-
-                return [
-                    'success' => false,
-                    'error' => $errorDetail,
-                ];
-
-            } catch (Exception $e) {
-                Log::error('PayMongo Refund Exception: ' . $e->getMessage());
-                return [
-                    'success' => false,
-                    'error' => 'Connection error communicating with PayMongo: ' . $e->getMessage(),
-                ];
-            }
+        if ($this->isSimulated() || ! str_starts_with($paymentId, 'pay_') || $amountCentavos <= 0) {
+            return ['outcome' => 'not_configured'];
         }
 
-        // Offline or test payment
-        $simulatedRefundId = 'ref_offline_' . strtolower(bin2hex(random_bytes(8)));
-        return [
-            'success' => true,
-            'refund_id' => $simulatedRefundId,
-            'status' => 'succeeded',
-            'simulated' => true,
-            'message' => 'Refund processed for offline / test record.',
-        ];
+        try {
+            $response = $this->request('POST', "{$this->baseUrl}/refunds", [
+                'data' => ['attributes' => [
+                    'amount' => $amountCentavos,
+                    'payment_id' => $paymentId,
+                    'reason' => 'requested_by_customer',
+                    'notes' => $notes,
+                ]],
+            ], 20, ['max_retries' => 0]);
+        } catch (\Throwable $e) {
+            Log::warning('PayMongo refund: no answer; outcome unknown.', ['exception' => class_basename($e)]);
+
+            return ['outcome' => 'unknown', 'error_code' => 'no_response'];
+        }
+
+        $status = $response->status();
+        if ($status >= 400 && $status < 500 && $status !== 429) {
+            $code = $response->json('errors.0.code');
+            $errorCode = is_string($code) ? substr($code, 0, 64) : "http_{$status}";
+            // A 404/409, or an error about the payment's refunds (e.g. "above the refundable amount": something may
+            // already be refunded), proves nothing about this refund: unknown, kept reserved for reconciliation
+            $about = strtolower($errorCode . ' ' . (string) $response->json('errors.0.detail'));
+            if (in_array($status, [404, 409], true) || str_contains($about, 'refund')) {
+                return ['outcome' => 'unknown', 'error_code' => $errorCode, 'http_status' => $status];
+            }
+
+            return ['outcome' => 'failed', 'error_code' => $errorCode, 'http_status' => $status];
+        }
+        if (! $response->successful()) {
+            return ['outcome' => 'unknown', 'error_code' => "http_{$status}", 'http_status' => $status];
+        }
+
+        $data = $response->json('data');
+        $attributes = is_array($data) ? ($data['attributes'] ?? null) : null;
+        $verifiable = is_array($attributes)
+            && is_string($data['id'] ?? null) && str_starts_with($data['id'], 'ref_')
+            && ($attributes['amount'] ?? null) === $amountCentavos
+            && ($attributes['payment_id'] ?? null) === $paymentId
+            && (! isset($attributes['currency']) || $attributes['currency'] === 'PHP');
+        if (! $verifiable) {
+            return ['outcome' => 'unknown', 'error_code' => 'unverifiable_response', 'http_status' => $status];
+        }
+
+        $outcome = match ($attributes['status'] ?? null) {
+            'succeeded' => 'succeeded',
+            'pending', 'processing' => 'provider_pending',
+            'failed' => 'failed',
+            default => 'unknown',
+        };
+
+        return ['outcome' => $outcome, 'provider_refund_id' => $data['id'], 'provider_status' => (string) ($attributes['status'] ?? ''), 'http_status' => $status];
+    }
+
+    /**
+     * Look one refund up (PayMongo "Retrieve a Refund", GET /refunds/{id}). Read-only and never cached: it is the
+     * evidence for settling an unclear refund outcome. Only a 2xx answer for the same refund id counts as "found";
+     * any error, 404 or timeout is "unavailable" and proves nothing either way.
+     *
+     * @return array{outcome: 'found'|'unavailable', error_code?: string,
+     *     refund?: array{id: string, status: mixed, amount: mixed, currency: mixed, payment_id: mixed, notes: string, livemode: mixed}}
+     */
+    public function retrieveRefund(string $refundId): array
+    {
+        if ($this->isSimulated() || ! preg_match('/^ref_[A-Za-z0-9_]+$/', $refundId)) {
+            return ['outcome' => 'unavailable', 'error_code' => 'not_configured'];
+        }
+
+        try {
+            $response = $this->request('GET', "{$this->baseUrl}/refunds/{$refundId}", [], 15, ['max_retries' => 0]);
+        } catch (\Throwable $e) {
+            Log::warning('PayMongo refund lookup: no answer.', ['exception' => class_basename($e)]);
+
+            return ['outcome' => 'unavailable', 'error_code' => 'no_response'];
+        }
+        if (! $response->successful()) {
+            return ['outcome' => 'unavailable', 'error_code' => 'http_' . $response->status()];
+        }
+
+        $data = $response->json('data');
+        $attributes = is_array($data) ? ($data['attributes'] ?? null) : null;
+        if (! is_array($attributes) || ($data['id'] ?? null) !== $refundId) {
+            return ['outcome' => 'unavailable', 'error_code' => 'unverifiable_response'];
+        }
+
+        return ['outcome' => 'found', 'refund' => [
+            'id' => $refundId,
+            'status' => $attributes['status'] ?? null,
+            'amount' => $attributes['amount'] ?? null,
+            'currency' => $attributes['currency'] ?? null,
+            'payment_id' => $attributes['payment_id'] ?? null,
+            'notes' => (string) ($attributes['notes'] ?? ''),
+            'livemode' => $attributes['livemode'] ?? null,
+        ]];
     }
 
     /**

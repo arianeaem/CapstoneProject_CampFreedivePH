@@ -50,22 +50,19 @@ class RefundController extends Controller
     }
 
     /**
-     * Approve and send the refund through PayMongo.
+     * Move a queued refund request into the booking's refund case (reason, guest choice, amount, then payout there).
+     * Nothing is sent to PayMongo here.
      */
     public function approve(ApproveRefundRequest $request, RefundRequest $refundRequest): RedirectResponse
     {
-        $operator = Auth::user();
-        $booking = $refundRequest->booking;
-        $result = $this->refunds->approve($refundRequest, $operator, $request->validated()['notes'] ?? null);
-
-        if (!$result['success']) {
-            return back()->with('error', "PayMongo Refund Error: {$result['error']}");
+        try {
+            $case = $this->refunds->approve($refundRequest, Auth::user());
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        $amount = number_format($result['amount'], 2);
-        AuditLogger::log('REFUND_APPROVED_AND_EXECUTED', "Refund of ₱{$amount} approved & executed via PayMongo for Booking #{$booking->booking_number} by {$operator->name} (Refund ID: {$result['refund_id']})", $operator, $operator->name, $request);
-
-        return back()->with('success', "Refund of ₱{$amount} successfully executed via PayMongo! Reference: {$result['refund_id']}");
+        return redirect()->to(portal_route('refund_cases.show', $case))
+            ->with('success', "Refund request moved to refund case #{$case->id}. Confirm the reason and the guest's choice before approving an amount; no money has been sent.");
     }
 
     /**
@@ -76,7 +73,11 @@ class RefundController extends Controller
         $operator = Auth::user();
         $booking = $refundRequest->booking;
         $notes = $request->validated()['notes'];
-        $this->refunds->reject($refundRequest, $operator, $notes);
+        try {
+            $this->refunds->reject($refundRequest, $operator, $notes);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         AuditLogger::log('REFUND_REJECTED', "Refund request rejected for Booking #{$booking->booking_number} by {$operator->name}. Reason: {$notes}", $operator, $operator->name, $request);
 
@@ -91,7 +92,11 @@ class RefundController extends Controller
         $operator = Auth::user();
         $booking = $refundRequest->booking;
         $validated = $request->validated();
-        $amount = number_format($this->refunds->forfeit($refundRequest, $operator, $validated['forfeit_reason'], $validated['notes'] ?? null), 2);
+        try {
+            $amount = number_format($this->refunds->forfeit($refundRequest, $operator, $validated['forfeit_reason'], $validated['notes'] ?? null), 2);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         AuditLogger::log('PAYMENT_FORFEITED', "Payment of ₱{$amount} forfeited for Booking #{$booking->booking_number} by {$operator->name} (Reason: {$validated['forfeit_reason']})", $operator, $operator->name, $request);
 

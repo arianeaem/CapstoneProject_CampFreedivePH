@@ -19,6 +19,7 @@ class CancellationRequest extends Model
         'status',
         'reviewed_by',
         'reviewed_at',
+        'policy_version',
     ];
 
     protected $casts = [

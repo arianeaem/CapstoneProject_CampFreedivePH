@@ -7,10 +7,11 @@ use App\Mail\BatchWeatherCancellationMail;
 use App\Models\Batch;
 use App\Models\BatchStatusLog;
 use App\Models\Booking;
+use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
 use App\Models\NotificationLog;
-use App\Models\RefundRequest;
 use App\Models\User;
+use App\Services\Refunds\RefundCaseService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Collection;
@@ -272,14 +273,28 @@ class BatchManagementService
      *
      * @throws Exception
      */
-    public function updateStatus(Batch $batch, string $newStatus, User $changer, ?string $note = null): void
+    /**
+     * @param array{reason_category?: ?string, activity_started?: ?string} $cancellation for cancelled_by_camp: why the
+     *        camp cancelled and whether the activity had started, as confirmed by the staff member. Missing values are
+     *        "unknown" and the refund cases wait for staff review (nothing is refunded automatically either way).
+     */
+    public function updateStatus(Batch $batch, string $newStatus, User $changer, ?string $note = null, array $cancellation = []): void
     {
         $validStatuses = ['confirmed', 'completed', 'rescheduled', 'cancelled_by_camp'];
         if (!in_array($newStatus, $validStatuses)) {
             throw new Exception("Invalid batch status: {$newStatus}");
         }
 
-        DB::transaction(function () use ($batch, $newStatus, $changer, $note) {
+        $category = $cancellation['reason_category'] ?? BookingRefund::REASON_UNKNOWN;
+        $activityStarted = $cancellation['activity_started'] ?? 'unknown';
+        if ($newStatus === 'cancelled_by_camp' && ($category === BookingRefund::REASON_WEATHER_IN_PROGRESS
+                || ($category === BookingRefund::REASON_WEATHER_PRE_DIVE && $activityStarted === 'yes'))) {
+            // Client policy: weather after the activity started is an interruption, not a cancellation, and no refund
+            // applies. It must not cancel every booking and open refunds; the interruption record comes in Batch 3-II.
+            throw new Exception('Weather after the camp activity has started is an interruption, not a pre-dive cancellation: no refund applies. Do not cancel the batch; mark it completed with a note explaining what happened.');
+        }
+
+        DB::transaction(function () use ($batch, $newStatus, $changer, $note, $category, $activityStarted) {
             $oldStatus = $batch->status;
             if ($oldStatus === $newStatus && empty($note)) {
                 return;
@@ -320,38 +335,23 @@ class BatchManagementService
                 if ($newStatus === 'cancelled_by_camp') {
                     $booking->update(['status' => 'cancelled_by_camp']);
 
-                    // Paid bookings get a refund request
-                    $completedPayments = $booking->payments()->where('status', 'completed')->get();
-                    foreach ($completedPayments as $payment) {
-                        RefundRequest::create([
-                            'payment_id' => $payment->id,
-                            'booking_id' => $booking->id,
-                            'requested_by' => 'camp_force_majeure',
-                            'requested_at' => now(),
-                            'eligibility_calculated' => [
-                                'days_until_dive' => max(0, Carbon::now()->diffInDays($booking->start_date, false)),
-                                'eligible_for_refund' => true,
-                                'refund_percentage' => 100,
-                                'window_label' => 'Camp Cancellation (100% Force Majeure Refund)',
-                                'policy_action_text' => 'Camp cancelled batch due to marine safety / weather. Full refund approved.',
-                            ],
-                            'status' => 'pending',
-                            'notes' => "Auto-generated refund request from batch cancellation: {$batch->batch_code}. Note: {$note}",
-                        ]);
-                    }
+                    // Paid bookings get a refund case (reason/progress as confirmed by staff; the guest's choice and an
+                    // approved amount come before any money moves). Every receipt counts: online "paid" and manual "completed".
+                    $case = app(RefundCaseService::class)->openForCampCancellation($booking, $category, $activityStarted, $changer, $note ?: 'Batch cancelled by camp');
 
                     BookingStatusLog::create([
                         'booking_id' => $booking->id,
                         'old_status' => $bookingOldStatus,
                         'new_status' => 'cancelled_by_camp',
                         'changed_by' => $changer->id,
-                        'note' => "Whole-batch cancellation: {$batch->name}. Full refund eligibility triggered. Custom email alert sent to {$booking->contact_email}.",
+                        'note' => "Whole-batch cancellation: {$batch->name} (" . (BookingRefund::REASONS[$category] ?? $category) . ')'
+                            . ($case ? ". Refund case #{$case->id} opened ({$case->status}); nothing refunded yet." : '. No payment to refund.'),
                     ]);
 
                     if (!empty($booking->contact_email)) {
                         try {
                             Mail::to($booking->contact_email)->send(
-                                new BatchWeatherCancellationMail($booking, $batch, $note ?: 'Cancelled by Camp due to weather or operational advisory.')
+                                new BatchWeatherCancellationMail($booking, $batch, $note ?: 'Cancelled by Camp due to weather or operational advisory.', $category)
                             );
 
                             NotificationLog::create([

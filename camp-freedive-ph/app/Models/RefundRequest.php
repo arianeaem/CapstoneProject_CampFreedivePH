@@ -22,6 +22,7 @@ class RefundRequest extends Model
         'paymongo_refund_id',
         'forfeit_reason',
         'notes',
+        'booking_refund_id',
     ];
 
     protected $casts = [
@@ -43,6 +44,11 @@ class RefundRequest extends Model
     public function reviewer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function bookingRefund(): BelongsTo
+    {
+        return $this->belongsTo(BookingRefund::class);
     }
 
     public function getForfeitReasonLabelAttribute(): string

@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\BookingRefund;
 use App\Models\Payment;
+use App\Services\Refunds\FinancialTotals;
 use App\Models\PaymentStatusLog;
 use App\Models\RefundRequest;
 use App\Services\AuditLogger;
@@ -66,13 +68,15 @@ class PaymentController extends Controller
         $perPage = max(5, min(100, (int) $request->input('per_page', 10)));
         $payments = $query->paginate($perPage)->withQueryString();
 
+        // Paid = receipts before refunds; Refunded = only confirmed refunds (see FinancialTotals)
         $stats = [
-            'total_gross' => Payment::whereIn('status', ['paid', 'completed'])->sum('amount'),
-            'total_net' => Payment::whereIn('status', ['paid', 'completed'])->sum('net_amount'),
-            'total_refunded' => Payment::where('status', 'refunded')->sum('amount_refunded') ?: Payment::where('status', 'refunded')->sum('amount'),
+            'total_gross' => FinancialTotals::paid(),
+            'total_net' => Payment::whereIn('status', Payment::RECEIPT_STATUSES)->sum('net_amount'),
+            'total_refunded' => FinancialTotals::refunded(),
             'total_forfeited' => Payment::where('is_forfeited', true)->orWhere('status', 'forfeited')->sum('amount'),
-            'pending_refunds' => RefundRequest::where('status', 'pending')->count(),
+            'pending_refunds' => RefundRequest::where('status', 'pending')->count() + BookingRefund::whereIn('status', BookingRefund::OPEN_STATUSES)->count(),
         ];
+        $stats['total_retained'] = round($stats['total_gross'] - $stats['total_refunded'], 2);
 
         return view('admin.payments.index', compact('payments', 'stats'));
     }

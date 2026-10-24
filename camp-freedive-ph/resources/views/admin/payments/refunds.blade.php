@@ -37,6 +37,9 @@
             <a href="{{ route('admin.payments.index') }}" class="btn-secondary px-3.5 py-2 text-sm sm:text-sm font-semibold">
                 Payments Ledger
             </a>
+            <a href="{{ portal_route('refund_cases.index') }}" class="btn-primary px-3.5 py-2 text-sm sm:text-sm font-semibold">
+                Refund Cases
+            </a>
         </div>
     </div>
 
@@ -157,42 +160,27 @@
                             Reject
                         </button>
 
-                        @if(!$isEligible)
-                            <!-- Forfeit Deposit Action -->
+                        @if($req->requested_by !== 'camp_force_majeure' && app(\App\Services\Refunds\RefundGuard::class)->historicalQuote($req) === 0)
+                            <!-- Forfeit Deposit Action (never for camp cancellations or earlier-terms promises; enforced by RefundGuard) -->
                             <form action="{{ route('admin.payments.refunds.forfeit', $req) }}" method="POST" class="flex-1">
                                 @csrf
                                 <input type="hidden" name="forfeit_reason" value="cancellation_outside_policy_window">
-                                <button type="submit" 
-                                        onclick="return confirm('Forfeit ₱{{ number_format($claimAmount, 2) }} deposit under camp cancellation policy for {{ $booking->booking_number }}?')"
+                                <button type="submit"
+                                        onclick="return confirm('Keep the ₱{{ number_format($claimAmount, 2) }} deposit under the camp cancellation policy for {{ $booking->booking_number }}?')"
                                         class="btn-secondary w-full py-2 text-sm font-bold text-center">
                                     Forfeit Deposit (₱0)
                                 </button>
                             </form>
-                        @else
-                            <!-- Approve Refund Action -->
-                            <form action="{{ route('admin.payments.refunds.approve', $req) }}" method="POST" class="flex-1">
-                                @csrf
-                                <button type="submit" 
-                                        onclick="return confirm('Approve & execute ₱{{ number_format($claimAmount, 2) }} refund via PayMongo for {{ $booking->booking_number }}?')"
-                                        class="btn-primary w-full py-2 text-sm font-bold shadow-2xs text-center">
-                                    Approve & Execute (₱{{ number_format($claimAmount, 2) }})
-                                </button>
-                            </form>
                         @endif
-                    </div>
-
-                    @if(!$isEligible)
-                        <!-- Policy Override Refund Action -->
-                        <form action="{{ route('admin.payments.refunds.approve', $req) }}" method="POST">
+                        <!-- Open the booking's refund case: no money moves here -->
+                        <form action="{{ route('admin.payments.refunds.approve', $req) }}" method="POST" class="flex-1">
                             @csrf
-                            <input type="hidden" name="notes" value="Administrative policy override: 100% refund approved">
-                            <button type="submit" 
-                                    onclick="return confirm('Override policy and execute full refund of ₱{{ number_format($claimAmount, 2) }} via PayMongo for {{ $booking->booking_number }}?')"
-                                    class="btn-danger w-full py-1.5 text-sm font-bold text-center">
-                                Override Policy: Execute Refund (₱{{ number_format($claimAmount, 2) }})
+                            <button type="submit" class="btn-primary w-full py-2 text-sm font-bold shadow-2xs text-center">
+                                Review in refund case
                             </button>
                         </form>
-                    @endif
+                    </div>
+                    <p class="text-xs text-[#6E6E73]">The refund case confirms the reason and the guest's choice, then an amount is approved and sent. Nothing is sent from this queue.</p>
                 </div>
 
             </div>

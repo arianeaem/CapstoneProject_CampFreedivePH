@@ -218,6 +218,7 @@ class WeatherSafetyModuleTest extends TestCase
             'contact_email' => 'juan@example.com',
             'contact_phone' => '09171234567',
             'total_amount' => 7000,
+            'downpayment_amount' => 3000,
             'balance_due' => 0,
         ]);
 
@@ -241,17 +242,21 @@ class WeatherSafetyModuleTest extends TestCase
         $this->assertEquals('cancelled_by_camp', $batch->fresh()->status);
         $this->assertEquals('cancelled_by_camp', $booking->fresh()->status);
 
-        // 100% Force Majeure Refund created
-        $refund = RefundRequest::where('booking_id', $booking->id)->first();
-        $this->assertNotNull($refund);
-        $this->assertEquals(100, $refund->eligibility_calculated['refund_percentage']);
+        // Batch 3-I: a weather refund case, not an automatic 100% refund; the guest chooses, staff confirm progress
+        $this->assertNull(RefundRequest::where('booking_id', $booking->id)->first());
+        $case = \App\Models\BookingRefund::where('booking_id', $booking->id)->sole();
+        $this->assertSame(['weather_pre_dive', 'unknown', 'awaiting_guest_choice'], [$case->reason_category, $case->activity_started, $case->status]);
+        $this->assertNotNull(app(\App\Services\Refunds\RefundLedger::class)->entitlement($case)['blocked'], 'Unknown progress never authorizes a refund.');
 
-        // Templated notification log created
+        // The guest is offered a free move or the downpayment back; the amount above it is reviewed, not promised
         $log = NotificationLog::where('batch_id', $batch->id)->first();
         $this->assertNotNull($log);
         $this->assertStringContainsString('Hello Juan Dela Cruz', $log->message_body);
-        $this->assertStringContainsString('full refund of PHP 7,000.00', $log->message_body);
-        $this->assertStringContainsString('move the booking for free', $log->message_body);
+        $this->assertStringContainsString('move to another available date for free', $log->message_body);
+        $this->assertStringContainsString('downpayment (PHP 3,000.00) back', $log->message_body);
+        $this->assertStringContainsString('our team will review the amount above the downpayment', $log->message_body);
+        $this->assertStringContainsString('No refund has been sent yet', $log->message_body);
+        $this->assertStringNotContainsString('full refund of PHP 7,000.00', $log->message_body);
     }
 
     public function test_admin_can_access_weather_monitoring_pages(): void

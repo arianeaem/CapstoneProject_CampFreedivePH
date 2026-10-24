@@ -347,8 +347,8 @@
             <p class="panel-section-title">What happens when you confirm</p>
             <ol class="list-decimal space-y-1 pl-5 text-[#3A3A3C]">
                 <li>The batch and its {{ $impact['bookings'] }} active booking(s) are marked <strong>Cancelled by Camp</strong>.</li>
-                <li>A <strong>full refund (100%)</strong> of what each participant paid is created and waits for you in <strong>Refunds</strong>.</li>
-                <li>Each participant gets the email below: why it was cancelled, their refund, and that they can ask to move to another date for free instead.</li>
+                <li>Each paid booking gets a <strong>refund case</strong> in <strong>Refund Cases</strong>. Nothing is refunded until the guest chooses a refund and the amount is approved.</li>
+                <li>Each participant gets the email below: why it was cancelled, and their choice of a free move or their downpayment back (anything paid beyond it is reviewed with them).</li>
             </ol>
             <p class="banner banner-warning mt-3">This cannot be undone.</p>
         </div>
@@ -371,6 +371,16 @@
                 <span class="form-hint">Participants read this exact sentence, so keep it simple.</span>
             </div>
 
+            <div class="space-y-2">
+                <label for="cancel-started" class="form-label form-label-required mb-0">Has the camp activity already started?</label>
+                <select id="cancel-started" name="activity_started" required class="form-select">
+                    <option value="no">No, it has not started</option>
+                    <option value="unknown">Not sure (refunds wait for review)</option>
+                    <option value="yes">Yes, it has started</option>
+                </select>
+                <span class="form-hint">Weather that turns bad after the camp has started is an interruption: no refund applies, and the batch should not be cancelled here.</span>
+            </div>
+
             <!-- Email preview: mirrors resources/views/emails/batch_weather_cancellation.blade.php -->
             <div class="space-y-2">
                 <span class="panel-section-title mb-0 block">Email each participant will receive</span>
@@ -386,10 +396,9 @@
                             <span x-text="cancelReason || '[Your reason]'"></span>
                         </div>
                         <div class="rounded-lg bg-[#ECFDF5] px-3 py-2 text-[#065F46]">
-                            <strong class="block">You will not lose any money</strong>
-                            We have already started a full refund of the <strong>[amount they paid]</strong>. It goes back to the payment method you used. You don't need to do anything.
+                            <strong class="block">Your options</strong>
+                            You can choose: move to another available date for free, or get your downpayment (<strong>[their downpayment]</strong>) back. Our team will review anything paid beyond the downpayment with you. Please reply to tell us your choice. No refund has been sent yet.
                         </div>
-                        <p><strong>Would you rather dive on another date?</strong> Just reply to this email or message us, and we will move your booking to another available date for free instead of refunding you.</p>
                         <p class="text-[#6E6E73]">Also shows their booking number, PIN and a "View my booking" button.</p>
                     </div>
                 </div>
@@ -397,7 +406,7 @@
 
             <label class="flex cursor-pointer items-start gap-2.5">
                 <input type="checkbox" x-model="understood" class="mt-0.5 rounded border-[#D1D1D6] text-[#780000]">
-                <span>I understand this cancels <strong>{{ $impact['bookings'] }} booking(s)</strong>, starts full refunds and emails every participant.</span>
+                <span>I understand this cancels <strong>{{ $impact['bookings'] }} booking(s)</strong>, opens refund cases for paid bookings and emails every participant.</span>
             </label>
         </form>
 

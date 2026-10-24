@@ -556,11 +556,15 @@ class BatchManagementController extends Controller
                 $batch,
                 $validated['status'],
                 auth()->user(),
-                $validated['note'] ?? null
+                $validated['note'] ?? null,
+                [
+                    'reason_category' => $validated['cancellation_reason_category'] ?? null,
+                    'activity_started' => $validated['activity_started'] ?? null,
+                ]
             );
 
             $actionLabel = match ($validated['status']) {
-                'cancelled_by_camp' => 'Cancelled by Camp (Full refund eligibility triggered for all connected bookings)',
+                'cancelled_by_camp' => 'Cancelled by Camp. Paid bookings have refund cases waiting for the guest\'s choice or staff review; nothing was refunded automatically',
                 'completed' => 'Marked as Completed',
                 'rescheduled' => 'Rescheduled (Participant email notifications dispatched)',
                 default => 'Updated to ' . ucfirst($validated['status']),

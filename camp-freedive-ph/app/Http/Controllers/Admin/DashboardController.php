@@ -152,20 +152,13 @@ class DashboardController extends Controller
         // ---------------------------------------------------------------
         // 4. Owner numbers (money)
         // ---------------------------------------------------------------
-        $paymentTotals = Payment::query()->selectRaw("
-                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') THEN amount END), 0) AS gross,
-                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') AND payment_type = 'downpayment' THEN amount END), 0) AS downpayment,
-                COALESCE(SUM(CASE WHEN status IN ('completed', 'paid') AND payment_type IN ('balance_settlement', 'full') THEN amount END), 0) AS balance,
-                COALESCE(SUM(CASE WHEN status = 'refunded' THEN amount_refunded END), 0) AS refunded_status,
-                COALESCE(SUM(amount_refunded), 0) AS refunded_all
-            ")->first();
-        $grossRevenue = (float) $paymentTotals->gross;
-        $downpaymentRevenue = (float) $paymentTotals->downpayment;
-        $balanceRevenue = (float) $paymentTotals->balance;
+        // Paid = receipts before refunds (refunded payments included); refunds = confirmed refunds only, never
+        // approved-but-unpaid cancellations (see FinancialTotals)
+        $grossRevenue = \App\Services\Refunds\FinancialTotals::paid();
+        $downpaymentRevenue = \App\Services\Refunds\FinancialTotals::paid(null, 'downpayment');
+        $balanceRevenue = \App\Services\Refunds\FinancialTotals::paid(null, 'balance');
         $outstandingBalances = (float) Booking::where('status', 'confirmed')->sum('balance_amount');
-        $refundsProcessed = (float) $paymentTotals->refunded_status
-            ?: (float) $paymentTotals->refunded_all
-            ?: (float) CancellationRequest::where('status', 'approved')->sum('calculated_refund_amount');
+        $refundsProcessed = \App\Services\Refunds\FinancialTotals::refunded();
         $netRevenue = max(0, $grossRevenue - $refundsProcessed);
 
         $financials = [

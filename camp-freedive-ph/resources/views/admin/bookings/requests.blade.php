@@ -150,9 +150,10 @@
                 $booking = $req->booking;
                 $payment = $booking->payments->first();
                 $policy = $cancellationPolicies[$req->id] ?? null;
-                $isEligible = ($policy && ($policy['refund_percentage'] ?? 0) > 0);
+                // An earlier-terms quote always goes to a refund case (RefundGuard refuses "no refund" for it)
+                $isEligible = ($policy && ($policy['refund_percentage'] ?? 0) > 0) || app(\App\Services\Refunds\RefundGuard::class)->historicalQuote($req) > 0;
                 $recRefund = $policy['calculated_refund'] ?? $req->calculated_refund_amount;
-                $claimAmount = $booking->paid_amount ?: ($payment->amount ?? 0);
+                $claimAmount = app(\App\Services\Refunds\RefundLedger::class)->position($booking)['paid'] / 100;
                 $studentNames = $booking->participants->pluck('name')->filter()->values();
                 $studentsDisplay = $studentNames->isNotEmpty() ? $studentNames->implode(', ') : $booking->contact_name;
             @endphp
@@ -212,9 +213,9 @@
                         <span class="text-[10px] font-bold uppercase tracking-wider text-[#8E8E93] block">POLICY STATUS</span>
                         <div class="flex items-center gap-1.5 font-bold text-xs {{ $isEligible ? 'text-emerald-800' : 'text-amber-900' }}">
                             @if($isEligible)
-                                <span>100% Refund Eligible (₱{{ number_format($recRefund, 2) }})</span>
+                                <span>Refund to review (quoted ₱{{ number_format($recRefund, 2) }}{{ ($policy['historical_terms'] ?? false) ? ', earlier published terms' : '' }})</span>
                             @else
-                                <span>0% Refund (Downpayment Forfeited per Policy)</span>
+                                <span>No refund (downpayment non-refundable under the current terms)</span>
                             @endif
                         </div>
                         <p class="text-xs text-[#6E6E73] leading-relaxed">
@@ -241,42 +242,29 @@
                         </button>
 
                         @if(!$isEligible)
-                            <!-- Forfeit downpayment -->
+                            <!-- Approve without refund -->
                             <form action="{{ route('admin.bookings.requests.cancellation.approve', $req) }}" method="POST" class="flex-1">
                                 @csrf
                                 <input type="hidden" name="action_type" value="forfeit">
-                                <button type="submit" 
-                                        onclick="return confirm('Approve cancellation with downpayment FORFEITED (₱0 refund) for {{ $booking->booking_number }} as per policy?')"
+                                <button type="submit"
+                                        onclick="return confirm('Approve the cancellation of {{ $booking->booking_number }} with no refund (current terms)?')"
                                         class="btn-secondary w-full py-2 text-sm font-bold text-center">
-                                    Forfeit Deposit (₱0)
+                                    Approve, no refund
                                 </button>
                             </form>
                         @else
-                            <!-- Approve and send refund -->
+                            <!-- Approve; the refund is reviewed in a refund case (no money moves here) -->
                             <form action="{{ route('admin.bookings.requests.cancellation.approve', $req) }}" method="POST" class="flex-1">
                                 @csrf
                                 <input type="hidden" name="action_type" value="policy_refund">
-                                <button type="submit" 
-                                        onclick="return confirm('Approve cancellation & process PayMongo refund of ₱{{ number_format($recRefund, 2) }} for {{ $booking->booking_number }}?')"
+                                <button type="submit"
+                                        onclick="return confirm('Approve the cancellation of {{ $booking->booking_number }}? No money is sent now: the refund is reviewed in a refund case.')"
                                         class="btn-primary w-full py-2 text-sm font-bold shadow-2xs text-center">
-                                    Approve & Refund (₱{{ number_format($recRefund, 2) }})
+                                    Approve, review refund
                                 </button>
                             </form>
                         @endif
                     </div>
-
-                    @if(!$isEligible)
-                        <!-- Policy Override Direct Refund Action -->
-                        <form action="{{ route('admin.bookings.requests.cancellation.approve', $req) }}" method="POST">
-                            @csrf
-                            <input type="hidden" name="action_type" value="full_refund">
-                            <button type="submit" 
-                                    onclick="return confirm('Override policy and execute full 100% refund of ₱{{ number_format($claimAmount, 2) }} for {{ $booking->booking_number }}?')"
-                                    class="btn-danger w-full py-1.5 text-sm font-bold text-center">
-                                Override Policy: Approve 100% Refund (₱{{ number_format($claimAmount, 2) }})
-                            </button>
-                        </form>
-                    @endif
                 </div>
             </div>
             @empty

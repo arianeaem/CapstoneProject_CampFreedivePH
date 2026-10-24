@@ -248,7 +248,7 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">3.2 Payment of Remaining Balance</h3>
                         <p class="mb-2">
-                            Unless otherwise stated in the booking confirmation, any remaining balance shall be settled on-site upon arrival and before the applicable training session or orientation begins.
+                            Unless otherwise stated in the booking confirmation, any remaining balance is settled at the camp at check-out time. The remaining balance is shown when you pay the downpayment and in your booking confirmation.
                         </p>
                         <p>
                             Failure to settle the required balance may result in the participant being unable to proceed with the scheduled activity.
@@ -290,10 +290,10 @@
                     <div>
                         <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.1 Participant Cancellation More Than Fourteen (14) Days Before the Scheduled Activity</h3>
                         <p class="mb-2">
-                            Where a participant cancels more than fourteen (14) days before the scheduled activity, the participant may request a 100% downpayment refund or rescheduling, subject to availability.
+                            The downpayment is non-refundable when a participant cancels. Where a participant withdraws more than fourteen (14) days before the scheduled activity, the reservation may instead be moved to another available camp date, subject to availability.
                         </p>
                         <p>
-                            Where rescheduling is selected, the reservation may be transferred to another available camp date within the permitted rescheduling period.
+                            Bookings made under earlier published terms are reviewed individually under the terms that applied when the booking was made.
                         </p>
                     </div>
 
@@ -322,9 +322,22 @@
                     </div>
 
                     <div>
-                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.5 Refund Processing</h3>
+                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.5 Cancellation by Camp Freedive PH</h3>
+                        <p class="mb-2">
+                            If Camp Freedive PH cancels a camp before diving starts because of a storm, an official weather warning or conditions that make diving unsafe, the participant may choose to move to another available date free of charge or to receive the downpayment back. Any amount paid beyond the downpayment is reviewed with the participant.
+                        </p>
+                        <p class="mb-2">
+                            If weather conditions become unsafe after the camp activity has started, our team will first try to continue at a safer dive site. If diving cannot safely continue, the situation will be explained on site; no refund applies in this case.
+                        </p>
                         <p>
-                            Where a refund is approved, the refund will be processed through the applicable payment method or in accordance with the refund procedure communicated by Camp Freedive PH. Processing times may vary depending on the payment provider and financial institution involved.
+                            If Camp Freedive PH cancels a camp for its own operational reasons (for example, a coach or boat is unavailable, or there are too few participants), the participant may choose to move to another available date free of charge or to receive back all payments made.
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 class="font-bold text-[#1D1D1F] text-base mb-1">4.6 Refund Processing</h3>
+                        <p>
+                            Where a refund is approved, it is processed through the applicable payment method or in accordance with the refund procedure communicated by Camp Freedive PH. A refund is complete only once the payment provider has confirmed it or the payout has been made; processing times may vary depending on the payment provider and financial institution involved.
                         </p>
                     </div>
                 </div>

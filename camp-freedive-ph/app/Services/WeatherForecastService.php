@@ -12,9 +12,10 @@ use App\Models\ForecastAccuracyLog;
 use App\Models\ForecastSnapshot;
 use App\Models\HourlyAssessment;
 use App\Models\ManualOverride;
+use App\Models\BookingRefund;
 use App\Models\NotificationLog;
-use App\Models\RefundRequest;
 use App\Models\User;
+use App\Services\Refunds\RefundCaseService;
 use App\Services\ExternalApi\ExternalApiClient;
 use Carbon\Carbon;
 use Exception;
@@ -714,10 +715,18 @@ class WeatherForecastService
     }
 
     /**
-     * Cancel the whole batch, mark refunds as 100% and email the participants.
+     * Cancel the whole batch for the weather (before diving) and email the participants their options.
+     * Paid bookings get a refund case (weather before diving, confirmed by this staff member); nothing is refunded
+     * until staff confirm the activity had not started, the guest chooses a refund and an amount is approved.
+     * $activityStarted is the staff member's answer ("no", "yes", "unknown"); "yes" is refused (an interruption
+     * after the activity started has no refund and must not cancel every booking).
      */
-    public function cancelBatchWithRefundsAndNotifications(Batch $batch, string $cancellationReason, User $operator): int
+    public function cancelBatchWithRefundsAndNotifications(Batch $batch, string $cancellationReason, User $operator, string $activityStarted = 'unknown'): int
     {
+        if ($activityStarted === 'yes') {
+            throw new \RuntimeException('Weather after the camp activity has started is an interruption, not a pre-dive cancellation: no refund applies. Do not cancel the batch; mark it completed with a note explaining what happened.');
+        }
+
         $batch->update([
             'status' => 'cancelled_by_camp',
             'lifecycle_status' => 'cancelled_by_camp',
@@ -744,33 +753,13 @@ class WeatherForecastService
             $bookingOldStatus = $booking->status;
             $booking->update(['status' => 'cancelled_by_camp']);
 
-            // Weather cancellation means full refund
-            foreach ($booking->payments()->where('status', 'completed')->get() as $payment) {
-                RefundRequest::create([
-                    'payment_id' => $payment->id,
-                    'booking_id' => $booking->id,
-                    'requested_by' => 'camp_force_majeure',
-                    'requested_at' => now(),
-                    'eligibility_calculated' => [
-                        'days_until_dive' => max(0, Carbon::now()->diffInDays($booking->start_date, false)),
-                        'eligible_for_refund' => true,
-                        'refund_percentage' => 100,
-                        'window_label' => 'Camp Cancellation (100% Force Majeure Refund)',
-                        'policy_action_text' => 'Camp cancelled batch due to marine safety / weather. Full refund approved.',
-                    ],
-                    'status' => 'pending',
-                    'notes' => "Weather cancellation for batch {$batch->batch_code}: {$cancellationReason}",
-                ]);
-            }
+            // Paid bookings (online "paid" and manual "completed") get a refund case for staff; no refund yet
+            app(RefundCaseService::class)->openForCampCancellation($booking, BookingRefund::REASON_WEATHER_PRE_DIVE, $activityStarted, $operator, "Weather cancellation of batch {$batch->batch_code}: {$cancellationReason}");
 
             // Short summary of the email, saved in the notification log
             $scheduledDateStr = $booking->start_date->format('M d, Y') . ' - ' . $booking->end_date->format('M d, Y');
-            $paid = (float) $booking->payments()->where('status', 'completed')->sum('amount');
             $messageBody = "Hello {$booking->contact_name}, we cancelled your trip on {$scheduledDateStr} for your safety.\n\nWhy: {$cancellationReason}\n\n"
-                . ($paid > 0
-                    ? 'A full refund of PHP ' . number_format($paid, 2) . ' has been started. No action needed.'
-                    : 'No payment was received yet, so there is nothing to refund.')
-                . "\n\nPrefer another date? Reply to this email and we will move the booking for free instead of refunding.";
+                . (new BatchWeatherCancellationMail($booking, $batch, $cancellationReason))->optionsText();
 
             NotificationLog::create([
                 'batch_id' => $batch->id,

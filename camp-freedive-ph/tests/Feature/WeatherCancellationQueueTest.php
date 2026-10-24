@@ -124,18 +124,16 @@ class WeatherCancellationQueueTest extends TestCase
         $booking2->refresh();
         $this->assertEquals('cancelled_by_camp', $booking2->status);
 
-        // Assert 100% force majeure refund requests created
-        $this->assertDatabaseHas('refund_requests', [
-            'booking_id' => $booking1->id,
-            'requested_by' => 'camp_force_majeure',
-            'status' => 'pending',
-        ]);
-
-        $this->assertDatabaseHas('refund_requests', [
-            'booking_id' => $booking2->id,
-            'requested_by' => 'camp_force_majeure',
-            'status' => 'pending',
-        ]);
+        // Batch 3-I: no automatic refund; each paid booking gets a weather refund case waiting for the guest's choice
+        $this->assertDatabaseCount('refund_requests', 0);
+        foreach ([$booking1, $booking2] as $booking) {
+            $this->assertDatabaseHas('booking_refunds', [
+                'booking_id' => $booking->id,
+                'reason_category' => 'weather_pre_dive',
+                'activity_started' => 'unknown',
+                'status' => 'awaiting_guest_choice',
+            ]);
+        }
 
         // Assert NotificationLogs created
         $this->assertDatabaseHas('notification_logs', [

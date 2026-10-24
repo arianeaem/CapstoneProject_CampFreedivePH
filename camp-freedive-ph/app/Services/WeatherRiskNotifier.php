@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Mail;
 
 /**
  * Weather notices sent less than 18 hours before a dive:
- * - Critical Risk: participants can reschedule for free or cancel with a full downpayment refund. Owners/admins must decide.
+ * - Critical Risk: participants can reschedule for free, or cancel and request a downpayment refund that staff
+ *   confirm (a rating alone never authorizes a refund). Owners/admins must decide.
  * - High Risk: everyone is told, but the dive is still on (no refund).
  * Each participant only gets each notice once per batch and dive date (saved in notification_logs).
  */
@@ -80,7 +81,7 @@ class WeatherRiskNotifier
                     'recipient_name' => $booking->contact_name,
                     'subject' => $subject,
                     'message_body' => $level === 'critical'
-                        ? 'Critical Risk notice: participant may reschedule for free or cancel with a full downpayment refund.'
+                        ? 'Critical Risk notice: participant may reschedule for free or cancel and request a downpayment refund (confirmed by staff).'
                         : 'High Risk notice: dive still planned, extra safety steps.',
                     'channel' => 'email',
                     'sent_at' => now(),

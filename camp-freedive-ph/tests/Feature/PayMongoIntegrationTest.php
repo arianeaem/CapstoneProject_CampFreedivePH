@@ -27,6 +27,8 @@ class PayMongoIntegrationTest extends TestCase
     /** Send a webhook signed the way PayMongo signs it (t=..,te=..,li=..). */
     protected function postSignedWebhook(array $payload, bool $live = false, string $secret = self::WEBHOOK_SECRET)
     {
+        // Paid events must match the configured key's mode (Batch 3-I); a synthetic test-mode key, never a real one
+        config(['paymongo.secret_key' => 'sk_test_synthetic']);
         $body = json_encode($payload);
         $t = time();
         $sig = hash_hmac('sha256', "{$t}.{$body}", $secret);
@@ -198,6 +200,9 @@ class PayMongoIntegrationTest extends TestCase
                                     'id' => 'pay_test_webhook_paid_777',
                                     'attributes' => [
                                         'status' => 'paid',
+                                        'amount' => 300000,
+                                        'currency' => 'PHP',
+                                        'livemode' => false,
                                     ],
                                 ],
                             ],
@@ -252,6 +257,9 @@ class PayMongoIntegrationTest extends TestCase
                                     'id' => 'pay_dedup_001',
                                     'attributes' => [
                                         'status' => 'paid',
+                                        'amount' => 300000,
+                                        'currency' => 'PHP',
+                                        'livemode' => false,
                                     ],
                                 ],
                             ],
@@ -379,7 +387,10 @@ class PayMongoIntegrationTest extends TestCase
         $this->postSignedWebhook($payload, false)->assertStatus(400);
         $this->assertSame('pending_downpayment', $booking->fresh()->status);
 
+        // A genuinely signed live event is accepted, but this app runs on a test key: the payment is not applied
         $this->postSignedWebhook($payload, true)->assertOk();
-        $this->assertSame('confirmed', $booking->fresh()->status);
+        $this->assertSame('pending_downpayment', $booking->fresh()->status);
+        $this->assertDatabaseMissing('payments', ['paymongo_payment_id' => 'pay_live_1']);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'PAYMONGO_WEBHOOK_PAYMENT_REJECTED']);
     }
 }

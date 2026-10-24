@@ -43,20 +43,19 @@
             <div class="hero-box">
                 <h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 800; color: #1D1D1F; letter-spacing: -0.2px;">Cancellation Approved</h1>
                 <p style="margin: 0 auto; font-size: 14px; color: #4A4A4F; line-height: 1.6; max-width: 480px;">
-                    Hi <strong>{{ $booking->contact_name }}</strong>, your cancellation request for Booking <strong>#{{ $booking->booking_number }}</strong> has been approved and processed.
+                    Hi <strong>{{ $booking->contact_name }}</strong>, your cancellation request for Booking <strong>#{{ $booking->booking_number }}</strong> has been approved.
                 </p>
             </div>
 
-            @if(!$isForfeited && $refundAmount > 0)
+            @if($refundUnderReview)
                 <div class="refund-box">
-                    <strong>Refund Approved & Queued for Processing</strong><br>
-                    <span>Approved Refund Amount: <strong>₱{{ number_format($refundAmount, 2) }}</strong></span><br>
-                    <span style="font-size: 13px;">Our finance staff has queued your refund back to your original payment method.</span>
+                    <strong>Refund review</strong><br>
+                    <span style="font-size: 13px;">Our team is reviewing whether a refund applies to your booking under the applicable terms. No refund has been sent yet. We will email you if a refund is approved and again once it has been sent back to your payment method.</span>
                 </div>
             @else
                 <div class="status-box">
-                    <strong>Cancellation Approved (Downpayment Forfeited)</strong><br>
-                    <span style="font-size: 13px;">Per camp policy, cancellations made within 14 days of departure result in downpayment forfeiture.</span>
+                    <strong>Cancellation approved, no refund</strong><br>
+                    <span style="font-size: 13px;">Under our cancellation policy the downpayment is not refunded when a booking is cancelled by the guest.</span>
                 </div>
             @endif
 
@@ -71,7 +70,7 @@
                 </tr>
                 <tr style="border: none !important; border-bottom: none !important;">
                     <td style="padding: 10px 0; color: #6E6E73; border: none !important; border-bottom: none !important;">Total Paid:</td>
-                    <td style="padding: 10px 0; font-weight: 600; border: none !important; border-bottom: none !important;">₱{{ number_format($booking->paid_amount, 2) }}</td>
+                    <td style="padding: 10px 0; font-weight: 600; border: none !important; border-bottom: none !important;">₱{{ number_format($totalPaid, 2) }}</td>
                 </tr>
             </table>
 

@@ -34,6 +34,12 @@ class Booking extends Model
     /** A booking's status or dates change a participant's history (last dive, latest details). */
     protected static function booted(): void
     {
+        // Every booking made from now on carries the refund policy it was made under; older ones stay NULL
+        // ("earlier published terms") and are reviewed, never repriced (see config/refunds.php)
+        static::creating(function (Booking $booking) {
+            $booking->refund_policy_version ??= config('refunds.policy_version');
+        });
+
         static::updated(function (Booking $booking) {
             if (!$booking->wasChanged(['status', 'start_date', 'contact_email', 'contact_phone'])) {
                 return;
@@ -77,6 +83,7 @@ class Booking extends Model
         'guardian_consent_at',
         'status',
         'created_by',
+        'refund_policy_version',
     ];
 
     protected $casts = [
@@ -129,6 +136,11 @@ class Booking extends Model
     public function cancellationRequests(): HasMany
     {
         return $this->hasMany(CancellationRequest::class);
+    }
+
+    public function refundCases(): HasMany
+    {
+        return $this->hasMany(BookingRefund::class);
     }
 
     public function statusLogs(): HasMany

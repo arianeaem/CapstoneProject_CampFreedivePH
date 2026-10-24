@@ -19,7 +19,7 @@ class CoachNotificationService
         ?string $bookingNumber = null,
         ?Collection $coaches = null,
     ): void {
-        $coaches ??= $batch->fresh(['assigned_coaches'])->assigned_coaches;
+        $coaches ??= $batch->fresh()->assigned_coaches;
 
         foreach ($coaches->unique('id') as $coach) {
             $this->send($coach, $batch, $eventTitle, $message, $bookingNumber);
@@ -28,7 +28,7 @@ class CoachNotificationService
 
     public function notifyOpening(CoachOpening $opening): void
     {
-        $batch = $opening->batch()->with('assigned_coaches')->first();
+        $batch = $opening->batch()->first();
         if (!$batch) {
             return;
         }

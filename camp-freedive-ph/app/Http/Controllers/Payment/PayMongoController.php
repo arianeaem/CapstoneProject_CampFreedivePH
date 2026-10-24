@@ -5,14 +5,16 @@ namespace App\Http\Controllers\Payment;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Payment;
+use App\Models\PaymongoWebhookEvent;
+use App\Models\RefundAttempt;
 use App\Services\AuditLogger;
+use App\Services\Refunds\RefundExecutor;
 use App\Services\Checkout\CheckoutWebhookHandler;
 use App\Services\Gateways\PayMongoGateway;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -274,18 +276,19 @@ class PayMongoController extends Controller
             return response()->json($body, $status);
         }
 
-        // PayMongo can send the same event more than once.
-        // Cache::add() only returns true the first time, so we skip repeats for 24 hours.
+        // PayMongo can send the same event more than once, and retries an event we could not process. Each event is
+        // recorded durably and claimed before processing; it is marked processed only after it succeeded, so a
+        // failure is retried on the next delivery and a processed event (or a replay of it) is never applied twice.
         $eventId = $processed['raw']['data']['id'] ?? ($eventData['id'] ?? null);
-        $dedupKey = $eventId ? "paymongo_webhook_evt:{$eventId}" : 'paymongo_webhook_payload:' . hash('sha256', $payload);
+        $eventKey = is_string($eventId) && $eventId !== '' ? $eventId : 'payload:' . hash('sha256', $payload);
+        $event = $this->claimWebhookEvent($eventKey, (string) $eventType);
 
-        if (!Cache::add($dedupKey, true, now()->addHours(24))) {
-            Log::info("PayMongo Webhook: Duplicate event delivery discarded (Key: {$dedupKey}, Event: {$eventType})");
-            return response()->json([
-                'received' => true,
-                'event' => $eventType,
-                'status' => 'duplicate_ignored',
-            ], 200);
+        if ($event === 'processed') {
+            Log::info('PayMongo Webhook: duplicate event delivery ignored.', ['event' => $eventType]);
+            return response()->json(['received' => true, 'event' => $eventType, 'status' => 'duplicate_ignored'], 200);
+        }
+        if ($event === 'busy') {
+            return response()->json(['error' => 'Event is being processed; retry later.'], 503);
         }
 
         Log::info("PayMongo Webhook Event Received: {$eventType}", ['event' => $eventType, 'event_id' => $eventId]);
@@ -311,16 +314,53 @@ class PayMongoController extends Controller
                     break;
             }
 
+            PaymongoWebhookEvent::where('event_id', $eventKey)->update(['status' => 'processed', 'processed_at' => now(), 'last_error' => null]);
+
             return response()->json(['received' => true, 'event' => $eventType], 200);
 
-        } catch (Exception $e) {
-            Log::error("PayMongo Webhook Processing Exception: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            PaymongoWebhookEvent::where('event_id', $eventKey)->update(['status' => 'failed', 'last_error' => substr(class_basename($e), 0, 120)]);
+            Log::error('PayMongo Webhook Processing Exception; PayMongo will retry it.', ['event' => $eventType, 'exception' => class_basename($e)]);
             return response()->json(['error' => 'Webhook processing error.'], 500);
         }
     }
 
     /**
+     * Record the event (first delivery) and claim it for processing.
+     * Returns "claimed", "processed" (already done: a duplicate or a replay) or "busy" (another delivery is on it).
+     * A claim older than 5 minutes is a crashed request and can be taken over.
+     */
+    private function claimWebhookEvent(string $eventKey, string $eventType): string
+    {
+        try {
+            PaymongoWebhookEvent::firstOrCreate(['event_id' => $eventKey], ['event_type' => substr($eventType, 0, 64), 'status' => 'received']);
+        } catch (\Illuminate\Database\QueryException) {
+            // Concurrent first delivery created it: fall through to the claim
+        }
+
+        $claimed = PaymongoWebhookEvent::where('event_id', $eventKey)
+            ->where(fn ($q) => $q->whereIn('status', ['received', 'failed'])
+                ->orWhere(fn ($s) => $s->where('status', 'processing')->where('updated_at', '<', now()->subMinutes(5))))
+            ->update(['status' => 'processing', 'attempts' => DB::raw('attempts + 1'), 'updated_at' => now()]);
+        if ($claimed === 1) {
+            return 'claimed';
+        }
+
+        return PaymongoWebhookEvent::where('event_id', $eventKey)->value('status') === 'processed' ? 'processed' : 'busy';
+    }
+
+    /**
      * Handle 'payment.paid' and 'checkout_session.payment.paid'.
+     */
+    /**
+     * Legacy booking paid (signed event). The payment evidence is checked and kept; the booking is confirmed only when
+     * everything matches what it expected:
+     *  - payment id ("pay_"), PHP, a positive integer amount, and the same mode (test/live) as our key;
+     *  - a payment id already on record is never applied again or moved to another booking;
+     *  - an existing paid payment row is never overwritten: a second real payment becomes its own row;
+     *  - amount different from what the booking expects: recorded as received, booking not confirmed, flagged;
+     *  - late payment on a cancelled booking: recorded as received, booking stays cancelled, flagged (no refund here).
+     * Capacity is not re-checked here (unchanged legacy behaviour, Batch 3-II B-01).
      */
     protected function handlePaymentPaidEvent(array $eventData): void
     {
@@ -337,51 +377,82 @@ class PayMongoController extends Controller
         }
 
         if (!$booking) {
-            Log::warning('PayMongo Webhook: Booking not found for paid event.', ['metadata' => $metadata]);
+            Log::warning('PayMongo Webhook: Booking not found for paid event.');
             return;
         }
 
-        $paymongoPaymentId = $attributes['payments'][0]['id'] ?? ($eventData['id'] ?? null);
-        $paymongoResourceId = $eventData['id'] ?? null;
-        $amountInCentavos = $attributes['amount'] ?? ($attributes['payments'][0]['attributes']['amount'] ?? 0);
-        $amountInPesos = $amountInCentavos > 0 ? ($amountInCentavos / 100) : ($booking->downpayment_amount ?? 3000);
-        $feeAmount = ($attributes['fee'] ?? 0) / 100;
+        // checkout_session.payment.paid carries the payment in payments[0]; payment.paid is the payment itself
+        $paymentObject = $attributes['payments'][0] ?? null;
+        $paymongoPaymentId = $paymentObject['id'] ?? ($eventData['id'] ?? null);
+        $paymentAttributes = $paymentObject['attributes'] ?? $attributes;
+        $sessionId = $paymentObject ? ($eventData['id'] ?? null) : null;
+        $amountCentavos = $paymentAttributes['amount'] ?? null;
+        $livemode = $paymentAttributes['livemode'] ?? ($attributes['livemode'] ?? null);
+        $expectedMode = app(\App\Services\PayMongoService::class)->configuredLivemode();
 
-        DB::transaction(function () use ($booking, $paymongoPaymentId, $paymongoResourceId, $amountInPesos, $feeAmount, $attributes) {
-            $payment = Payment::where('booking_id', $booking->id)
-                ->where('payment_type', 'downpayment')
-                ->latest()
-                ->first();
+        $problem = match (true) {
+            ! is_string($paymongoPaymentId) || ! str_starts_with($paymongoPaymentId, 'pay_') => 'payment id missing',
+            ! is_int($amountCentavos) || $amountCentavos <= 0 => 'amount missing',
+            ($paymentAttributes['currency'] ?? 'PHP') !== 'PHP' => 'currency is not PHP',
+            ! is_bool($livemode) || $expectedMode === null || $livemode !== $expectedMode => 'test/live mode does not match',
+            isset($paymentAttributes['status']) && $paymentAttributes['status'] !== 'paid' => 'payment status is not paid',
+            default => null,
+        };
+        if ($problem !== null) {
+            AuditLogger::log('PAYMONGO_WEBHOOK_PAYMENT_REJECTED', "Paid event for Booking #{$booking->booking_number} not applied: {$problem}. Needs staff review.", null, 'PayMongo Webhook');
+            return;
+        }
 
-            if (!$payment) {
-                $payment = new Payment([
-                    'booking_id' => $booking->id,
-                    'payment_type' => 'downpayment',
-                    'transaction_id' => 'TXN-' . strtoupper(bin2hex(random_bytes(4))),
-                ]);
+        DB::transaction(function () use ($booking, $paymongoPaymentId, $sessionId, $amountCentavos, $paymentAttributes, $attributes) {
+            $known = Payment::where('paymongo_payment_id', $paymongoPaymentId)->lockForUpdate()->first();
+            if ($known) {
+                if ($known->booking_id !== $booking->id) {
+                    AuditLogger::log('PAYMONGO_WEBHOOK_PAYMENT_CONFLICT', "Payment {$paymongoPaymentId} is already recorded on another booking; event for Booking #{$booking->booking_number} not applied.", null, 'PayMongo Webhook');
+                }
+                return; // already recorded: nothing to do
             }
 
-            $paymentMethodType = $attributes['payment_method_type'] ?? 'gcash';
+            // The pending downpayment row for this checkout (or any pending one); never a row that is already paid
+            $payment = Payment::where('booking_id', $booking->id)->where('status', 'pending')
+                ->orderByRaw('CASE WHEN paymongo_resource_id = ? THEN 0 ELSE 1 END', [(string) $sessionId])
+                ->latest('id')->lockForUpdate()->first();
+            $expectedCentavos = (int) round((float) ($payment?->amount ?? $booking->downpayment_amount) * 100);
+            $amountPesos = round($amountCentavos / 100, 2);
+            $feePesos = is_int($paymentAttributes['fee'] ?? null) ? round($paymentAttributes['fee'] / 100, 2) : 0.0;
 
+            $payment ??= new Payment([
+                'booking_id' => $booking->id,
+                'payment_type' => 'downpayment',
+                'transaction_id' => 'TXN-' . strtoupper(bin2hex(random_bytes(4))),
+            ]);
             $payment->fill([
                 'status' => 'paid',
                 'paid_at' => now(),
-                'payment_method' => $paymentMethodType,
+                'payment_method' => (string) ($paymentAttributes['source']['type'] ?? $paymentAttributes['payment_method_type'] ?? $attributes['payment_method_type'] ?? 'paymongo'),
                 'paymongo_payment_id' => $paymongoPaymentId,
-                'paymongo_resource_id' => $paymongoResourceId,
-                'amount' => $amountInPesos,
-                'fee_amount' => $feeAmount,
-                'net_amount' => $amountInPesos - $feeAmount,
+                'paymongo_resource_id' => $payment->paymongo_resource_id ?? $sessionId,
+                'amount' => $amountPesos,
+                'fee_amount' => $feePesos,
+                'net_amount' => round($amountPesos - $feePesos, 2),
             ])->save();
 
-            if ($booking->status !== 'confirmed') {
+            if (str_starts_with($booking->status, 'cancelled')) {
+                AuditLogger::log('PAYMONGO_WEBHOOK_LATE_PAYMENT', "Payment of ₱" . number_format($amountPesos, 2) . " received for cancelled Booking #{$booking->booking_number}; kept as received, booking not reinstated. Needs staff review.", null, 'PayMongo Webhook');
+                return;
+            }
+            if ($amountCentavos !== $expectedCentavos) {
+                AuditLogger::log('PAYMONGO_WEBHOOK_AMOUNT_MISMATCH', "Payment of ₱" . number_format($amountPesos, 2) . " received for Booking #{$booking->booking_number}, expected ₱" . number_format($expectedCentavos / 100, 2) . ". Recorded; booking not confirmed automatically. Needs staff review.", null, 'PayMongo Webhook');
+                return;
+            }
+
+            if (in_array($booking->status, ['pending_downpayment', 'pending'], true)) {
                 $booking->update(['status' => 'confirmed']);
                 app(\App\Services\SlotReservationService::class)->releaseHold($booking->start_date, $booking->booking_number);
             }
 
             AuditLogger::log(
                 'PAYMONGO_WEBHOOK_PAID',
-                "Webhook marked Booking #{$booking->booking_number} as PAID (₱" . number_format($amountInPesos, 2) . ")",
+                "Webhook marked Booking #{$booking->booking_number} as PAID (₱" . number_format($amountPesos, 2) . ")",
                 null,
                 'PayMongo Webhook'
             );
@@ -410,25 +481,90 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Handle refund events.
+     * refund.created / refund.updated (signed). Updates the refund ledger by the refund's own status; never marks a
+     * payment "refunded" or overwrites its amounts (that hid receipts and turned partial refunds into full ones).
+     *  - matched by PayMongo refund id, else by the operation id in its notes ("op:<uuid>", our submission whose
+     *    answer was lost), on the same payment and for the same amount;
+     *  - pending -> provider_pending, succeeded -> succeeded, failed -> failed; a finished attempt is never changed;
+     *  - a refund we did not send (e.g. made in the PayMongo dashboard) is recorded as an "external" ledger entry so
+     *    it counts (once: the PayMongo refund id is unique).
      */
     protected function handleRefundEvent(array $eventData): void
     {
         $attributes = $eventData['attributes'] ?? [];
         $paymentId = $attributes['payment_id'] ?? null;
         $refundId = $eventData['id'] ?? null;
-        $amountInCentavos = $attributes['amount'] ?? 0;
-        $amountInPesos = $amountInCentavos / 100;
+        $amount = $attributes['amount'] ?? null;
+        $mapped = match ($attributes['status'] ?? null) {
+            'succeeded' => RefundAttempt::SUCCEEDED,
+            'pending', 'processing' => RefundAttempt::PROVIDER_PENDING,
+            'failed' => RefundAttempt::FAILED,
+            default => null,
+        };
+        $expectedMode = app(\App\Services\PayMongoService::class)->configuredLivemode();
 
-        if ($paymentId) {
-            $payment = Payment::where('paymongo_payment_id', $paymentId)->first();
-            if ($payment) {
-                $payment->update([
-                    'status' => 'refunded',
-                    'paymongo_refund_id' => $refundId,
-                    'amount_refunded' => $amountInPesos,
-                ]);
+        if (! is_string($refundId) || ! str_starts_with($refundId, 'ref_') || ! is_string($paymentId) || ! is_int($amount) || $amount <= 0
+            || $mapped === null || ($attributes['currency'] ?? 'PHP') !== 'PHP'
+            || (isset($attributes['livemode']) && $attributes['livemode'] !== $expectedMode)) {
+            AuditLogger::log('PAYMONGO_REFUND_EVENT_REJECTED', 'Refund event ' . (is_string($refundId) ? $refundId : '?') . ' not applied: incomplete, unexpected status, currency or mode.', null, 'PayMongo Webhook');
+            return;
+        }
+
+        $payment = Payment::where('paymongo_payment_id', $paymentId)->first();
+        if (! $payment) {
+            AuditLogger::log('PAYMONGO_REFUND_EVENT_UNMATCHED', "Refund {$refundId} is for a payment not on record ({$paymentId}).", null, 'PayMongo Webhook');
+            return;
+        }
+
+        $case = DB::transaction(function () use ($refundId, $payment, $amount, $mapped, $attributes) {
+            $attempt = RefundAttempt::where('provider_refund_id', $refundId)->lockForUpdate()->first();
+            if (! $attempt && preg_match('/op:([0-9a-f-]{36})/', (string) ($attributes['notes'] ?? ''), $m)) {
+                $attempt = RefundAttempt::where('operation_id', $m[1])->lockForUpdate()->first();
             }
+
+            if (! $attempt) {
+                RefundAttempt::create([
+                    'payment_id' => $payment->id,
+                    'operation_id' => (string) \Illuminate\Support\Str::uuid(),
+                    'method' => 'external',
+                    'amount_centavos' => $amount,
+                    'currency' => 'PHP',
+                    'status' => $mapped,
+                    'provider_refund_id' => $refundId,
+                    'provider_status' => (string) $attributes['status'],
+                    'resolution_source' => RefundAttempt::SOURCE_PROVIDER_WEBHOOK,
+                    'resolved_at' => in_array($mapped, [RefundAttempt::SUCCEEDED, RefundAttempt::FAILED], true) ? now() : null,
+                    'evidence_note' => 'Recorded from a PayMongo refund event; not sent from this system.',
+                ]);
+                AuditLogger::log('PAYMONGO_REFUND_EVENT_EXTERNAL', "Refund {$refundId} (₱" . number_format($amount / 100, 2) . ", {$attributes['status']}) on payment #{$payment->id} was not sent from this system; recorded in the refund ledger.", null, 'PayMongo Webhook');
+
+                return null;
+            }
+
+            if ($attempt->payment_id !== $payment->id || $attempt->amount_centavos !== $amount) {
+                AuditLogger::log('PAYMONGO_REFUND_EVENT_MISMATCH', "Refund {$refundId} does not match refund operation {$attempt->operation_id} (payment or amount differs); not applied.", null, 'PayMongo Webhook');
+                return null;
+            }
+            if (in_array($attempt->status, [RefundAttempt::SUCCEEDED, RefundAttempt::FAILED, RefundAttempt::OFFLINE_CONFIRMED], true)) {
+                if ($attempt->status !== $mapped) {
+                    AuditLogger::log('PAYMONGO_REFUND_EVENT_CONFLICT', "Refund {$refundId} reported {$attributes['status']} but operation {$attempt->operation_id} is already {$attempt->status}; not changed.", null, 'PayMongo Webhook');
+                }
+                return null;
+            }
+
+            $attempt->update([
+                'status' => $mapped,
+                'provider_refund_id' => $refundId,
+                'provider_status' => (string) $attributes['status'],
+                'resolution_source' => RefundAttempt::SOURCE_PROVIDER_WEBHOOK,
+                'resolved_at' => in_array($mapped, [RefundAttempt::SUCCEEDED, RefundAttempt::FAILED], true) ? now() : null,
+            ]);
+
+            return $attempt->bookingRefund;
+        });
+
+        if ($case) {
+            app(RefundExecutor::class)->refreshCompletion($case);
         }
     }
 }

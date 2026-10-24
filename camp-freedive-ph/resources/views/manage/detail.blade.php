@@ -96,7 +96,11 @@
                     <span class="text-sm text-[#D70015] font-bold">Unconfirmed Reservation</span>
                 @else
                     <strong class="text-sm text-[#065F46] block">₱{{ number_format($booking->downpayment_amount, 2) }} Downpayment Paid</strong>
-                    <span class="text-sm text-[#780000] font-bold">₱{{ number_format($booking->balance_amount, 2) }} balance due at camp</span>
+                    @if(str_starts_with($booking->status, 'cancelled') || $booking->status === 'no_show')
+                        <span class="text-sm text-[#6E6E73] font-bold">No balance to pay (booking cancelled)</span>
+                    @else
+                        <span class="text-sm text-[#780000] font-bold">₱{{ number_format($booking->balance_amount, 2) }} balance due at camp (check-out)</span>
+                    @endif
                 @endif
             </div>
         </div>
@@ -252,8 +256,8 @@
                             <strong class="text-sm font-bold text-[#166534]">₱{{ number_format($booking->downpayment_amount, 2) }}</strong>
                         </div>
                         <div class="p-3 rounded-xl bg-[#FFFBEB] border border-[#FEF3C7]">
-                            <span class="text-xs text-[#92400E] font-medium block">Balance Due at Camp:</span>
-                            <strong class="text-sm font-bold text-[#780000]">₱{{ number_format($booking->balance_amount, 2) }}</strong>
+                            <span class="text-xs text-[#92400E] font-medium block">Balance Due at Camp (check-out):</span>
+                            <strong class="text-sm font-bold text-[#780000]">{{ str_starts_with($booking->status, 'cancelled') || $booking->status === 'no_show' ? 'None (booking cancelled)' : '₱' . number_format($booking->balance_amount, 2) }}</strong>
                         </div>
                     </div>
                 </div>
@@ -294,7 +298,7 @@
                         <span>Cancellation Request ({{ $cReq->created_at->format('M d, Y') }})</span>
                         <span class="uppercase tracking-wider px-2 py-0.5 rounded bg-white text-sm font-bold">{{ $cReq->status }}</span>
                     </div>
-                    <p>Calculated Refund: ₱{{ number_format($cReq->calculated_refund_amount, 2) }}</p>
+                    <p>Refund quoted under the applicable terms: ₱{{ number_format($cReq->calculated_refund_amount, 2) }} (reviewed by our team; not yet sent)</p>
                     @if($cReq->reason)
                         <p class="text-sm">Reason: {{ $cReq->reason }}</p>
                     @endif
@@ -378,7 +382,7 @@
                         <span>Advisory: Weather Force Majeure Active</span>
                     </div>
                     <p class="text-sm text-sky-900 leading-relaxed">
-                        PAGASA gale warnings or severe sea surges have triggered camp-wide safety protocols. All rescheduling restrictions are waived. Full refunds are eligible upon cancellation.
+                        PAGASA gale warnings or severe sea surges have triggered camp-wide safety protocols. All rescheduling restrictions are waived. You may also request a refund of your downpayment; our team confirms the weather situation before any refund.
                     </p>
                 </div>
                 @endif
@@ -484,8 +488,8 @@
                 <span class="font-bold">{{ $policy['days_until_dive'] }} days</span>
             </div>
             <div class="flex justify-between gap-4 border-t border-[#D1D1D6] pt-2">
-                <span class="font-bold">Refund</span>
-                <span class="font-extrabold text-[#780000]">₱{{ number_format($policy['calculated_refund'], 2) }}</span>
+                <span class="font-bold">{{ ($policy['refund_requires_review'] ?? false) ? 'Refund (reviewed by our team)' : 'Refund' }}</span>
+                <span class="font-extrabold text-[#780000]">{{ $policy['calculated_refund'] > 0 ? '₱' . number_format($policy['calculated_refund'], 2) : 'No refund' }}</span>
             </div>
             <p class="text-[#6E6E73]">{{ $policy['cancel_message'] }}</p>
         </div>

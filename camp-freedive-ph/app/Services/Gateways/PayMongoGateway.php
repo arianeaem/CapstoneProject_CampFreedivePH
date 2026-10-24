@@ -119,11 +119,12 @@ class PayMongoGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Refund a PayMongo payment.
+     * Refund a PayMongo payment: one POST, never retried, outcome as PayMongoService::submitRefund describes.
+     * Refunds for bookings go through RefundExecutor, which records the attempt first.
      */
     public function refundPayment(string $paymentId, float $amount, string $reason = 'requested_by_customer', ?string $notes = null): array
     {
-        return $this->service->refund($paymentId, $amount, $reason, $notes);
+        return $this->service->submitRefund($paymentId, (int) round($amount * 100), $notes ?: 'Camp FreedivePH refund');
     }
 
     /**

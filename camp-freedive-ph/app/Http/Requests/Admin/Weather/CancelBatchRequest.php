@@ -16,6 +16,8 @@ class CancelBatchRequest extends FormRequest
     {
         return [
             'cancellation_reason' => 'required|string|max:1000',
+            // Has the camp activity already started? Missing means "unknown" (refunds wait for staff review)
+            'activity_started' => 'nullable|string|in:no,yes,unknown',
         ];
     }
 }

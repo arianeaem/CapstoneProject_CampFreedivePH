@@ -10,8 +10,11 @@ use Carbon\Carbon;
  *
  * Based on how many days are left before the dive, and if there is a storm warning
  * (PAGASA typhoon signal, Coast Guard gale warning):
- * 1. Storm / weather: full refund or free reschedule.
- * 2. More than 14 days: full refund or free reschedule (we can still give the slots to others).
+ * 1. Storm / weather: free reschedule, or the downpayment back once staff confirm the weather cancellation
+ *    (refund_requires_review: a forecast or rating alone never authorizes a refund).
+ * 2. More than 14 days: free reschedule; a voluntary cancellation is not refunded (client policy, config/refunds.php).
+ *    Bookings made under the earlier published terms (no refund_policy_version) keep the amount those terms quoted
+ *    (100% of the downpayment), marked historical_terms for staff review: never repriced or paid automatically.
  * 3. 7 to 14 days: free reschedule only, no cancelling.
  * 4. Less than 7 days: no cancel or reschedule (coaches, boat and gear are already paid for).
  */
@@ -61,25 +64,40 @@ class BookingPolicyEngine
             // A Critical Risk rating on the batch counts too (same as the participant email)
             || ($booking->batch?->risk_classification === 'critical_risk' && $daysUntilDive >= 0);
 
+        $historicalTerms = $booking->refund_policy_version === null;
+        $refundRequiresReview = false;
+
         // Pick the policy based on days left and weather
         if ($isForceMajeure) {
-            // Safety first: full refund on gale / typhoon warnings
+            // Safety first: free move, or the downpayment back once staff confirm the trip cannot go ahead
             $policyTier = 'force_majeure';
             $refundPercentage = 100;
             $calculatedRefund = (float) $booking->downpayment_amount;
+            $refundRequiresReview = true;
             $rescheduleAllowed = true;
             $cancelAllowed = true;
             $rescheduleMessage = 'Storm/Typhoon Warning Active: Free reschedule granted due to marine safety advisory.';
-            $cancelMessage = 'Storm/Typhoon Warning Active: 100% full refund available due to force majeure.';
-        } elseif ($daysUntilDive > $fullRefundDays) {
-            // Enough time: full refund or free reschedule
+            $cancelMessage = 'Storm/Typhoon Warning Active: you may move to another date for free, or request a refund of your downpayment (₱'
+                . number_format($booking->downpayment_amount, 2) . '). Our team confirms the weather situation before any refund.';
+        } elseif ($daysUntilDive > $fullRefundDays && $historicalTerms) {
+            // Booked under the earlier published terms (100% downpayment refund): kept as quoted, decided by staff
             $policyTier = 'more_than_two_weeks';
             $refundPercentage = 100;
             $calculatedRefund = (float) $booking->downpayment_amount;
+            $refundRequiresReview = true;
             $rescheduleAllowed = true;
             $cancelAllowed = true;
             $rescheduleMessage = "Allowed: More than {$fullRefundDays} days before dive date. Free reschedule to any available safe batch.";
-            $cancelMessage = 'Eligible for 100% Full Downpayment Refund (₱' . number_format($booking->downpayment_amount, 2) . ') or Free Reschedule.';
+            $cancelMessage = 'Your booking was made under our earlier terms. You can move to another date for free; a cancellation request is reviewed by our team under the terms shown when you booked.';
+        } elseif ($daysUntilDive > $fullRefundDays) {
+            // Enough time: free reschedule; a voluntary cancellation is not refunded
+            $policyTier = 'more_than_two_weeks';
+            $refundPercentage = 0;
+            $calculatedRefund = 0.00;
+            $rescheduleAllowed = true;
+            $cancelAllowed = true;
+            $rescheduleMessage = "Allowed: More than {$fullRefundDays} days before dive date. Free reschedule to any available safe batch.";
+            $cancelMessage = 'The downpayment is non-refundable if you cancel. You can move to another available date for free instead.';
         } elseif ($daysUntilDive >= $rescheduleOnlyDays && $daysUntilDive <= $fullRefundDays) {
             // Free reschedule only; cancelling is not allowed
             $policyTier = 'within_two_weeks';
@@ -122,6 +140,9 @@ class BookingPolicyEngine
             'has_pending_reschedule' => $hasPendingReschedule,
             'has_pending_cancellation' => $hasPendingCancellation,
             'is_cancelled' => $isCancelled,
+            'historical_terms' => $historicalTerms,
+            'refund_requires_review' => $refundRequiresReview,
+            'refund_policy_version' => $booking->refund_policy_version,
         ];
     }
 }

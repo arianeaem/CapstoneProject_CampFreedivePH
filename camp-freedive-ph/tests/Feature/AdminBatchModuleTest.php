@@ -176,12 +176,17 @@ class AdminBatchModuleTest extends TestCase
         $this->assertEquals('cancelled_by_camp', $batch->fresh()->status);
         $this->assertEquals('cancelled_by_camp', $booking->fresh()->status);
 
-        // Refund request should be created
-        $this->assertDatabaseHas('refund_requests', [
-            'booking_id' => $booking->id,
-            'requested_by' => 'camp_force_majeure',
-            'status' => 'pending',
-        ]);
+        // Batch 3-I: no money moves and no guest-style refund request; a refund case awaits staff, reason unconfirmed
+        $this->assertDatabaseMissing('refund_requests', ['booking_id' => $booking->id, 'requested_by' => 'camp_force_majeure']);
+        if (app(\App\Services\Refunds\RefundLedger::class)->position($booking->fresh())['refundable'] > 0) {
+            $this->assertDatabaseHas('booking_refunds', [
+                'booking_id' => $booking->id,
+                'source' => 'camp_cancellation',
+                'reason_category' => 'unknown',
+                'activity_started' => 'unknown',
+                'status' => 'awaiting_staff_review',
+            ]);
+        }
 
         // Audit log created
         $this->assertDatabaseHas('batch_status_logs', [

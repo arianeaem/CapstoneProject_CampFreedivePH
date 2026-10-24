@@ -71,27 +71,35 @@ class AdminPaymentsAndRefundsTest extends TestCase
         ]);
     }
 
-    public function test_admin_can_approve_refund_and_execute_paymongo(): void
+    /** Batch 3-I: approving a queued refund opens the booking's refund case; it never sends money by itself. */
+    public function test_admin_approve_opens_a_refund_case_without_moving_money(): void
     {
+        \Illuminate\Support\Facades\Http::fake();
         $admin = User::where('email', 'admin@campfreedive.ph')->first();
         $this->actingAs($admin);
 
         $refundRequest = RefundRequest::where('status', 'pending')->first();
         $payment = $refundRequest->payment;
         $booking = $refundRequest->booking;
+        $paymentStatus = $payment->status;
+        $bookingStatus = $booking->status;
 
         $response = $this->post("/admin/payments/refunds/{$refundRequest->id}/approve", [
             'notes' => '100% refund approved per camp policy',
         ]);
 
-        $response->assertRedirect();
-        $this->assertEquals('approved', $refundRequest->fresh()->status);
-        $this->assertEquals('refunded', $payment->fresh()->status);
-        $this->assertEquals('cancelled_by_guest', $booking->fresh()->status);
-        $this->assertNotNull($payment->fresh()->paymongo_refund_id);
+        $case = \App\Models\BookingRefund::where('booking_id', $booking->id)->sole();
+        $response->assertRedirect(route('admin.refund_cases.show', $case));
+        $this->assertEquals('in_review', $refundRequest->fresh()->status);
+        $this->assertEquals($case->id, $refundRequest->fresh()->booking_refund_id);
+        $this->assertEquals(\App\Models\BookingRefund::AWAITING_STAFF_REVIEW, $case->status);
+        $this->assertEquals($paymentStatus, $payment->fresh()->status);
+        $this->assertEquals($bookingStatus, $booking->fresh()->status);
+        $this->assertNull($payment->fresh()->paymongo_refund_id);
+        \Illuminate\Support\Facades\Http::assertNothingSent();
 
         $this->assertDatabaseHas('audit_logs', [
-            'action' => 'REFUND_APPROVED_AND_EXECUTED',
+            'action' => 'REFUND_CASE_OPENED',
         ]);
     }
 
@@ -110,7 +118,8 @@ class AdminPaymentsAndRefundsTest extends TestCase
 
         $response->assertRedirect();
         $this->assertEquals('rejected', $refundRequest->fresh()->status);
-        $this->assertEquals('completed', $payment->fresh()->status);
+        // Back to its received status: an online PayMongo payment is "paid" (no longer overwritten as "completed")
+        $this->assertEquals('paid', $payment->fresh()->status);
         $this->assertEquals('confirmed', $booking->fresh()->status);
 
         $this->assertDatabaseHas('audit_logs', [

@@ -3,165 +3,97 @@
 namespace App\Services\Payment;
 
 use App\Enums\BookingStatus;
+use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
-use App\Models\Payment;
 use App\Models\PaymentStatusLog;
 use App\Models\RefundRequest;
 use App\Models\User;
-use App\Services\PayMongoService;
+use App\Services\Refunds\RefundCaseService;
+use App\Services\Refunds\RefundGuard;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
- * Refund queue actions: pay a refund through PayMongo, reject it, or keep the money per policy.
- * Each action updates the payment, the refund request and the booking together, with status logs.
+ * The legacy refund queue (refund_requests, one row per payment). Since Batch 3-I nothing here moves money:
+ *  - "approve" opens (or joins) the booking's refund case, where the reason is confirmed and an amount approved
+ *    from the actual receipts before RefundExecutor pays it out;
+ *  - "reject" and "forfeit" are decisions only. Payment rows keep their receipt status (no more status flips that
+ *    hide receipts), and a camp cancellation is never relabelled as a guest cancellation.
+ * Every action first claims the request (pending -> decided) under a row lock, so it is decided once.
  */
 class RefundService
 {
-    public function __construct(protected PayMongoService $payMongo)
+    public function __construct(protected RefundCaseService $cases, protected RefundGuard $guard)
     {
     }
 
-    /**
-     * The PayMongo payment id ("pay_...") to refund. Older payments only stored the checkout
-     * session, so the id is looked up from the session once and saved on the payment.
-     */
-    public function resolvePayMongoPaymentId(Payment $payment): string
+    /** @return BookingRefund the case to review (no money moved) */
+    public function approve(RefundRequest $refundRequest, User $operator): BookingRefund
     {
-        $paymentId = $payment->paymongo_payment_id;
-
-        if ((empty($paymentId) || !str_starts_with($paymentId, 'pay_')) && !empty($payment->paymongo_resource_id)) {
-            $session = $this->payMongo->getCheckoutSession($payment->paymongo_resource_id);
-            $sessionPayments = $session['data']['attributes']['payments'] ?? [];
-            if (!empty($sessionPayments[0]['id'])) {
-                $paymentId = $sessionPayments[0]['id'];
-                $payment->update(['paymongo_payment_id' => $paymentId]);
-            }
-        }
-
-        return $paymentId ?: ($payment->transaction_id ?: 'offline');
+        return $this->cases->openFromLegacyRequest($refundRequest, $operator);
     }
 
-    /**
-     * Send the money back through PayMongo and close the booking.
-     *
-     * @return array{success: bool, error?: string, refund_id?: string, amount?: float}
-     */
-    public function approve(RefundRequest $refundRequest, User $operator, ?string $notes): array
-    {
-        $payment = $refundRequest->payment;
-        $booking = $refundRequest->booking;
-        $amount = (float) ($refundRequest->refund_amount ?: $payment->amount);
-
-        $result = $this->payMongo->refund(
-            $this->resolvePayMongoPaymentId($payment),
-            $amount,
-            'requested_by_customer',
-            $notes ?? 'Camp FreedivePH Approved Cancellation Refund'
-        );
-
-        if (!$result['success']) {
-            return ['success' => false, 'error' => $result['error'] ?? 'PayMongo refund execution failed. Please retry.'];
-        }
-
-        $refundId = $result['refund_id'] ?? ('ref_' . bin2hex(random_bytes(8)));
-
-        DB::transaction(function () use ($refundRequest, $payment, $booking, $refundId, $amount, $notes, $operator) {
-            $payment->update([
-                'status' => 'refunded',
-                'paymongo_refund_id' => $refundId,
-                'amount_refunded' => $amount,
-                'refund_reason' => $notes ?? 'Admin approved participant cancellation refund',
-            ]);
-
-            $refundRequest->update([
-                'status' => 'approved',
-                'paymongo_refund_id' => $refundId,
-                'notes' => $notes ?? 'Refund processed via PayMongo API',
-                'reviewed_by' => $operator->id,
-                'reviewed_at' => now(),
-            ]);
-
-            $booking->update(['status' => BookingStatus::CancelledByGuest->value]);
-
-            PaymentStatusLog::create([
-                'payment_id' => $payment->id,
-                'old_status' => 'refund_requested',
-                'new_status' => 'refunded',
-                'changed_by' => $operator->id,
-                'note' => 'Refund of ₱' . number_format($amount, 2) . " executed via PayMongo (Refund ID: {$refundId})",
-                'created_at' => now(),
-            ]);
-
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => BookingStatus::CancellationRequested->value,
-                'new_status' => BookingStatus::CancelledByGuest->value,
-                'changed_by' => $operator->id,
-                'note' => 'Booking cancelled. 100% refund of ₱' . number_format($amount, 2) . ' credited to participant via PayMongo.',
-                'created_at' => now(),
-            ]);
-        });
-
-        return ['success' => true, 'refund_id' => $refundId, 'amount' => $amount];
-    }
-
-    /** Turn the refund down: the payment stays and the booking goes back to confirmed. */
+    /** Turn the request down: the booking goes back to confirmed only if it was waiting on this cancellation. */
     public function reject(RefundRequest $refundRequest, User $operator, string $notes): void
     {
-        $payment = $refundRequest->payment;
-        $booking = $refundRequest->booking;
+        DB::transaction(function () use ($refundRequest, $operator, $notes) {
+            $request = $this->claim($refundRequest);
+            $this->guard->assertMayReject($request, $operator, $notes);
+            $booking = $request->booking;
 
-        DB::transaction(function () use ($refundRequest, $payment, $booking, $notes, $operator) {
-            $payment->update(['status' => 'completed']);
-            $booking->update(['status' => BookingStatus::Confirmed->value]);
+            $request->update(['status' => 'rejected', 'notes' => $notes, 'reviewed_by' => $operator->id, 'reviewed_at' => now()]);
 
-            $refundRequest->update([
-                'status' => 'rejected',
-                'notes' => $notes,
-                'reviewed_by' => $operator->id,
-                'reviewed_at' => now(),
-            ]);
+            // A payment marked "refund requested" goes back to its received status: online "paid", manual "completed"
+            $payment = $request->payment;
+            $oldStatus = $payment?->status ?? 'unknown';
+            if ($payment && $payment->status === 'refund_requested') {
+                $payment->update(['status' => str_starts_with((string) $payment->paymongo_payment_id, 'pay_') ? 'paid' : 'completed']);
+            }
 
             PaymentStatusLog::create([
-                'payment_id' => $payment->id,
-                'old_status' => 'refund_requested',
-                'new_status' => 'completed',
+                'payment_id' => $request->payment_id,
+                'old_status' => $oldStatus,
+                'new_status' => $payment?->status ?? 'unknown',
                 'changed_by' => $operator->id,
                 'note' => "Refund request rejected by {$operator->name} - Reason: {$notes}",
                 'created_at' => now(),
             ]);
 
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => BookingStatus::CancellationRequested->value,
-                'new_status' => BookingStatus::Confirmed->value,
-                'changed_by' => $operator->id,
-                'note' => "Cancellation & refund rejected by {$operator->name} - Reason: {$notes}",
-                'created_at' => now(),
-            ]);
+            if ($booking->status === BookingStatus::CancellationRequested->value) {
+                $booking->update(['status' => BookingStatus::Confirmed->value]);
+                BookingStatusLog::create([
+                    'booking_id' => $booking->id,
+                    'old_status' => BookingStatus::CancellationRequested->value,
+                    'new_status' => BookingStatus::Confirmed->value,
+                    'changed_by' => $operator->id,
+                    'note' => "Cancellation & refund rejected by {$operator->name} - Reason: {$notes}",
+                    'created_at' => now(),
+                ]);
+            }
         });
     }
 
     /**
-     * Keep the payment per policy (late cancellation or no-show).
+     * Keep the payment per policy (late cancellation or no-show). Not allowed for camp cancellations: the guest is
+     * owed a free move or their money back there.
      *
      * @return float The amount kept
      */
     public function forfeit(RefundRequest $refundRequest, User $operator, string $reason, ?string $notes): float
     {
-        $payment = $refundRequest->payment;
-        $booking = $refundRequest->booking;
-        $amount = (float) $payment->amount;
+        return DB::transaction(function () use ($refundRequest, $operator, $reason, $notes) {
+            $request = $this->claim($refundRequest);
+            if ($request->requested_by === 'camp_force_majeure') {
+                throw new RuntimeException('A camp cancellation cannot be forfeited: the guest may move dates or be refunded. Open the refund case instead.');
+            }
+            $this->guard->assertMayForfeit($request); // earlier-terms quote or open refund case: never forfeited here
+            $payment = $request->payment;
+            $booking = $request->booking;
+            $amount = (float) $payment->amount;
 
-        DB::transaction(function () use ($refundRequest, $payment, $booking, $reason, $notes, $amount, $operator) {
-            $payment->update([
-                'status' => 'forfeited',
-                'is_forfeited' => true,
-                'forfeited_amount' => $amount,
-                'forfeit_reason' => $reason,
-            ]);
-
-            $refundRequest->update([
+            // "forfeited" is still a receipt (counted as paid and retained) but no longer refundable
+            $payment->update(['status' => 'forfeited', 'is_forfeited' => true, 'forfeited_amount' => $amount, 'forfeit_reason' => $reason]);
+            $request->update([
                 'status' => 'forfeited',
                 'forfeit_reason' => $reason,
                 'notes' => $notes ?? 'Deposit forfeited per camp cancellation policy rules.',
@@ -169,28 +101,40 @@ class RefundService
                 'reviewed_at' => now(),
             ]);
 
-            $bookingStatus = $reason === 'customer_no_show' ? BookingStatus::NoShow : BookingStatus::CancelledByGuest;
-            $booking->update(['status' => $bookingStatus->value]);
-
             PaymentStatusLog::create([
                 'payment_id' => $payment->id,
-                'old_status' => 'refund_requested',
+                'old_status' => $payment->getOriginal('status') ?? 'paid',
                 'new_status' => 'forfeited',
                 'changed_by' => $operator->id,
-                'note' => 'Payment of ₱' . number_format($amount, 2) . " forfeited. Reason: {$reason}" . ($notes ? " - {$notes}" : ''),
+                'note' => 'Payment of ₱' . number_format($amount, 2) . " kept (forfeited). Reason: {$reason}" . ($notes ? " - {$notes}" : ''),
                 'created_at' => now(),
             ]);
 
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => BookingStatus::CancellationRequested->value,
-                'new_status' => $bookingStatus->value,
-                'changed_by' => $operator->id,
-                'note' => "Booking cancelled. Downpayment forfeited per camp policy ({$reason}).",
-                'created_at' => now(),
-            ]);
+            // Only a booking still waiting on this request changes status; a camp cancellation keeps its label
+            if (in_array($booking->status, [BookingStatus::CancellationRequested->value, BookingStatus::Confirmed->value], true)) {
+                $newStatus = $reason === 'customer_no_show' ? BookingStatus::NoShow : BookingStatus::CancelledByGuest;
+                $booking->update(['status' => $newStatus->value]);
+                BookingStatusLog::create([
+                    'booking_id' => $booking->id,
+                    'old_status' => BookingStatus::CancellationRequested->value,
+                    'new_status' => $newStatus->value,
+                    'changed_by' => $operator->id,
+                    'note' => "Booking cancelled. Downpayment forfeited per camp policy ({$reason}).",
+                    'created_at' => now(),
+                ]);
+            }
+
+            return $amount;
         });
+    }
 
-        return $amount;
+    private function claim(RefundRequest $refundRequest): RefundRequest
+    {
+        $locked = RefundRequest::whereKey($refundRequest->id)->lockForUpdate()->firstOrFail();
+        if ($locked->status !== 'pending') {
+            throw new RuntimeException('This refund request was already handled.');
+        }
+
+        return $locked;
     }
 }

@@ -200,10 +200,11 @@ class WeatherSafetyController extends Controller
             $sentCount = $this->forecastService->cancelBatchWithRefundsAndNotifications(
                 $batch,
                 $validated['cancellation_reason'],
-                auth()->user()
+                auth()->user(),
+                $validated['activity_started'] ?? 'unknown'
             );
 
-            return back()->with('success', "Batch {$batch->batch_code} is cancelled. {$sentCount} participant(s) were emailed and their full refunds are waiting in Refunds.");
+            return back()->with('success', "Batch {$batch->batch_code} is cancelled. {$sentCount} participant(s) were emailed their options; paid bookings have refund cases in Refund Cases (nothing was refunded automatically).");
         } catch (Exception $e) {
             return back()->with('error', "Cancellation failed: " . $e->getMessage());
         }

@@ -307,12 +307,15 @@ class ManageBookingController extends Controller
             return back()->with('error', 'Cancellation is not allowed: ' . $policy['cancel_message']);
         }
 
+        // calculated_refund_amount is the amount the applicable terms quote now (kept as shown); the policy version
+        // says which terms (NULL = the earlier published terms). No refund is decided or paid here.
         $cancellationRequest = CancellationRequest::create([
             'booking_id' => $booking->id,
             'calculated_refund_amount' => $policy['calculated_refund'],
             'reason' => $validated['reason'] ?? 'Participant requested cancellation',
             'force_majeure_flag' => $policy['is_force_majeure'],
             'status' => 'pending',
+            'policy_version' => $booking->refund_policy_version,
         ]);
 
         $booking->update([

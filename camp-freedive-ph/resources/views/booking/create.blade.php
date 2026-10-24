@@ -1552,7 +1552,7 @@
                                 Cancellation & Reschedule Policy
                             </h3>
                             <p class="text-xs sm:text-sm text-[#6E6E73] mt-0.5">
-                                These notice periods apply to participant requests. Camp FreedivePH may also cancel or reschedule a dive when safety, weather, site, boat, or other operational conditions require it. We will notify affected participants and provide the applicable next steps.
+                                These notice periods apply to participant requests. If Camp FreedivePH cancels before diving because of the weather, you can move for free or get your downpayment back; if we cancel for our own reasons (coach, boat, too few guests), you can move for free or get all your payments back. If the weather turns unsafe after the camp has started, no refund applies.
                             </p>
                         </div>
 
@@ -1562,11 +1562,11 @@
                                 <div class="flex items-center justify-between gap-2 flex-wrap">
                                     <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Lead Time More Than 14 Days Before Dive</strong>
                                     <span class="text-[11px] sm:text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">
-                                        100% Refund or 1 Free Reschedule
+                                        Free Date Move
                                     </span>
                                 </div>
                                 <p class="text-xs text-[#6E6E73] leading-relaxed">
-                                    Eligible for full downpayment refund or one free date transfer to any future open schedule.
+                                    You can move to another available date for free. The downpayment is non-refundable if you cancel.
                                 </p>
                             </div>
 
@@ -1575,11 +1575,11 @@
                                 <div class="flex items-center justify-between gap-2 flex-wrap">
                                     <strong class="text-xs sm:text-sm font-bold text-[#1D1D1F]">Lead Time 7 to 14 Days Before Dive</strong>
                                     <span class="text-[11px] sm:text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-md">
-                                        1 Free Date Reschedule
+                                        Free Date Move
                                     </span>
                                 </div>
                                 <p class="text-xs text-[#6E6E73] leading-relaxed">
-                                    Free date reschedule to another available schedule. Cancelling is not allowed and the downpayment is non-refundable.
+                                    You can move to another available date for free. Cancelling is not allowed and the downpayment is non-refundable.
                                 </p>
                             </div>
 

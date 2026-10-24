@@ -14,11 +14,16 @@ class CancellationApprovedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * $refundUnderReview: a refund case is open (approved cancellations never send money themselves, so the email
+     * never says a refund was sent or queued; the amount is only stated once staff pay it out).
+     */
     public function __construct(
         public Booking $booking,
         public CancellationRequest $cancellationRequest,
         public float $refundAmount,
-        public bool $isForfeited
+        public bool $isForfeited,
+        public bool $refundUnderReview = false,
     ) {}
 
     public function envelope(): Envelope
@@ -32,6 +37,7 @@ class CancellationApprovedMail extends Mailable
     {
         return new Content(
             view: 'emails.cancellation_approved',
+            with: ['totalPaid' => app(\App\Services\Refunds\RefundLedger::class)->position($this->booking)['paid'] / 100],
         );
     }
 }

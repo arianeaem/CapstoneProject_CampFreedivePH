@@ -27,6 +27,18 @@ class Payment extends Model
 {
     use HasFactory;
 
+    /**
+     * Money actually received (online "paid", manual "completed"), including payments later refunded or forfeited
+     * under the old single-status model. "pending" and "failed" are never receipts.
+     */
+    public const RECEIPT_STATUSES = ['paid', 'completed', 'refund_requested', 'refunded', 'partially_refunded', 'forfeited'];
+
+    /** Receipts that can still be refunded (a forfeited payment was kept by decision). */
+    public const REFUNDABLE_STATUSES = ['paid', 'completed', 'refund_requested', 'refunded', 'partially_refunded'];
+
+    /** Old model: refunds recorded on the payment row itself (status + amount_refunded), before the refund ledger. */
+    public const LEGACY_REFUNDED_STATUSES = ['refunded', 'partially_refunded'];
+
     protected $fillable = [
         'booking_id',
         'payment_method',
@@ -83,6 +95,31 @@ class Payment extends Model
     public function latestRefundRequest(): HasOne
     {
         return $this->hasOne(RefundRequest::class)->latestOfMany();
+    }
+
+    public function refundAttempts(): HasMany
+    {
+        return $this->hasMany(RefundAttempt::class);
+    }
+
+    public function amountCentavos(): int
+    {
+        return (int) round((float) $this->amount * 100);
+    }
+
+    /**
+     * Refund recorded under the old model (before the ledger). The ledger never writes these columns, so nothing is
+     * counted twice. A "refunded" row without an amount is taken as fully refunded (safe for further refunds; the
+     * reports flag it for reconciliation).
+     */
+    public function legacyRefundedCentavos(): int
+    {
+        if (! in_array($this->status, self::LEGACY_REFUNDED_STATUSES, true)) {
+            return 0;
+        }
+        $recorded = (int) round((float) $this->amount_refunded * 100);
+
+        return min($this->amountCentavos(), $recorded > 0 ? $recorded : $this->amountCentavos());
     }
 
     public function getFormattedPaymentMethodAttribute(): string

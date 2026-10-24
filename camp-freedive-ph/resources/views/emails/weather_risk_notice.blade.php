@@ -30,7 +30,7 @@
                 <p style="margin:20px 0 8px;font-weight:700;">Because of this, you can choose to:</p>
                 <ul style="margin:0 0 16px;padding-left:20px;">
                     <li><strong>Reschedule for free</strong> to another available date, or</li>
-                    <li><strong>Cancel</strong> and get a <strong>full refund of your downpayment</strong> (&#8369;{{ number_format($booking->downpayment_amount, 2) }}).</li>
+                    <li><strong>Cancel</strong> and request a <strong>full refund of your downpayment</strong> (&#8369;{{ number_format($booking->downpayment_amount, 2) }}); our team confirms the weather situation before the refund.</li>
                 </ul>
 
                 <p style="margin:24px 0;">
@@ -39,7 +39,7 @@
 
                 <p>
                     If you would like to keep your booking, you don't need to do anything. Our safety team makes the final go / no-go decision
-                    before departure. If we cancel the trip, we will email you and you will get a full refund.
+                    before departure. If we cancel the trip before diving starts, we will email you and you can choose a free move to another date or your downpayment back.
                 </p>
             @else
                 <p>

@@ -79,7 +79,11 @@ class BookingRequestController extends Controller
     public function approveReschedule(ApproveRescheduleRequest $request, RescheduleRequest $rescheduleRequest): RedirectResponse
     {
         $operator = Auth::user();
-        $booking = $this->requests->approveReschedule($rescheduleRequest, $operator, $request->input('admin_notes'));
+        try {
+            $booking = $this->requests->approveReschedule($rescheduleRequest, $operator, $request->input('admin_notes'));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         AuditLogger::log('RESCHEDULE_APPROVED', "Reschedule request approved for Booking #{$booking->booking_number} by {$operator->name}", $operator, $operator->name, $request);
 
@@ -93,7 +97,11 @@ class BookingRequestController extends Controller
     {
         $operator = Auth::user();
         $booking = $rescheduleRequest->booking;
-        $reason = $this->requests->rejectReschedule($rescheduleRequest, $operator, $request->input('admin_notes'));
+        try {
+            $reason = $this->requests->rejectReschedule($rescheduleRequest, $operator, $request->input('admin_notes'));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         AuditLogger::log('RESCHEDULE_REJECTED', "Reschedule request rejected for Booking #{$booking->booking_number} by {$operator->name}. Reason: {$reason}", $operator, $operator->name, $request);
 
@@ -109,22 +117,26 @@ class BookingRequestController extends Controller
         $booking = $cancellationRequest->booking;
         $validated = $request->validated();
 
-        $result = $this->requests->approveCancellation(
-            $cancellationRequest,
-            $operator,
-            $validated['action_type'] ?? 'policy_refund',
-            isset($validated['refund_amount']) ? (float) $validated['refund_amount'] : null,
-            $request->input('admin_notes')
-        );
-        $refundAmount = $result['refund_amount'];
-
-        AuditLogger::log('CANCELLATION_APPROVED', "Cancellation request approved and processed for Booking #{$booking->booking_number} by {$operator->name}. Refund amount: ₱{$refundAmount}", $operator, $operator->name, $request);
-
-        if (!$result['forfeited'] && $refundAmount > 0) {
-            return back()->with('success', "Cancellation for Booking #{$booking->booking_number} approved! Refund of ₱" . number_format($refundAmount, 2) . ' has been executed directly via PayMongo.');
+        try {
+            $result = $this->requests->approveCancellation(
+                $cancellationRequest,
+                $operator,
+                $validated['action_type'] ?? 'policy_refund',
+                isset($validated['refund_amount']) ? (float) $validated['refund_amount'] : null,
+                $request->input('admin_notes')
+            );
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Cancellation for Booking #{$booking->booking_number} has been approved (Downpayment forfeited per policy).");
+        $case = $result['case'];
+        AuditLogger::log('CANCELLATION_APPROVED', "Cancellation request approved for Booking #{$booking->booking_number} by {$operator->name}. " . ($result['forfeited'] ? 'No refund (forfeited).' : "No money moved; refund case #{$case?->id} ({$case?->status})."), $operator, $operator->name, $request);
+
+        if ($result['forfeited']) {
+            return back()->with('success', "Cancellation for Booking #{$booking->booking_number} has been approved (no refund).");
+        }
+
+        return back()->with('success', "Cancellation for Booking #{$booking->booking_number} approved. No money was sent: review refund case #{$case?->id} in Refund Cases (" . str_replace('_', ' ', (string) $case?->status) . ').');
     }
 
     /**
@@ -134,7 +146,11 @@ class BookingRequestController extends Controller
     {
         $operator = Auth::user();
         $booking = $cancellationRequest->booking;
-        $reason = $this->requests->rejectCancellation($cancellationRequest, $operator, $request->input('admin_notes'));
+        try {
+            $reason = $this->requests->rejectCancellation($cancellationRequest, $operator, $request->input('admin_notes'));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         AuditLogger::log('CANCELLATION_REJECTED', "Cancellation request rejected for Booking #{$booking->booking_number} by {$operator->name}. Reason: {$reason}", $operator, $operator->name, $request);
 

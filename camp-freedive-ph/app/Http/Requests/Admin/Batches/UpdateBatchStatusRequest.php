@@ -17,6 +17,9 @@ class UpdateBatchStatusRequest extends FormRequest
         return [
             'status' => 'required|string|in:confirmed,completed,rescheduled,cancelled_by_camp',
             'note' => 'nullable|string|max:1000',
+            // Camp cancellation only (optional for older callers: missing means "unknown", which goes to staff review)
+            'cancellation_reason_category' => 'nullable|string|in:weather_pre_dive,weather_in_progress,camp_operational',
+            'activity_started' => 'nullable|string|in:no,yes,unknown',
         ];
     }
 }

@@ -33,13 +33,15 @@
         </table>
 
         <div class="content">
-            <h1 style="margin: 0 0 12px; font-size: 22px; font-weight: 800;">Your dive has been cancelled for your safety</h1>
+            <h1 style="margin: 0 0 12px; font-size: 22px; font-weight: 800;">{{ $reasonCategory === 'weather_pre_dive' ? 'Your dive has been cancelled for your safety' : 'Your dive has been cancelled' }}</h1>
 
             <p>Hello {{ $booking->contact_name }},</p>
 
             <p>
                 We're sorry, but we had to cancel your freediving trip on <strong>{{ $dates }}</strong>.
-                Our safety team decided the sea will not be safe for diving on those dates.
+                @if($reasonCategory === 'weather_pre_dive')
+                    Our safety team decided the sea will not be safe for diving on those dates.
+                @endif
             </p>
 
             <div class="reason-box">
@@ -48,16 +50,9 @@
             </div>
 
             <div class="refund-box">
-                <strong style="display: block; margin-bottom: 2px;">You will not lose any money</strong>
-                @if($refundAmount > 0)
-                    We have already started a <strong>full refund of the &#8369;{{ number_format($refundAmount, 2) }}</strong> you paid.
-                    It goes back to the payment method you used. You don't need to do anything.
-                @else
-                    We have not received any payment for this booking yet, so there is nothing to refund and nothing for you to pay.
-                @endif
+                <strong style="display: block; margin-bottom: 2px;">Your options</strong>
+                {{ $optionsText }}
             </div>
-
-            <p><strong>Would you rather dive on another date?</strong> Just reply to this email or message us, and we will move your booking to another available date for free instead of refunding you.</p>
 
             <p style="margin: 24px 0;">
                 <a href="{{ route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin]) }}" class="btn">View my booking</a>
@@ -67,7 +62,7 @@
                 <tr><td style="padding: 8px 0; color: #6E6E73;">Booking number</td><td style="padding: 8px 0; font-weight: 700;">{{ $booking->booking_number }}</td></tr>
                 <tr><td style="padding: 8px 0; color: #6E6E73;">PIN</td><td style="padding: 8px 0;"><span class="pin-badge">{{ $booking->pin }}</span></td></tr>
                 <tr><td style="padding: 8px 0; color: #6E6E73;">Cancelled dates</td><td style="padding: 8px 0; font-weight: 700;">{{ $booking->start_date?->format('M d, Y') }}@if($booking->end_date) - {{ $booking->end_date->format('M d, Y') }}@endif</td></tr>
-                <tr><td style="padding: 8px 0; color: #6E6E73;">Refund</td><td style="padding: 8px 0; font-weight: 700; color: #065F46;">&#8369;{{ number_format($refundAmount, 2) }} (100%)</td></tr>
+                <tr><td style="padding: 8px 0; color: #6E6E73;">Total paid</td><td style="padding: 8px 0; font-weight: 700;">&#8369;{{ number_format($totalPaid, 2) }}</td></tr>
             </table>
 
             <p style="color: #6E6E73; font-size: 13px;">Thank you for understanding. We hope to see you in the water soon.</p>
