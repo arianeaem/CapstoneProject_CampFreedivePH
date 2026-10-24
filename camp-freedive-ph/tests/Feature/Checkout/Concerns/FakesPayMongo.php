@@ -169,6 +169,37 @@ trait FakesPayMongo
         Http::fake(["api.paymongo.com/v1/checkout_sessions/{$sessionId}" => Http::failedConnection('Synthetic timeout')]);
     }
 
+    /** Act as the queue worker (Queue is faked): run every queued checkout-message job. Running one twice is safe. */
+    protected function deliverQueuedCheckoutNotifications(): int
+    {
+        $jobs = \Illuminate\Support\Facades\Queue::pushed(\App\Jobs\SendCheckoutNotification::class);
+        $jobs->each(fn ($job) => $job->handle(app(\App\Services\Checkout\CheckoutNotifier::class)));
+
+        return $jobs->count();
+    }
+
+    /**
+     * After a finalized or paid-but-unallocated outcome: nothing is sent inside the request; once the queued jobs run,
+     * exactly one customer message of $customerMailable to $to, one staff alert per active owner/admin, and nothing
+     * else (one job per message, no other jobs, queued mail or notifications).
+     */
+    protected function assertOnlyOutcomeMessages(string $customerMailable, string $to): void
+    {
+        $staff = \App\Models\User::whereIn('role', ['admin', 'owner'])->where('status', 'active')->whereNotNull('email')->count();
+        \Illuminate\Support\Facades\Mail::assertNothingSent();
+        $this->assertSame([\App\Jobs\SendCheckoutNotification::class], array_keys(\Illuminate\Support\Facades\Queue::pushedJobs()));
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\SendCheckoutNotification::class, 1 + $staff);
+
+        $this->deliverQueuedCheckoutNotifications();
+
+        \Illuminate\Support\Facades\Mail::assertSent($customerMailable, 1);
+        \Illuminate\Support\Facades\Mail::assertSent($customerMailable, fn ($mail) => $mail->hasTo($to));
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\AdminOperationalNotificationMail::class, $staff);
+        \Illuminate\Support\Facades\Mail::assertSentCount(1 + $staff);
+        \Illuminate\Support\Facades\Mail::assertNothingQueued();
+        \Illuminate\Support\Facades\Notification::assertNothingSent();
+    }
+
     /** Send a webhook signed the way PayMongo signs it (same scheme as PayMongoIntegrationTest). For later batches. */
     protected function postSignedPayMongoWebhook(array $payload)
     {

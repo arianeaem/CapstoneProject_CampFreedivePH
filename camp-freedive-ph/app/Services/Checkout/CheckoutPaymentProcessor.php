@@ -20,6 +20,7 @@ class CheckoutPaymentProcessor
         protected PaymentVerifier $verifier,
         protected BookingFinalizer $finalizer,
         protected PayMongoService $paymongo,
+        protected CheckoutNotifier $notifier,
     ) {
     }
 
@@ -28,6 +29,24 @@ class CheckoutPaymentProcessor
      * @param string|null $claimedSessionId the session id an authenticated webhook names, if any
      */
     public function process(CheckoutIntent $intent, string $source, ?string $claimedSessionId = null): FinalizationResult
+    {
+        return $this->notified($intent, $this->decide($intent, $source, $claimedSessionId));
+    }
+
+    /**
+     * Post-outcome messages: written to the CheckoutNotifier outbox (once per checkout) and queued, never sent inside
+     * this request. Also runs for outcomes answered from the database, so a lost recording or dispatch is redone.
+     */
+    private function notified(CheckoutIntent $intent, FinalizationResult $result): FinalizationResult
+    {
+        if (in_array($result->outcome, [FinalizationResult::FINALIZED, FinalizationResult::ALREADY_FINALIZED, FinalizationResult::PAID_UNALLOCATED], true)) {
+            $this->notifier->afterOutcome($intent);
+        }
+
+        return $result;
+    }
+
+    private function decide(CheckoutIntent $intent, string $source, ?string $claimedSessionId): FinalizationResult
     {
         $sameSession = $claimedSessionId === null || $claimedSessionId === $intent->paymongo_checkout_session_id;
 
@@ -78,6 +97,6 @@ class CheckoutPaymentProcessor
             feeCentavos: is_int($e['fee_centavos'] ?? null) ? $e['fee_centavos'] : null,
         );
 
-        return $this->finalizer->finalize($intent, PaymentVerificationResult::verified($payment), $source);
+        return $this->notified($intent, $this->finalizer->finalize($intent, PaymentVerificationResult::verified($payment), $source));
     }
 }

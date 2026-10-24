@@ -67,6 +67,15 @@ Schedule::command('checkout:reconcile')
     ->appendOutputTo(storage_path('logs/checkout_reconcile.log'));
 
 /**
+ * Checkout messages (booking confirmation, payment received, staff alerts): re-queue due and interrupted deliveries
+ * from the outbox. Does nothing until checkouts produce messages; needs the queue worker to deliver them.
+ */
+Schedule::command('checkout:notifications')
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->onOneServer();
+
+/**
  * Participant data retention, on the 1st of each month: health notes cleared 12 months
  * after the last dive, records anonymised 3 years after it (see the Participants page).
  */

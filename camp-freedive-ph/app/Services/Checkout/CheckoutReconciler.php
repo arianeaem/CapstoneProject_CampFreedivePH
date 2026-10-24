@@ -41,7 +41,8 @@ use Throwable;
  *
  * Fairness: each group is scanned from a per-group cursor (shared cache), and due checkouts are taken round-robin
  * across groups. Pacing per checkout decays with its age. Losing the cache only means earlier retries or rescans;
- * payment evidence lives in the database. No notifications, refunds or personal data in logs.
+ * payment evidence lives in the database. Customer/staff messages go through the processor's CheckoutNotifier outbox
+ * (delivered and retried by checkout:notifications, not here). No refunds or personal data in logs.
  */
 class CheckoutReconciler
 {

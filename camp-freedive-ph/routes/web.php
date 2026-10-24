@@ -177,6 +177,11 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::post('/payments/refunds/{refundRequest}/approve', [AdminRefundController::class, 'approve'])->name('payments.refunds.approve');
     Route::post('/payments/refunds/{refundRequest}/reject', [AdminRefundController::class, 'reject'])->name('payments.refunds.reject');
     Route::post('/payments/refunds/{refundRequest}/forfeit', [AdminRefundController::class, 'forfeit'])->name('payments.refunds.forfeit');
+    // Checkout payments that need staff review (paid but no room, payment review, unresolved); no money movement
+    Route::get('/payments/checkout-review', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'index'])->name('payments.checkout_review');
+    Route::get('/payments/checkout-review/{checkoutIntent}', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'show'])->name('payments.checkout_review.show');
+    Route::post('/payments/checkout-review/{checkoutIntent}/recheck', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'recheck'])->name('payments.checkout_review.recheck')->middleware('throttle:10,1');
+    Route::post('/payments/checkout-review/{checkoutIntent}/resend', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'resend'])->name('payments.checkout_review.resend')->middleware('throttle:10,1');
     Route::get('/payments/{payment}', [AdminPaymentController::class, 'show'])->name('payments.show');
     Route::post('/payments/{payment}/settle-balance', [AdminPaymentController::class, 'settleBalance'])->name('payments.settle_balance');
 

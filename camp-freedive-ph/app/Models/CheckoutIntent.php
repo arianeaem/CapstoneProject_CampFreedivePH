@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A checkout attempt before payment. It is NOT an official booking: no booking number, PIN,
@@ -47,7 +48,7 @@ class CheckoutIntent extends Model
         'finalized_at', 'failed_at', 'failure_reason', 'expired_at',
         'unallocated_reason', 'resolution_status', 'resolution_note', 'resolved_by', 'resolved_at',
         'refund_reference', 'refund_status', 'refunded_amount', 'refunded_at',
-        'staff_notified_at', 'customer_notified_at', 'retention_review_at',
+        'staff_notified_at', 'customer_notified_at', 'retention_review_at', 'notifications_recorded_at',
     ];
 
     /** Never serialize personal details by accident (e.g. toArray() in a log or JSON response). */
@@ -77,12 +78,18 @@ class CheckoutIntent extends Model
             'staff_notified_at' => 'datetime',
             'customer_notified_at' => 'datetime',
             'retention_review_at' => 'datetime',
+            'notifications_recorded_at' => 'datetime',
         ];
     }
 
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    public function notifications(): HasMany
+    {
+        return $this->hasMany(CheckoutNotification::class);
     }
 
     public function batch(): BelongsTo

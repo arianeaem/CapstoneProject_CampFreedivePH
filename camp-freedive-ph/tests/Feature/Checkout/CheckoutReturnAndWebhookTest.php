@@ -203,7 +203,8 @@ class CheckoutReturnAndWebhookTest extends TestCase
         $this->assertSame(CheckoutIntent::STATUS_FINALIZED, $intent->fresh()->status);
         $this->assertSame(1, Payment::count());
         $this->assertSame('return', $intent->fresh()->verification['source']);
-        $this->assertNothingSent();
+        $this->assertOnlyOutcomeMessages(\App\Mail\BookingConfirmedMail::class, 'casey.fixture@example.test');
+        $response->assertDontSee('pin=', false); // no PIN-bearing manage link; the PIN goes by email only
     }
 
     public function test_repeated_return_shows_the_same_booking_without_calling_paymongo_again(): void
@@ -351,7 +352,7 @@ class CheckoutReturnAndWebhookTest extends TestCase
         $this->assertSame(CheckoutIntent::STATUS_FINALIZED, $intent->fresh()->status);
         $this->assertSame('webhook', $intent->fresh()->verification['source']);
         $this->assertSame(1, Booking::count());
-        $this->assertNothingSent();
+        $this->assertOnlyOutcomeMessages(\App\Mail\BookingConfirmedMail::class, 'casey.fixture@example.test');
     }
 
     public function test_webhook_with_invalid_signature_is_rejected(): void

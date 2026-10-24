@@ -186,6 +186,11 @@ class CheckoutReconcileTest extends TestCase
         Mail::assertNothingQueued();
         Notification::assertNothingSent();
         Queue::assertNothingPushed();
+        $this->assertNoRefunds();
+    }
+
+    private function assertNoRefunds(): void
+    {
         $this->assertSame(0, DB::table('refund_requests')->count());
         $this->assertSame(0, CheckoutIntent::whereNotNull('refund_status')->count());
     }
@@ -226,7 +231,8 @@ class CheckoutReconcileTest extends TestCase
         $this->assertSame(CheckoutIntent::STATUS_FINALIZED, $intent->fresh()->status);
         $this->assertSame('reconcile', $intent->fresh()->verification['source']);
         $this->assertSame(1, Booking::count());
-        $this->assertNoSideEffects();
+        $this->assertOnlyOutcomeMessages(\App\Mail\BookingConfirmedMail::class, 'casey.fixture@example.test');
+        $this->assertNoRefunds();
     }
 
     public function test_missed_callbacks_without_capacity_become_paid_unallocated(): void
@@ -389,7 +395,9 @@ class CheckoutReconcileTest extends TestCase
         $this->assertNotNull($fresh->paymongo_payment_id);
         $this->assertEquals(4000.00, (float) $fresh->paid_amount);
         $this->assertNull($fresh->expired_at);
-        $this->assertNoSideEffects();
+        // "Payment received, under review": no booking confirmation is claimed
+        $this->assertOnlyOutcomeMessages(\App\Mail\CheckoutPaymentReceivedMail::class, 'casey.fixture@example.test');
+        $this->assertNoRefunds();
     }
 
     public function test_only_verified_unpaid_old_checkouts_are_expired(): void
