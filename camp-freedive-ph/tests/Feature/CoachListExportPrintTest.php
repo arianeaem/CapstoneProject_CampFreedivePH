@@ -128,6 +128,22 @@ class CoachListExportPrintTest extends TestCase
         $this->assertSame(['Zed Coach 2', 'Zed Coach 4', 'Zed Coach 6'], $inactive);
     }
 
+    public function test_search_ignores_letter_case_on_screen_in_excel_and_in_print(): void
+    {
+        // PostgreSQL LIKE is case-sensitive; staff search must not be (name and email, all three outputs)
+        User::factory()->create(['role' => 'coach', 'status' => 'active', 'name' => 'Other Person', 'email' => 'other.person@example.com']);
+
+        foreach (['CORA.COACH@EXAMPLE.COM', 'cOrA'] as $term) {
+            $screen = collect($this->actingAs($this->admin)->get('/admin/coaches?search=' . urlencode($term))->viewData('coaches')->items())->pluck('name')->all();
+            $excel = collect($this->listSheet($this->actingAs($this->admin)->get('/admin/coaches/export?search=' . urlencode($term))))->skip(1)->pluck(0)->values()->all();
+
+            $this->assertSame(['Cora Coach'], $screen, "Screen search '{$term}'.");
+            $this->assertSame(['Cora Coach'], $excel, "Excel search '{$term}'.");
+            $this->actingAs($this->admin)->get('/admin/coaches/print?search=' . urlencode($term))->assertOk()
+                ->assertSee('Cora Coach')->assertDontSee('Other Person');
+        }
+    }
+
     public function test_available_on_and_has_capacity_filters(): void
     {
         $other = User::factory()->create(['role' => 'coach', 'status' => 'active', 'name' => 'Busy Coach']);
