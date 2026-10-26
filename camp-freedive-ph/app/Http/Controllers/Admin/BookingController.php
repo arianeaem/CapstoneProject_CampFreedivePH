@@ -15,6 +15,9 @@ use App\Models\Payment;
 use App\Services\Analytics\AnalyticsService;
 use App\Services\AuditLogger;
 use App\Services\BatchManagementService;
+use App\Services\Booking\BookingTransitionService;
+use App\Services\Booking\CapacityCoordinator;
+use App\Services\Booking\CapacityException;
 use App\Services\BookingPolicyEngine;
 use App\Services\Exports\ManagementListExporter;
 use App\Services\WeatherSafetyService;
@@ -295,21 +298,8 @@ class BookingController extends Controller
         $validated = $request->validated();
 
         $participantCount = count($validated['participants']);
-
-        // Check the 45 people limit
         $startDate = $validated['start_date'];
-        $existingPax = (int) Booking::whereDate('start_date', $startDate)
-            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest'])
-            ->withCount('participants')
-            ->get()
-            ->sum('participants_count');
-
         $settingService = app(\App\Services\SystemSettingService::class);
-        $maxCapacity = (int) ($settingService->get('camp_operations.max_batch_capacity', 45) ?? 45);
-        if (($existingPax + $participantCount) > $maxCapacity) {
-            $remaining = max(0, $maxCapacity - $existingPax);
-            return back()->withInput()->with('error', "Cannot create booking: Batch capacity ceiling of {$maxCapacity} pax reached for {$startDate} (Only {$remaining} slots available).");
-        }
 
         $pricePerPerson = app(\App\Services\PricingRuleEngine::class)->getBasePrice(
             $validated['class_type'], 
@@ -343,18 +333,18 @@ class BookingController extends Controller
             $bookingNumber = 'CFP-' . date('Y') . '-' . str_pad(mt_rand(1000, 9999), 4, '0', STR_PAD_LEFT);
         }
         $pin = (string) mt_rand(1000, 9999);
-        $batch = $this->batchService->findOrCreateBatchForDates(
-            $validated['start_date'],
-            $validated['end_date'],
-            $currentUser
-        );
-
         $guardianFields = $request->guardianFields();
+        $newBatch = null;
 
-        $booking = DB::transaction(function () use (
+        // The place check, the batch and the booking all happen inside the date's capacity locks (shared with checkout
+        // and every other booking path): guests paying right now count, and two staff members cannot both take the
+        // last places.
+        try {
+            $booking = app(CapacityCoordinator::class)->transaction([$startDate], function () use (
+            $participantCount,
+            &$newBatch,
             $guardianFields,
             $validated,
-            $batch,
             $bookingNumber,
             $pin,
             $pricePerPerson,
@@ -369,6 +359,10 @@ class BookingController extends Controller
             $paidAmount,
             $currentUser
         ) {
+            app(CapacityCoordinator::class)->assertRoom($validated['start_date'], $participantCount);
+            ['batch' => $batch, 'created' => $created] = $this->batchService->findOrCreateBatchRecord($validated['start_date'], $validated['end_date'], $currentUser);
+            $newBatch = $created ? $batch : null;
+
             $booking = Booking::create([
                 'booking_number' => $bookingNumber,
                 'pin' => $pin,
@@ -432,6 +426,12 @@ class BookingController extends Controller
 
             return $booking;
         });
+        } catch (CapacityException $e) {
+            return back()->withInput()->with('error', 'Cannot create this booking. ' . $e->getMessage());
+        }
+        if ($newBatch) {
+            $this->batchService->completeCreatedBatch($newBatch, $currentUser); // network only after commit
+        }
 
         AuditLogger::log(
             'BOOKING_MANUAL_CREATED',
@@ -529,8 +529,7 @@ class BookingController extends Controller
         $customerChanges = $this->collectCustomerChanges($booking, $validated, $pickupLocation);
         $previousEmail = $booking->contact_email;
 
-        DB::transaction(function () use (
-            $booking,
+        $saveDetails = function (Booking $booking) use (
             $validated,
             $pickupOption,
             $pickupLocation,
@@ -547,8 +546,6 @@ class BookingController extends Controller
             $diffs
         ) {
             $booking->update([
-                'start_date' => $validated['start_date'],
-                'end_date' => $validated['end_date'],
                 'pickup_option' => $pickupOption,
                 'pickup_location' => $pickupLocation,
                 'carpool_fee' => $carpoolFee,
@@ -596,7 +593,14 @@ class BookingController extends Controller
                 'note' => $noteText,
                 'created_at' => now(),
             ]);
-        });
+        };
+
+        // Dates, batch and details are saved together inside the capacity locks: a move into a full date changes nothing
+        try {
+            app(BookingTransitionService::class)->moveDates($booking, $validated['start_date'], $validated['end_date'], $currentUser, after: $saveDetails);
+        } catch (\RuntimeException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
 
         // Audit log (Data Privacy Act, RA 10173)
         AuditLogger::log(
@@ -693,47 +697,23 @@ class BookingController extends Controller
     public function updateStatus(UpdateBookingStatusRequest $request, Booking $booking): RedirectResponse
     {
         $currentUser = Auth::user();
-
         $validated = $request->validated();
-
-        $oldStatus = $booking->status;
         $newStatus = $validated['status'];
 
-        if ($oldStatus === $newStatus) {
+        if ($booking->status === $newStatus) {
             return back()->with('info', 'Status is already set to ' . $newStatus);
         }
 
-        $note = $validated['note'] ?: "Status updated from {$oldStatus} to {$newStatus} by {$currentUser->name}";
-
-        // No-show
-        if ($newStatus === 'no_show') {
-            $note .= ' (No-show: Downpayment forfeited per camp policy)';
+        // Payment, capacity, refund-case and stale-form checks: BookingTransitionService (never a bare status update)
+        try {
+            $booking = app(BookingTransitionService::class)->changeStatus($booking, $newStatus, $currentUser, $validated['note'] ?? null);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        DB::transaction(function () use ($booking, $oldStatus, $newStatus, $note, $currentUser) {
-            $booking->update(['status' => $newStatus]);
-
-            BookingStatusLog::create([
-                'booking_id' => $booking->id,
-                'old_status' => $oldStatus,
-                'new_status' => $newStatus,
-                'changed_by' => $currentUser->id,
-                'note' => $note,
-                'created_at' => now(),
-            ]);
-        });
-
-        AuditLogger::log(
-            'BOOKING_STATUS_CHANGED',
-            "Booking #{$booking->booking_number} status transitioned: {$oldStatus} {$newStatus} by {$currentUser->name}. Note: {$note}",
-            $currentUser,
-            $currentUser->name,
-            $request
-        );
-
         $flashMessage = "Status for Booking #{$booking->booking_number} changed to {$booking->status_badge['label']}.";
-        if (in_array($newStatus, ['cancelled_by_camp', 'cancelled_by_guest'])) {
-            $flashMessage .= " Please review and process any pending refunds in the Payments & Refunds module.";
+        if ($newStatus === 'cancelled_by_camp') {
+            $flashMessage .= ' Any money received is in a refund case for review (Refund Cases); nothing was refunded automatically.';
         }
 
         return back()->with('success', $flashMessage);

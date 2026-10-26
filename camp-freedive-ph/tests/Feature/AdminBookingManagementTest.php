@@ -146,6 +146,12 @@ class AdminBookingManagementTest extends TestCase
 
         $booking = Booking::where('booking_number', 'CFP-2026-1001')->first();
 
+        // Batch 3-II A: a trip that has not happened yet cannot be marked completed
+        $booking->update(['start_date' => now()->addDays(5)->toDateString(), 'end_date' => now()->addDays(6)->toDateString(), 'status' => 'confirmed']);
+        $this->patch("/admin/bookings/{$booking->id}/status", ['status' => 'completed', 'note' => 'too early'])->assertSessionHas('error');
+        $this->assertEquals('confirmed', $booking->fresh()->status);
+        $booking->update(['start_date' => now()->subDays(3)->toDateString(), 'end_date' => now()->subDays(2)->toDateString()]);
+
         // 1. Update to completed
         $response = $this->patch("/admin/bookings/{$booking->id}/status", [
             'status' => 'completed',
@@ -159,7 +165,11 @@ class AdminBookingManagementTest extends TestCase
             'new_status' => 'completed',
         ]);
 
-        // 2. Update to no-show
+        // 2. Update to no-show (another confirmed booking whose date has passed; a completed trip stays completed)
+        $this->patch("/admin/bookings/{$booking->id}/status", ['status' => 'no_show'])->assertSessionHas('error');
+        $this->assertEquals('completed', $booking->fresh()->status);
+        $booking = Booking::where('booking_number', '!=', 'CFP-2026-1001')->where('status', 'confirmed')->first();
+        $booking->update(['start_date' => now()->subDays(3)->toDateString(), 'end_date' => now()->subDays(2)->toDateString()]);
         $response2 = $this->patch("/admin/bookings/{$booking->id}/status", [
             'status' => 'no_show',
             'note' => 'Guest did not arrive for departure van.',

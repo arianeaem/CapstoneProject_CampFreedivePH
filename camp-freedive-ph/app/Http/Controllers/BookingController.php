@@ -363,15 +363,19 @@ class BookingController extends Controller
             return $this->startCheckoutIntent($request, $validated, $contactName, $paxCount, $startDate, $endDate, $isCertified);
         }
 
+        // Place check, batch, booking, pending payment and the 15-minute hold commit together inside the date's capacity
+        // locks (CapacityCoordinator, shared with checkout and staff paths). The PayMongo call happens after commit.
+        $newBatch = null;
         try {
-            return $this->slotReservationService->withLock($startDate, function () use (
+            $created = app(\App\Services\Booking\CapacityCoordinator::class)->transaction([$startDate], function () use (
                 $validated,
                 $contactName,
                 $paxCount,
                 $startDate,
                 $endDate,
                 $isCertified,
-                $request
+                $request,
+                &$newBatch
             ) {
                 // Max 45 people per weekend trip (boat limit and 1 coach for every 4 participants).
                 // Counts saved bookings and the 15-minute checkout holds.
@@ -395,144 +399,152 @@ class BookingController extends Controller
                 ] = $charges;
 
                 // Put the booking in the batch for these dates
-                $batch = app(\App\Services\BatchManagementService::class)->findOrCreateBatchForDates($startDate, $endDate);
+                ['batch' => $batch, 'created' => $batchCreated] = app(\App\Services\BatchManagementService::class)->findOrCreateBatchRecord($startDate, $endDate);
+                $newBatch = $batchCreated ? $batch : null;
 
                 // 4-digit PIN so the participant can look up the booking without an account
                 $bookingNumber = 'CFP-' . date('Y') . '-' . strtoupper(Str::random(5));
                 $pin = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
 
-                // Save everything in one transaction. If the PayMongo session fails,
-                // nothing gets saved.
-                DB::beginTransaction();
-                try {
-                    $booking = Booking::create([
-                        'booking_number' => $bookingNumber,
-                        'pin' => $pin,
-                        'batch_id' => $batch->id,
-                        'class_type' => $validated['class_type'],
-                        'is_certified_diver' => $isCertified,
-                        'start_date' => $startDate,
-                        'end_date' => $endDate,
-                        'pickup_option' => $validated['pickup_option'],
-                        'pickup_location' => $validated['pickup_location'] ?? null,
-                        'carpool_fee' => $carpoolFee,
-                        'boat_dive' => !empty($validated['boat_dive']) && $validated['boat_dive'],
-                        'boat_dive_fee' => $boatDiveFee,
-                        'lgu_fee' => $lguFee,
-                        'environmental_fee' => $envFee,
-                        'subtotal' => $subtotal,
-                        'total_amount' => $totalAmount,
-                        'downpayment_amount' => $downpaymentAmount,
-                        'balance_amount' => $balanceAmount,
-                        'contact_name' => $contactName ?: 'Participant',
-                        'contact_email' => $validated['contact_email'],
-                        'contact_phone' => $validated['contact_phone'],
-                        'contact_facebook' => $validated['contact_facebook'] ?? null,
-                        'status' => 'pending_downpayment',
-                    ] + $request->guardianFields());
+                $booking = Booking::create([
+                    'booking_number' => $bookingNumber,
+                    'pin' => $pin,
+                    'batch_id' => $batch->id,
+                    'class_type' => $validated['class_type'],
+                    'is_certified_diver' => $isCertified,
+                    'start_date' => $startDate,
+                    'end_date' => $endDate,
+                    'pickup_option' => $validated['pickup_option'],
+                    'pickup_location' => $validated['pickup_location'] ?? null,
+                    'carpool_fee' => $carpoolFee,
+                    'boat_dive' => !empty($validated['boat_dive']) && $validated['boat_dive'],
+                    'boat_dive_fee' => $boatDiveFee,
+                    'lgu_fee' => $lguFee,
+                    'environmental_fee' => $envFee,
+                    'subtotal' => $subtotal,
+                    'total_amount' => $totalAmount,
+                    'downpayment_amount' => $downpaymentAmount,
+                    'balance_amount' => $balanceAmount,
+                    'contact_name' => $contactName ?: 'Participant',
+                    'contact_email' => $validated['contact_email'],
+                    'contact_phone' => $validated['contact_phone'],
+                    'contact_facebook' => $validated['contact_facebook'] ?? null,
+                    'status' => 'pending_downpayment',
+                ] + $request->guardianFields());
 
-                    // Save each participant's health info
-                    foreach ($this->participantRecords($validated['participants'], $classPrice) as $participant) {
-                        $booking->participants()->create($participant);
-                    }
-
-                    // Save the discounts used at checkout, so later rule changes
-                    // don't change the price of this booking
-                    foreach ($quote['adjustments'] as $adj) {
-                        $booking->priceAdjustments()->create([
-                            'pricing_rule_id' => $adj['rule_id'],
-                            'rule_name' => $adj['rule_name'],
-                            'rule_type' => $adj['rule_type'],
-                            'condition_summary' => $adj['condition_summary'],
-                            'base_price' => $quote['base_price_per_pax'],
-                            'adjustment_amount' => $adj['delta_per_pax'],
-                            'adjusted_price' => $quote['adjusted_price_per_pax'],
-                        ]);
-                    }
-
-                    // Payment link expires in 24 hours
-                    $paymentMethod = $validated['payment_method'] ?? 'paymongo';
-                    $transactionId = 'PAY-' . strtoupper(Str::random(10));
-
-                    $payment = Payment::create([
-                        'booking_id' => $booking->id,
-                        'payment_method' => 'paymongo',
-                        'transaction_id' => $transactionId,
-                        'amount' => $downpaymentAmount,
-                        'fee_amount' => 0.00,
-                        'net_amount' => $downpaymentAmount,
-                        'payment_type' => 'downpayment',
-                        'status' => 'pending',
-                        'expires_at' => now()->addHours(24),
-                    ]);
-
-                    // Hold the slots for 15 minutes during checkout
-                    $this->slotReservationService->acquireHold($startDate, $bookingNumber, $paxCount, SlotReservationService::DEFAULT_HOLD_TTL_SECONDS);
-
-                    // Create the PayMongo checkout (GCash, Maya, card, GrabPay)
-                    $payMongoGateway = app(\App\Services\Gateways\PayMongoGateway::class);
-                    $checkoutResult = $payMongoGateway->createCheckoutSession($booking, $downpaymentAmount);
-
-                    if (!$checkoutResult['success']) {
-                        $errMsg = is_array($checkoutResult['error'] ?? null)
-                            ? ($checkoutResult['error']['errors'][0]['detail'] ?? 'PayMongo session creation failed.')
-                            : ($checkoutResult['error'] ?? 'Unable to connect to PayMongo.');
-                        throw new Exception("PayMongo Error: " . $errMsg);
-                    }
-
-                    $payment->update([
-                        'paymongo_resource_id' => $checkoutResult['checkout_id'],
-                    ]);
-
-                    BookingStatusLog::create([
-                        'booking_id' => $booking->id,
-                        'old_status' => 'initiated',
-                        'new_status' => 'pending_downpayment',
-                        'changed_by' => null,
-                        'note' => "Reservation created. Awaiting downpayment of ₱" . number_format($downpaymentAmount, 2) . " via PayMongo Hosted Checkout.",
-                        'created_at' => now(),
-                    ]);
-
-                    AuditLogger::log(
-                        'BOOKING_CREATED',
-                        "New booking #{$booking->booking_number} created for {$booking->contact_name} ({$paxCount} pax, {$booking->class_type}). Awaiting PayMongo checkout.",
-                        null,
-                        $booking->contact_name,
-                        $request
-                    );
-
-                    DB::commit();
-
-                    app(\App\Services\AdminNotificationService::class)->newBooking($booking->fresh());
-
-                    return response()->json([
-                        'success' => true,
-                        'is_paymongo_redirect' => true,
-                        'checkout_url' => $checkoutResult['checkout_url'],
-                        'checkout_id' => $checkoutResult['checkout_id'],
-                        'booking_number' => $booking->booking_number,
-                        'pin' => $booking->pin,
-                        'booking_id' => $booking->id,
-                        'downpayment_paid' => $downpaymentAmount,
-                        'downpayment_due' => $downpaymentAmount,
-                        'balance_due' => $balanceAmount,
-                        'manage_url' => route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin]),
-                    ]);
-                } catch (Exception $e) {
-                    DB::rollBack();
-                    $this->slotReservationService->releaseHold($startDate, $bookingNumber);
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'An error occurred while setting up your PayMongo payment: ' . $e->getMessage(),
-                    ], 500);
+                // Save each participant's health info
+                foreach ($this->participantRecords($validated['participants'], $classPrice) as $participant) {
+                    $booking->participants()->create($participant);
                 }
+
+                // Save the discounts used at checkout, so later rule changes
+                // don't change the price of this booking
+                foreach ($quote['adjustments'] as $adj) {
+                    $booking->priceAdjustments()->create([
+                        'pricing_rule_id' => $adj['rule_id'],
+                        'rule_name' => $adj['rule_name'],
+                        'rule_type' => $adj['rule_type'],
+                        'condition_summary' => $adj['condition_summary'],
+                        'base_price' => $quote['base_price_per_pax'],
+                        'adjustment_amount' => $adj['delta_per_pax'],
+                        'adjusted_price' => $quote['adjusted_price_per_pax'],
+                    ]);
+                }
+
+                // Payment link expires in 24 hours
+                $payment = Payment::create([
+                    'booking_id' => $booking->id,
+                    'payment_method' => 'paymongo',
+                    'transaction_id' => 'PAY-' . strtoupper(Str::random(10)),
+                    'amount' => $downpaymentAmount,
+                    'fee_amount' => 0.00,
+                    'net_amount' => $downpaymentAmount,
+                    'payment_type' => 'downpayment',
+                    'status' => 'pending',
+                    'expires_at' => now()->addHours(24),
+                ]);
+
+                // Hold the slots for 15 minutes during checkout
+                $this->slotReservationService->acquireHold($startDate, $bookingNumber, $paxCount, SlotReservationService::DEFAULT_HOLD_TTL_SECONDS);
+
+                return ['booking' => $booking, 'payment' => $payment, 'downpayment' => $downpaymentAmount, 'balance' => $balanceAmount];
             });
-        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+        } catch (\App\Services\Booking\CapacityException) {
             return response()->json([
                 'success' => false,
                 'message' => 'The booking system is currently processing high-volume simultaneous checkouts. Please retry in a few moments.',
             ], 429);
         }
+        if ($created instanceof JsonResponse) {
+            return $created;
+        }
+        ['booking' => $booking, 'payment' => $payment, 'downpayment' => $downpaymentAmount, 'balance' => $balanceAmount] = $created;
+        if ($newBatch) {
+            app(\App\Services\BatchManagementService::class)->completeCreatedBatch($newBatch); // network only after commit
+        }
+
+        // Create the PayMongo checkout (GCash, Maya, card, GrabPay): no lock or transaction is held during the call
+        $payMongoGateway = app(\App\Services\Gateways\PayMongoGateway::class);
+        try {
+            $checkoutResult = $payMongoGateway->createCheckoutSession($booking, $downpaymentAmount);
+        } catch (Exception $e) {
+            $checkoutResult = ['success' => false, 'error' => $e->getMessage()];
+        }
+
+        if (!$checkoutResult['success']) {
+            // As before: nothing is kept when PayMongo cannot start the payment (no money was taken). The reservation
+            // was never shown to the guest; its rows are removed and its hold released.
+            $this->slotReservationService->releaseHold($startDate, $booking->booking_number);
+            DB::transaction(function () use ($booking) {
+                $booking->payments()->where('status', 'pending')->delete();
+                $booking->priceAdjustments()->delete();
+                $booking->participants()->delete();
+                $booking->delete();
+            });
+            $errMsg = is_array($checkoutResult['error'] ?? null)
+                ? ($checkoutResult['error']['errors'][0]['detail'] ?? 'PayMongo session creation failed.')
+                : ($checkoutResult['error'] ?? 'Unable to connect to PayMongo.');
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while setting up your PayMongo payment: PayMongo Error: ' . $errMsg,
+            ], 500);
+        }
+
+        $payment->update(['paymongo_resource_id' => $checkoutResult['checkout_id']]);
+
+        BookingStatusLog::create([
+            'booking_id' => $booking->id,
+            'old_status' => 'initiated',
+            'new_status' => 'pending_downpayment',
+            'changed_by' => null,
+            'note' => "Reservation created. Awaiting downpayment of ₱" . number_format($downpaymentAmount, 2) . " via PayMongo Hosted Checkout.",
+            'created_at' => now(),
+        ]);
+
+        AuditLogger::log(
+            'BOOKING_CREATED',
+            "New booking #{$booking->booking_number} created for {$booking->contact_name} ({$paxCount} pax, {$booking->class_type}). Awaiting PayMongo checkout.",
+            null,
+            $booking->contact_name,
+            $request
+        );
+
+        app(\App\Services\AdminNotificationService::class)->newBooking($booking->fresh());
+
+        return response()->json([
+            'success' => true,
+            'is_paymongo_redirect' => true,
+            'checkout_url' => $checkoutResult['checkout_url'],
+            'checkout_id' => $checkoutResult['checkout_id'],
+            'booking_number' => $booking->booking_number,
+            'pin' => $booking->pin,
+            'booking_id' => $booking->id,
+            'downpayment_paid' => $downpaymentAmount,
+            'downpayment_due' => $downpaymentAmount,
+            'balance_due' => $balanceAmount,
+            'manage_url' => route('manage.show', ['booking_number' => $booking->booking_number, 'pin' => $booking->pin]),
+        ]);
     }
 
     /**

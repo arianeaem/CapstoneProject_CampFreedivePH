@@ -190,6 +190,9 @@ $registerBackofficeRoutes = function (string $portalRole) {
         Route::post('/payments/refund-cases/{refundCase}/attempts/{refundAttempt}/verify', [\App\Http\Controllers\Admin\RefundCaseController::class, 'verifyAttempt'])->name('refund_cases.attempts.verify');
         Route::post('/payments/refund-cases/{refundCase}/attempts/{refundAttempt}/offline', [\App\Http\Controllers\Admin\RefundCaseController::class, 'confirmOffline'])->name('refund_cases.attempts.offline');
     });
+    // Received money that could not simply be applied to a booking (Batch 3-II A); no money movement
+    Route::get('/payments/exceptions', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'index'])->name('payments.exceptions');
+    Route::post('/payments/exceptions/bookings/{booking}/resend', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'resend'])->name('payments.exceptions.resend')->middleware('throttle:10,1');
     // Checkout payments that need staff review (paid but no room, payment review, unresolved); no money movement
     Route::get('/payments/checkout-review', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'index'])->name('payments.checkout_review');
     Route::get('/payments/checkout-review/{checkoutIntent}', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'show'])->name('payments.checkout_review.show');

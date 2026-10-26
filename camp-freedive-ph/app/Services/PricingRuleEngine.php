@@ -149,7 +149,7 @@ class PricingRuleEngine
 
         return BookingParticipant::whereHas('booking', function ($q) use ($dateStr) {
             $q->whereDate('start_date', $dateStr)
-              ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']);
+              ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated']);
         })->count();
     }
 

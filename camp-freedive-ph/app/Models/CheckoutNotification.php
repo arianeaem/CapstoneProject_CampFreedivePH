@@ -19,7 +19,7 @@ class CheckoutNotification extends Model
     public const STAFF_PAID_UNALLOCATED = 'staff_paid_unallocated';
 
     protected $fillable = [
-        'checkout_intent_id', 'kind', 'recipient', 'recipient_hash', 'status', 'attempts',
+        'checkout_intent_id', 'booking_id', 'kind', 'recipient', 'recipient_hash', 'status', 'attempts',
         'available_at', 'claim_token', 'claimed_at', 'sent_at', 'last_error',
     ];
 
@@ -39,6 +39,12 @@ class CheckoutNotification extends Model
     public function checkoutIntent(): BelongsTo
     {
         return $this->belongsTo(CheckoutIntent::class);
+    }
+
+    /** Set instead of checkout_intent_id for a legacy booking's confirmation (Batch 3-II A). */
+    public function booking(): BelongsTo
+    {
+        return $this->belongsTo(Booking::class);
     }
 
     public function isForCustomer(): bool

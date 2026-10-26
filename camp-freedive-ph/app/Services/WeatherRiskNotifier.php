@@ -21,7 +21,7 @@ class WeatherRiskNotifier
     public const WINDOW_HOURS = 18;
 
     /** Bookings that are still going on the trip. */
-    protected const ACTIVE_BOOKING_EXCLUDED = ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest', 'pending_downpayment', 'completed', 'no_show'];
+    protected const ACTIVE_BOOKING_EXCLUDED = ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest', 'pending_downpayment', 'paid_unallocated', 'completed', 'no_show'];
 
     public function __construct(protected AdminNotificationService $admin)
     {

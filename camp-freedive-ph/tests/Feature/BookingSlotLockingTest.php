@@ -190,7 +190,12 @@ class BookingSlotLockingTest extends TestCase
             'net_amount' => 3000,
         ]);
 
-        // Simulate payment success callback (signed return URL, as PayMongo sends it)
+        // PayMongo reports the session paid (synthetic test key; a missing key never counts as paid since Batch 3-II A)
+        config(['paymongo.secret_key' => 'sk_test_synthetic']);
+        \Illuminate\Support\Facades\Http::fake(['*/checkout_sessions/cs_test_slot_lock' => \Illuminate\Support\Facades\Http::response(['data' => ['id' => 'cs_test_slot_lock', 'attributes' => [
+            'payments' => [['id' => 'pay_test_slot_lock', 'attributes' => ['status' => 'paid', 'amount' => 300000, 'currency' => 'PHP', 'livemode' => false]]]]]])]);
+
+        // Payment success callback (signed return URL, as PayMongo sends it)
         $response = $this->get(\App\Services\Gateways\PayMongoGateway::signedReturnUrl('paymongo.success', $booking));
         $response->assertStatus(302);
 

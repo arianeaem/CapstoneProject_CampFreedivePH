@@ -9,6 +9,8 @@ namespace App\Enums;
 enum BookingStatus: string
 {
     case PendingDownpayment = 'pending_downpayment';
+    /** Legacy booking whose downpayment was verified after its place was gone: payment kept, no seat, staff review. */
+    case PaidUnallocated = 'paid_unallocated';
     case Confirmed = 'confirmed';
     case RescheduleRequested = 'reschedule_requested';
     case CancellationRequested = 'cancellation_requested';
@@ -25,8 +27,8 @@ enum BookingStatus: string
     /** Any kind of cancellation. */
     public const CANCELLED = [self::Cancelled, self::CancelledByCamp, self::CancelledByGuest];
 
-    /** Bookings that do not take a seat on the boat (cancelled or not paid yet). */
-    public const INACTIVE = [self::CancelledByCamp, self::CancelledByGuest, self::Cancelled, self::PendingDownpayment];
+    /** Bookings that do not take a seat on the boat (cancelled, not paid yet, or paid but not placed). */
+    public const INACTIVE = [self::CancelledByCamp, self::CancelledByGuest, self::Cancelled, self::PendingDownpayment, self::PaidUnallocated];
 
     /** @param  array<int, self>  $cases
      *  @return array<int, string> */
@@ -44,6 +46,7 @@ enum BookingStatus: string
     {
         return match ($this) {
             self::PendingDownpayment => 'Waiting for downpayment',
+            self::PaidUnallocated => 'Paid, no place yet (staff review)',
             self::Confirmed, self::Rescheduled => 'Paid & going',
             self::RescheduleRequested => 'Asked to reschedule',
             self::CancellationRequested => 'Asked to cancel',

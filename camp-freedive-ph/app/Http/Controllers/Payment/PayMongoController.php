@@ -8,6 +8,9 @@ use App\Models\Payment;
 use App\Models\PaymongoWebhookEvent;
 use App\Models\RefundAttempt;
 use App\Services\AuditLogger;
+use App\Services\Booking\CapacityCoordinator;
+use App\Services\Booking\CapacityException;
+use App\Services\Booking\LegacyPaymentConfirmer;
 use App\Services\Refunds\RefundExecutor;
 use App\Services\Checkout\CheckoutWebhookHandler;
 use App\Services\Gateways\PayMongoGateway;
@@ -21,11 +24,11 @@ use Illuminate\Support\Facades\Log;
 /**
  * PayMongo checkout and webhooks.
  *
- * - sends the participant to the PayMongo checkout page (GCash, Maya, cards, GrabPay)
- * - when the participant comes back on the success page we check the payment right away
- * - the webhook also confirms the payment (signature is checked, and the same event
- *   is ignored if it comes again within 24 hours)
- * - when paid: booking goes from pending_downpayment to confirmed and the email is sent
+ * - sends the participant to the PayMongo checkout page (GCash, Maya, cards, GrabPay), only for a booking still
+ *   waiting for its downpayment and only while its date has a place
+ * - the signed return page and the signed webhook both apply the payment through LegacyPaymentConfirmer: verified
+ *   payment, capacity re-checked under the date lock, confirmed only if a place is free (else kept for staff review);
+ *   the confirmation email goes through the durable outbox, once, only after a real confirmation
  */
 class PayMongoController extends Controller
 {
@@ -48,6 +51,17 @@ class PayMongoController extends Controller
         // Only the participant who opened this booking with its number + PIN can pay for it
         if (session('auth_booking_id') !== $booking->id) {
             return redirect()->route('manage.index')->with('info', 'Please enter your booking number and PIN first.');
+        }
+
+        // Only a booking still waiting for its downpayment can be paid (never a cancelled, confirmed or under-review one)
+        if (! in_array($booking->status, ['pending_downpayment', 'pending'], true)) {
+            return back()->with('error', 'This booking is not waiting for a payment, so no new payment was started.');
+        }
+        // Its place is not held any more after 15 minutes: only start a payment while the date still has room
+        // (the payment is checked again under the capacity lock when it arrives)
+        $pax = $booking->participants()->count();
+        if ($pax > app(CapacityCoordinator::class)->remaining($booking->start_date->format('Y-m-d'), $booking)) {
+            return back()->with('error', 'This date is now full, so no new payment was started. Please contact us to choose another date.');
         }
 
         // 1. Get the downpayment amount
@@ -136,99 +150,33 @@ class PayMongoController extends Controller
 
         $payment = Payment::where('booking_id', $booking->id)
             ->where('payment_type', 'downpayment')
-            ->latest()
+            ->latest('id')
             ->first();
 
-        $paymongo = app(\App\Services\PayMongoService::class);
-        $paidPayment = null;
-
-        if ($payment && $payment->status === 'paid') {
-            $verified = true; // the webhook got here first
-        } elseif ($payment && $payment->paymongo_resource_id && $paymongo->isSimulated()) {
-            $verified = !app()->isProduction(); // simulated checkout without API keys (local/testing)
-        } elseif ($payment && $payment->paymongo_resource_id) {
-            $paidPayment = $paymongo->paidPaymentForCheckout($payment->paymongo_resource_id);
-            $verified = $paidPayment !== null;
-        } else {
-            $verified = false;
-        }
-
-        if (!$verified) {
-            Log::info("PayMongo success return without a confirmed payment for Booking #{$booking->booking_number}; waiting for the webhook.");
-
-            return redirect()->route('manage.show', ['booking_number' => $booking->booking_number])
-                ->with('info', "We're still waiting for PayMongo to confirm your payment. Your booking will be confirmed automatically and we'll e-mail you once it arrives.");
-        }
-
-        try {
-            DB::transaction(function () use ($booking, $payment, $paidPayment) {
-                $paymongoPaymentId = $paidPayment['id'] ?? null;
-                $feeAmount = ($paidPayment['attributes']['fee'] ?? 0) / 100;
-                $paymentMethodType = $paidPayment['attributes']['source']['type'] ?? $paidPayment['attributes']['payment_method_type'] ?? 'paymongo';
-
-                if ($payment && $payment->status !== 'paid') {
-                    $payment->update([
-                        'status' => 'paid',
-                        'paid_at' => now(),
-                        'payment_method' => $paymentMethodType,
-                        'paymongo_payment_id' => $paymongoPaymentId ?: ($payment->paymongo_payment_id ?: ('pay_' . bin2hex(random_bytes(8)))),
-                        'fee_amount' => $feeAmount,
-                    ]);
-
-                    \App\Models\PaymentStatusLog::create([
-                        'payment_id' => $payment->id,
-                        'old_status' => 'pending',
-                        'new_status' => 'paid',
-                        'changed_by' => null,
-                        'note' => "Downpayment paid successfully via PayMongo Hosted Checkout ({$paymentMethodType}).",
-                        'created_at' => now(),
-                    ]);
+        // Ask PayMongo only while our payment row is still waiting; a missing key never counts as paid (any environment)
+        if ($payment && $payment->status === 'pending' && $payment->paymongo_resource_id) {
+            $paid = app(\App\Services\PayMongoService::class)->paidPaymentForCheckout($payment->paymongo_resource_id);
+            if ($paid !== null) {
+                try {
+                    app(LegacyPaymentConfirmer::class)->apply($booking, $paid['id'] ?? null, $paid['attributes'] ?? [], $payment->paymongo_resource_id, 'return');
+                } catch (CapacityException) {
+                    // Busy right now: the webhook (or a reload) applies it; nothing was written
+                } catch (Exception $e) {
+                    Log::error("PayMongo return could not apply the payment for Booking #{$booking->booking_number}.", ['exception' => class_basename($e)]);
                 }
-
-                // Confirm the booking
-                if ($booking->status === 'pending_downpayment' || $booking->status === 'pending') {
-                    $booking->update([
-                        'status' => 'confirmed',
-                    ]);
-
-                    app(\App\Services\SlotReservationService::class)->releaseHold($booking->start_date, $booking->booking_number);
-
-                    \App\Models\BookingStatusLog::create([
-                        'booking_id' => $booking->id,
-                        'old_status' => 'pending_downpayment',
-                        'new_status' => 'confirmed',
-                        'changed_by' => null,
-                        'note' => "Booking confirmed automatically upon successful PayMongo downpayment receipt.",
-                        'created_at' => now(),
-                    ]);
-                }
-
-                AuditLogger::log(
-                    'PAYMONGO_PAYMENT_SUCCESS',
-                    "Payment verified and confirmed for Booking #{$booking->booking_number} via PayMongo",
-                    null,
-                    "Contact: {$booking->contact_name}"
-                );
-            });
-
-            // Send the confirmation email
-            try {
-                \Illuminate\Support\Facades\Mail::to($booking->contact_email)->send(
-                    new \App\Mail\BookingConfirmedMail($booking->fresh()->load('participants', 'payments'))
-                );
-            } catch (Exception $e) {
-                Log::warning("Email send failed for booking #{$booking->booking_number}: " . $e->getMessage());
             }
-
-            return redirect()->route('booking.create', ['confirmed' => $booking->booking_number])
-                ->with('success', 'Your downpayment has been received via PayMongo! Your 2D1N freediving camp slot is now confirmed.');
-
-        } catch (Exception $e) {
-            Log::error("PayMongo Success Handler Exception for Booking #{$booking->booking_number}: " . $e->getMessage());
-
-            return redirect()->route('booking.create', ['confirmed' => $booking->booking_number])
-                ->with('success', 'Payment received. Your booking is confirmed.');
         }
+
+        $booking->refresh();
+        $manage = fn (string $message) => redirect()->route('manage.show', ['booking_number' => $booking->booking_number])->with('info', $message);
+
+        return match (true) {
+            CapacityCoordinator::takesPlace($booking->status) => redirect()->route('booking.create', ['confirmed' => $booking->booking_number])
+                ->with('success', 'Your downpayment has been received via PayMongo and your booking is confirmed. A confirmation email is on its way.'),
+            $booking->status === LegacyPaymentConfirmer::PAID_UNALLOCATED => $manage('We received your payment, but the date filled up before it arrived, so your booking is not confirmed yet. Our team will contact you about your options; your payment is safe.'),
+            in_array($booking->status, ['pending_downpayment', 'pending'], true) => $manage("We're still waiting for PayMongo to confirm your payment. We'll e-mail you once your booking is confirmed."),
+            default => $manage('This booking is not active. If you paid, our team has your payment on record and will contact you.'),
+        };
     }
 
     /**
@@ -350,17 +298,10 @@ class PayMongoController extends Controller
     }
 
     /**
-     * Handle 'payment.paid' and 'checkout_session.payment.paid'.
-     */
-    /**
-     * Legacy booking paid (signed event). The payment evidence is checked and kept; the booking is confirmed only when
-     * everything matches what it expected:
-     *  - payment id ("pay_"), PHP, a positive integer amount, and the same mode (test/live) as our key;
-     *  - a payment id already on record is never applied again or moved to another booking;
-     *  - an existing paid payment row is never overwritten: a second real payment becomes its own row;
-     *  - amount different from what the booking expects: recorded as received, booking not confirmed, flagged;
-     *  - late payment on a cancelled booking: recorded as received, booking stays cancelled, flagged (no refund here).
-     * Capacity is not re-checked here (unchanged legacy behaviour, Batch 3-II B-01).
+     * 'payment.paid' and 'checkout_session.payment.paid' for a legacy booking (signed). Applied by
+     * LegacyPaymentConfirmer, exactly like the return page: verified payment, capacity re-checked under the date lock,
+     * a full date or a cancelled booking keeps the payment for staff review, and nothing is ever applied twice.
+     * A busy date throws, so the event is retried by PayMongo.
      */
     protected function handlePaymentPaidEvent(array $eventData): void
     {
@@ -369,94 +310,21 @@ class PayMongoController extends Controller
         $bookingId = $metadata['booking_id'] ?? null;
         $bookingNumber = $metadata['booking_number'] ?? null;
 
-        $booking = null;
-        if ($bookingId) {
-            $booking = Booking::find($bookingId);
-        } elseif ($bookingNumber) {
-            $booking = Booking::where('booking_number', $bookingNumber)->first();
-        }
-
-        if (!$booking) {
+        $booking = $bookingId ? Booking::find($bookingId) : ($bookingNumber ? Booking::where('booking_number', $bookingNumber)->first() : null);
+        if (! $booking) {
             Log::warning('PayMongo Webhook: Booking not found for paid event.');
             return;
         }
 
         // checkout_session.payment.paid carries the payment in payments[0]; payment.paid is the payment itself
         $paymentObject = $attributes['payments'][0] ?? null;
-        $paymongoPaymentId = $paymentObject['id'] ?? ($eventData['id'] ?? null);
+        $paymentId = $paymentObject['id'] ?? ($eventData['id'] ?? null);
         $paymentAttributes = $paymentObject['attributes'] ?? $attributes;
         $sessionId = $paymentObject ? ($eventData['id'] ?? null) : null;
-        $amountCentavos = $paymentAttributes['amount'] ?? null;
-        $livemode = $paymentAttributes['livemode'] ?? ($attributes['livemode'] ?? null);
-        $expectedMode = app(\App\Services\PayMongoService::class)->configuredLivemode();
+        $eventLivemode = is_bool($attributes['livemode'] ?? null) ? $attributes['livemode'] : null;
 
-        $problem = match (true) {
-            ! is_string($paymongoPaymentId) || ! str_starts_with($paymongoPaymentId, 'pay_') => 'payment id missing',
-            ! is_int($amountCentavos) || $amountCentavos <= 0 => 'amount missing',
-            ($paymentAttributes['currency'] ?? 'PHP') !== 'PHP' => 'currency is not PHP',
-            ! is_bool($livemode) || $expectedMode === null || $livemode !== $expectedMode => 'test/live mode does not match',
-            isset($paymentAttributes['status']) && $paymentAttributes['status'] !== 'paid' => 'payment status is not paid',
-            default => null,
-        };
-        if ($problem !== null) {
-            AuditLogger::log('PAYMONGO_WEBHOOK_PAYMENT_REJECTED', "Paid event for Booking #{$booking->booking_number} not applied: {$problem}. Needs staff review.", null, 'PayMongo Webhook');
-            return;
-        }
-
-        DB::transaction(function () use ($booking, $paymongoPaymentId, $sessionId, $amountCentavos, $paymentAttributes, $attributes) {
-            $known = Payment::where('paymongo_payment_id', $paymongoPaymentId)->lockForUpdate()->first();
-            if ($known) {
-                if ($known->booking_id !== $booking->id) {
-                    AuditLogger::log('PAYMONGO_WEBHOOK_PAYMENT_CONFLICT', "Payment {$paymongoPaymentId} is already recorded on another booking; event for Booking #{$booking->booking_number} not applied.", null, 'PayMongo Webhook');
-                }
-                return; // already recorded: nothing to do
-            }
-
-            // The pending downpayment row for this checkout (or any pending one); never a row that is already paid
-            $payment = Payment::where('booking_id', $booking->id)->where('status', 'pending')
-                ->orderByRaw('CASE WHEN paymongo_resource_id = ? THEN 0 ELSE 1 END', [(string) $sessionId])
-                ->latest('id')->lockForUpdate()->first();
-            $expectedCentavos = (int) round((float) ($payment?->amount ?? $booking->downpayment_amount) * 100);
-            $amountPesos = round($amountCentavos / 100, 2);
-            $feePesos = is_int($paymentAttributes['fee'] ?? null) ? round($paymentAttributes['fee'] / 100, 2) : 0.0;
-
-            $payment ??= new Payment([
-                'booking_id' => $booking->id,
-                'payment_type' => 'downpayment',
-                'transaction_id' => 'TXN-' . strtoupper(bin2hex(random_bytes(4))),
-            ]);
-            $payment->fill([
-                'status' => 'paid',
-                'paid_at' => now(),
-                'payment_method' => (string) ($paymentAttributes['source']['type'] ?? $paymentAttributes['payment_method_type'] ?? $attributes['payment_method_type'] ?? 'paymongo'),
-                'paymongo_payment_id' => $paymongoPaymentId,
-                'paymongo_resource_id' => $payment->paymongo_resource_id ?? $sessionId,
-                'amount' => $amountPesos,
-                'fee_amount' => $feePesos,
-                'net_amount' => round($amountPesos - $feePesos, 2),
-            ])->save();
-
-            if (str_starts_with($booking->status, 'cancelled')) {
-                AuditLogger::log('PAYMONGO_WEBHOOK_LATE_PAYMENT', "Payment of ₱" . number_format($amountPesos, 2) . " received for cancelled Booking #{$booking->booking_number}; kept as received, booking not reinstated. Needs staff review.", null, 'PayMongo Webhook');
-                return;
-            }
-            if ($amountCentavos !== $expectedCentavos) {
-                AuditLogger::log('PAYMONGO_WEBHOOK_AMOUNT_MISMATCH', "Payment of ₱" . number_format($amountPesos, 2) . " received for Booking #{$booking->booking_number}, expected ₱" . number_format($expectedCentavos / 100, 2) . ". Recorded; booking not confirmed automatically. Needs staff review.", null, 'PayMongo Webhook');
-                return;
-            }
-
-            if (in_array($booking->status, ['pending_downpayment', 'pending'], true)) {
-                $booking->update(['status' => 'confirmed']);
-                app(\App\Services\SlotReservationService::class)->releaseHold($booking->start_date, $booking->booking_number);
-            }
-
-            AuditLogger::log(
-                'PAYMONGO_WEBHOOK_PAID',
-                "Webhook marked Booking #{$booking->booking_number} as PAID (₱" . number_format($amountPesos, 2) . ")",
-                null,
-                'PayMongo Webhook'
-            );
-        });
+        app(LegacyPaymentConfirmer::class)->apply($booking, is_string($paymentId) ? $paymentId : null, $paymentAttributes, $sessionId, 'webhook',
+            $eventLivemode, isset($attributes['payment_method_type']) ? (string) $attributes['payment_method_type'] : null);
     }
 
     /**

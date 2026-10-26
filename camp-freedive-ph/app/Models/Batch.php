@@ -268,7 +268,7 @@ class Batch extends Model
     /**
      * Total participants in active bookings.
      */
-    public const INACTIVE_BOOKING_STATUSES = ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'];
+    public const INACTIVE_BOOKING_STATUSES = ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated'];
 
     public function getTotalParticipantsCountAttribute(): int
     {
@@ -352,7 +352,7 @@ class Batch extends Model
     public function getTotalRevenueAttribute(): float
     {
         return (float) $this->bookings
-            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'])
+            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated'])
             ->sum('total_amount');
     }
 
@@ -362,7 +362,7 @@ class Batch extends Model
     public function getCollectedRevenueAttribute(): float
     {
         $activeBookings = $this->bookings
-            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']);
+            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated']);
 
         $activeBookingIds = $activeBookings->pluck('id');
 
@@ -394,7 +394,7 @@ class Batch extends Model
     public function getOutstandingBalanceBookingsAttribute(): Collection
     {
         return $this->bookings
-            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'])
+            ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated'])
             ->filter(fn($b) => (float) $b->balance_amount > 0)
             ->values();
     }

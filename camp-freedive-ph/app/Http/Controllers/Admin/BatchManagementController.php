@@ -385,8 +385,10 @@ class BatchManagementController extends Controller
         $existingBatch = Batch::whereDate('start_date', $validated['start_date'])->first();
         if ($existingBatch) {
             $bookingIds = $request->input('booking_ids', []);
-            if (!empty($bookingIds)) {
-                Booking::whereIn('id', $bookingIds)->update(['batch_id' => $existingBatch->id]);
+            try {
+                $this->batchService->attachBookings($existingBatch, $bookingIds); // same-date bookings only
+            } catch (Exception $e) {
+                return back()->withInput()->with('error', $e->getMessage());
             }
 
             return redirect()->route('admin.batches.show', $existingBatch)

@@ -87,7 +87,7 @@ class PortalController extends Controller
             if ($nextBatch) {
                 $batch = $nextBatch;
                 $allBatchParticipants = $batch->bookings()
-                    ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment'])
+                    ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated'])
                     ->with('participants.booking')
                     ->get()
                     ->flatMap->participants

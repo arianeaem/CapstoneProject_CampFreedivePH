@@ -123,6 +123,8 @@ class AdminBatchModuleTest extends TestCase
         $booking = Booking::where('booking_number', 'CFP-2026-1002')->first() ?: Booking::first();
         $startDate = Carbon::now()->addDays(120)->format('Y-m-d');
         $endDate = Carbon::now()->addDays(121)->format('Y-m-d');
+        // Batch 3-II A: a batch only takes bookings on its own date (mismatches are refused, see BookingLifecycleIntegrityTest)
+        $booking->update(['start_date' => $startDate, 'end_date' => $endDate]);
 
         $response = $this->post('/admin/batches', [
             'batch_number' => 'Batch 99',
@@ -253,13 +255,23 @@ class AdminBatchModuleTest extends TestCase
             'end_date' => $batch1->end_date,
         ]);
 
-        $response = $this->post("/admin/batches/{$batch1->id}/move-booking", [
+        // Batch 3-II A: a batch is one dive date. Moving into a batch on another date is refused (dates change through
+        // edit or reschedule, with a capacity check); moving between batches of the same date works.
+        $this->assertNotEquals($batch1->start_date->toDateString(), $batch2->start_date->toDateString());
+        $this->post("/admin/batches/{$batch1->id}/move-booking", [
             'booking_id' => $booking->id,
             'target_batch_id' => $batch2->id,
             'reason' => 'Customer requested grouping with friends in Batch 2.',
-        ]);
+        ])->assertSessionHas('error');
+        $this->assertEquals($batch1->id, $booking->fresh()->batch_id);
 
-        $response->assertRedirect();
-        $this->assertEquals($batch2->id, $booking->fresh()->batch_id);
+        $sameDay = Batch::create(['name' => 'Batch 1B', 'batch_code' => 'Batch 1B', 'start_date' => $batch1->start_date, 'end_date' => $batch1->end_date,
+            'status' => 'confirmed', 'lifecycle_status' => 'confirmed']);
+        $this->post("/admin/batches/{$batch1->id}/move-booking", [
+            'booking_id' => $booking->id,
+            'target_batch_id' => $sameDay->id,
+            'reason' => 'Customer requested grouping with friends in Batch 1B.',
+        ])->assertSessionHas('success');
+        $this->assertEquals($sameDay->id, $booking->fresh()->batch_id);
     }
 }

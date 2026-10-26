@@ -115,7 +115,7 @@ class SlotReservationService
 
         return BookingParticipant::whereHas('booking', function ($q) use ($date) {
             $q->whereDate('start_date', $date)
-              ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment']);
+              ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'cancelled', 'pending_downpayment', 'paid_unallocated']);
         })->count();
     }
 
@@ -152,6 +152,14 @@ class SlotReservationService
         }
 
         return $totalHeld;
+    }
+
+    /** People held in the cache by one legacy checkout ($holdKey = its booking number); 0 once the hold ran out. */
+    public function getHoldPax(string $startDate, string $holdKey): int
+    {
+        $date = Carbon::parse($startDate)->format('Y-m-d');
+
+        return (int) (Cache::get("slot_hold:{$date}:{$holdKey}")['pax'] ?? 0);
     }
 
     /**

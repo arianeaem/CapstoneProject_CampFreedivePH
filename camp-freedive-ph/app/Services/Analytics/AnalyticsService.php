@@ -22,7 +22,7 @@ class AnalyticsService
     public const BOOKING_GROUPS = [
         'going' => ['confirmed', 'reschedule_requested', 'cancellation_requested', 'rescheduled'],
         'completed' => ['completed'],
-        'waiting' => ['pending_downpayment'],
+        'waiting' => ['pending_downpayment', 'paid_unallocated'],
         'cancelled' => ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest'],
         'no_show' => ['no_show'],
     ];

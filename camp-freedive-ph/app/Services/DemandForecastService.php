@@ -615,7 +615,7 @@ class DemandForecastService
                 ];
             }
 
-            $validBookings = $batch->bookings->whereNotIn('status', ['cancelled_by_camp', 'cancelled', 'cancelled_by_guest', 'pending_downpayment']);
+            $validBookings = $batch->bookings->whereNotIn('status', ['cancelled_by_camp', 'cancelled', 'cancelled_by_guest', 'pending_downpayment', 'paid_unallocated']);
             $pax = $validBookings->sum(fn($b) => $b->participants->count());
             $rev = (float) $validBookings->sum(fn($b) => (float) $b->total_amount);
             $bCount = $validBookings->count();

@@ -41,7 +41,7 @@ class CoachMatchingService
             // Get the active participants in this batch
             $participants = BookingParticipant::whereHas('booking', function ($q) use ($batch) {
                 $q->where('batch_id', $batch->id)
-                  ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'no_show', 'pending_downpayment']);
+                  ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'no_show', 'pending_downpayment', 'paid_unallocated']);
             })->get();
 
             $totalParticipants = $participants->count();
@@ -157,7 +157,7 @@ class CoachMatchingService
             $remainingCoaches = User::whereIn('id', $remainingCoachIds)->get();
             $participants = BookingParticipant::whereHas('booking', function ($q) use ($batch) {
                 $q->where('batch_id', $batch->id)
-                  ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'no_show', 'pending_downpayment']);
+                  ->whereNotIn('status', ['cancelled_by_camp', 'cancelled_by_guest', 'no_show', 'pending_downpayment', 'paid_unallocated']);
             })->get();
 
             if ($remainingCoaches->isEmpty()) {

@@ -257,8 +257,14 @@ class Booking extends Model
                 'class' => 'bg-rose-100 text-rose-800',
                 'color' => '#BE123C',
             ],
+            'paid_unallocated' => [
+                'label' => 'Paid, no place (review)',
+                'bg' => 'bg-amber-100 text-amber-900',
+                'class' => 'bg-amber-100 text-amber-900',
+                'color' => '#B45309',
+            ],
             'no_show' => [
-                'label' => 'No-Show (Forfeited)',
+                'label' => 'No-Show',
                 'bg' => 'bg-purple-50 text-purple-700',
                 'class' => 'bg-purple-50 text-purple-700',
                 'color' => '#7E22CE',

@@ -143,7 +143,11 @@ class PayMongoIntegrationTest extends TestCase
             'net_amount' => 3000.00,
         ]);
 
-        // Simulated checkout (no API keys in testing), opened through the signed return URL
+        // PayMongo reports the session paid (synthetic test key). A missing key is never treated as paid (Batch 3-II A).
+        config(['paymongo.secret_key' => 'sk_test_synthetic']);
+        Http::fake(['*/checkout_sessions/cs_test_session_123' => Http::response(['data' => ['id' => 'cs_test_session_123', 'attributes' => [
+            'payments' => [['id' => 'pay_test_return_123', 'attributes' => ['status' => 'paid', 'amount' => 300000, 'currency' => 'PHP', 'livemode' => false]]]]]])]);
+
         $response = $this->get($this->signedUrl('paymongo.success', $booking));
 
         $response->assertRedirect(route('booking.create', ['confirmed' => $booking->booking_number]));
@@ -345,7 +349,7 @@ class PayMongoIntegrationTest extends TestCase
         Http::fake(['*/checkout_sessions/cs_paid_1' => Http::response([
             'data' => ['id' => 'cs_paid_1', 'attributes' => ['status' => 'active', 'payments' => [[
                 'id' => 'pay_sandbox_paid_1',
-                'attributes' => ['status' => 'paid', 'fee' => 7500, 'source' => ['type' => 'gcash']],
+                'attributes' => ['status' => 'paid', 'amount' => 300000, 'currency' => 'PHP', 'livemode' => false, 'fee' => 7500, 'source' => ['type' => 'gcash']],
             ]]]],
         ])]);
 

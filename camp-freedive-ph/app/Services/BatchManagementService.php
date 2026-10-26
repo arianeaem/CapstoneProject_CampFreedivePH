@@ -109,6 +109,15 @@ class BatchManagementService
             return $batch;
         }
 
+        return $this->completeCreatedBatch($batch, $creator);
+    }
+
+    /**
+     * The non-database follow-up of a batch created by findOrCreateBatchRecord(): renumbering, the creation log and the
+     * first weather check (network). Call after the transaction that created it has committed.
+     */
+    public function completeCreatedBatch(Batch $batch, ?User $creator = null): Batch
+    {
         $this->resequenceBatches();
         $batch->refresh();
 
@@ -136,6 +145,18 @@ class BatchManagementService
     {
         $startDate = Carbon::parse($startDate)->startOfDay();
         $endDate = $endDate ? Carbon::parse($endDate)->startOfDay() : $startDate->copy()->addDay();
+
+        // Look-up and create under the date's capacity lock (PostgreSQL advisory, transaction-scoped; re-entrant when the
+        // caller already holds it), so two requests for the same date never both create a batch.
+        return DB::transaction(function () use ($startDate, $endDate, $creator) {
+            app(SlotReservationService::class)->lockDateInTransaction($startDate->toDateString());
+
+            return $this->findOrCreateBatchRecordLocked($startDate, $endDate, $creator);
+        });
+    }
+
+    private function findOrCreateBatchRecordLocked(Carbon $startDate, Carbon $endDate, ?User $creator): array
+    {
 
         // Check if there is already an open/confirmed batch for this start date
         $existing = Batch::whereDate('start_date', $startDate->toDateString())
@@ -233,12 +254,8 @@ class BatchManagementService
                 $batch->refresh();
             }
 
-            // Add the selected bookings
-            if (!empty($bookingIds)) {
-                Booking::whereIn('id', $bookingIds)->update([
-                    'batch_id' => $batch->id,
-                ]);
-            }
+            // Add the selected bookings (only bookings on this batch's start date)
+            $this->attachBookings($batch, $bookingIds);
 
             // Audit log
             BatchStatusLog::create([
@@ -325,12 +342,25 @@ class BatchManagementService
             ]);
 
             // 3. Update the bookings
+            // Finished, already-cancelled and no-show bookings keep their status; "completed" only finishes bookings that
+            // were actually going (an unpaid or paid-but-unplaced booking is never marked as a finished trip)
             $connectedBookings = $batch->bookings()
-                ->whereNotIn('status', ['cancelled_by_guest', 'no_show'])
+                ->whereNotIn('status', ['cancelled_by_guest', 'no_show', 'completed', 'cancelled'])
+                ->when($newStatus === 'completed', fn ($q) => $q->whereIn('status', ['confirmed', 'rescheduled']))
                 ->get();
 
-            foreach ($connectedBookings as $booking) {
+            $cascaded = 0;
+            foreach ($connectedBookings as $listed) {
+                // Re-read under the row lock: a staff decision committed since the list was read (a guest cancellation,
+                // a move to another batch) is never overwritten
+                $booking = Booking::whereKey($listed->id)->lockForUpdate()->first();
+                if (! $booking || $booking->batch_id !== $batch->id
+                    || in_array($booking->status, ['cancelled_by_guest', 'no_show', 'completed', 'cancelled'], true)
+                    || ($newStatus === 'completed' && ! in_array($booking->status, ['confirmed', 'rescheduled'], true))) {
+                    continue;
+                }
                 $bookingOldStatus = $booking->status;
+                $cascaded++;
 
                 if ($newStatus === 'cancelled_by_camp') {
                     $booking->update(['status' => 'cancelled_by_camp']);
@@ -418,7 +448,7 @@ class BatchManagementService
 
             AuditLogger::log(
                 'BATCH_STATUS_UPDATED',
-                "Updated status of batch {$batch->batch_code} from '{$oldStatus}' to '{$newStatus}'. Cascaded to " . $connectedBookings->count() . " bookings.",
+                "Updated status of batch {$batch->batch_code} from '{$oldStatus}' to '{$newStatus}'. Cascaded to {$cascaded} bookings.",
                 $changer,
                 $changer->name
             );
@@ -440,10 +470,40 @@ class BatchManagementService
     }
 
     /**
+     * Put bookings into a batch. A batch is one dive date: every booking must start on the batch's start date, or
+     * nothing is attached (change the booking's dates first, through edit or reschedule).
+     *
+     * @throws Exception
+     */
+    public function attachBookings(Batch $batch, array $bookingIds): void
+    {
+        if ($bookingIds === []) {
+            return;
+        }
+        $date = $batch->start_date->toDateString();
+        $mismatched = Booking::whereIn('id', $bookingIds)->whereDate('start_date', '!=', $date)->pluck('booking_number');
+        if ($mismatched->isNotEmpty()) {
+            throw new Exception('These bookings are not on ' . $batch->start_date->format('M d, Y') . " and cannot join {$batch->name}: "
+                . $mismatched->implode(', ') . '. Change their dates first (edit or reschedule). Nothing was changed.');
+        }
+        Booking::whereIn('id', $bookingIds)->update(['batch_id' => $batch->id]);
+    }
+
+    /**
      * Move a booking to another batch (or take it out of its batch).
      */
     public function moveBooking(Booking $booking, ?Batch $targetBatch, User $changer, ?string $reason = null): void
     {
+        // A batch is one dive date: moving between batches never changes dates or capacity (use edit or reschedule)
+        if ($targetBatch !== null) {
+            if ($targetBatch->start_date?->format('Y-m-d') !== $booking->start_date?->format('Y-m-d')) {
+                throw new Exception("Booking {$booking->booking_number} is on " . $booking->start_date?->format('M d, Y') . " but {$targetBatch->name} starts "
+                    . $targetBatch->start_date?->format('M d, Y') . '. Change the booking dates first (edit or reschedule). Nothing was moved.');
+            }
+            if (! in_array($targetBatch->status, ['open', 'confirmed'], true)) {
+                throw new Exception("{$targetBatch->name} is {$targetBatch->status}; bookings can only join an open or confirmed batch. Nothing was moved.");
+            }
+        }
         $oldBatchId = $booking->batch_id;
         $oldBatchName = $booking->batch ? $booking->batch->name : 'Unbatched';
         $newBatchName = $targetBatch ? $targetBatch->name : 'Unbatched';

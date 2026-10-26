@@ -749,12 +749,26 @@ class WeatherForecastService
 
         $notificationsSent = 0;
 
-        foreach ($connectedBookings as $booking) {
-            $bookingOldStatus = $booking->status;
-            $booking->update(['status' => 'cancelled_by_camp']);
+        foreach ($connectedBookings as $listed) {
+            // Re-read under the row lock: a staff decision committed since the list was read (a guest cancellation, a
+            // move to another batch) is never overwritten. Paid bookings (online "paid" and manual "completed") get a
+            // refund case for staff; no refund yet.
+            $cancelled = DB::transaction(function () use ($listed, $batch, $activityStarted, $operator, $cancellationReason) {
+                $locked = Booking::whereKey($listed->id)->lockForUpdate()->first();
+                if (! $locked || $locked->batch_id !== $batch->id
+                    || in_array($locked->status, ['cancelled', 'cancelled_by_guest', 'cancelled_by_camp', 'completed', 'no_show'], true)) {
+                    return null;
+                }
+                $oldStatus = $locked->status;
+                $locked->update(['status' => 'cancelled_by_camp']);
+                app(RefundCaseService::class)->openForCampCancellation($locked, BookingRefund::REASON_WEATHER_PRE_DIVE, $activityStarted, $operator, "Weather cancellation of batch {$batch->batch_code}: {$cancellationReason}");
 
-            // Paid bookings (online "paid" and manual "completed") get a refund case for staff; no refund yet
-            app(RefundCaseService::class)->openForCampCancellation($booking, BookingRefund::REASON_WEATHER_PRE_DIVE, $activityStarted, $operator, "Weather cancellation of batch {$batch->batch_code}: {$cancellationReason}");
+                return [$locked, $oldStatus];
+            });
+            if ($cancelled === null) {
+                continue;
+            }
+            [$booking, $bookingOldStatus] = $cancelled;
 
             // Short summary of the email, saved in the notification log
             $scheduledDateStr = $booking->start_date->format('M d, Y') . ' - ' . $booking->end_date->format('M d, Y');

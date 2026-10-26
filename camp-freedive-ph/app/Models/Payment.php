@@ -52,6 +52,10 @@ class Payment extends Model
         'status',
         'paymongo_refund_id',
         'amount_refunded',
+        'review_reason',
+        'review_flagged_at',
+        'review_resolved_at',
+        'review_resolved_by',
         'refund_reason',
         'is_forfeited',
         'forfeited_amount',
@@ -70,7 +74,21 @@ class Payment extends Model
         'is_forfeited' => 'boolean',
         'paid_at' => 'datetime',
         'expires_at' => 'datetime',
+        'review_flagged_at' => 'datetime',
+        'review_resolved_at' => 'datetime',
     ];
+
+    /** Why a received payment waits for staff (Batch 3-II A); it stays a receipt meanwhile. */
+    public const REVIEW_CAPACITY_UNAVAILABLE = 'capacity_unavailable';
+    public const REVIEW_PAID_AFTER_CANCELLATION = 'paid_after_cancellation';
+    public const REVIEW_AMOUNT_MISMATCH = 'amount_mismatch';
+    public const REVIEW_PAID_AGAIN = 'paid_again';
+
+    /** Payments flagged for staff and not yet resolved. */
+    public function scopeAwaitingReview($query)
+    {
+        return $query->whereNotNull('review_reason')->whereNull('review_resolved_at');
+    }
 
     public function booking(): BelongsTo
     {
