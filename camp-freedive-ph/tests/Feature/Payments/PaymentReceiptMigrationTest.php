@@ -30,7 +30,9 @@ class PaymentReceiptMigrationTest extends TestCase
     use BuildsCheckoutIntents;
     use RefundFixtures;
 
-    private const B1_MIGRATIONS = 3;
+    /** Migrations added after B1 (B2.1 guest choices) sit on top: rollbacks to B1 steps pass through them first. */
+    private const LATER_MIGRATIONS = 1;
+    private const B1_MIGRATIONS = 3 + self::LATER_MIGRATIONS;
 
     protected function setUp(): void
     {
@@ -121,6 +123,8 @@ class PaymentReceiptMigrationTest extends TestCase
             $this->assertSame([], DB::select('PRAGMA foreign_key_check'));
         }
         $this->assertEqualsCanonicalizing(array_merge(
+            DB::getDriverName() === 'pgsql' ? ['payment_exception_choices_guard'] // B2.1
+                : ['payment_exception_choices_valid_insert', 'payment_exception_choices_guard_update', 'payment_exception_choices_no_delete'],
             DB::getDriverName() === 'pgsql'
                 ? ['payments_guard_owner', 'provider_payment_identities_guard', 'payment_exceptions_guard', 'payment_exception_receipts_immutable', 'payment_exception_events_immutable', 'payment_exception_receipts_owner']
                 : ['payments_owner_present', 'payments_guard_owner', 'provider_payment_identities_no_delete', 'provider_payment_identities_guard', 'payment_exceptions_no_delete', 'payment_exceptions_guard',
@@ -151,7 +155,7 @@ class PaymentReceiptMigrationTest extends TestCase
                 'transaction_id' => 'PAY-MIG-1', 'paymongo_payment_id' => 'pay_mig_unapplied', 'amount' => 4000, 'payment_type' => 'downpayment', 'status' => 'paid'])))->payment;
         DB::transaction(fn () => app(PaymentExceptionService::class)->open(PaymentException::KIND_INTENT_UNALLOCATED, $unapplied, 'test'));
 
-        $this->assertStringContainsString('Payment exceptions are recorded', (string) $this->rollback(1));
+        $this->assertStringContainsString('Payment exceptions are recorded', (string) $this->rollback(self::LATER_MIGRATIONS + 1));
         $this->assertStringContainsString('Payment exceptions are recorded', (string) $this->rollback(self::B1_MIGRATIONS));
         $this->assertSame(1, PaymentException::count());
         $this->assertSame(1, DB::table('provider_payment_identities')->count());
@@ -166,7 +170,7 @@ class PaymentReceiptMigrationTest extends TestCase
             null, $booking->id, 'test', fn () => Payment::create(['booking_id' => $booking->id, 'payment_method' => 'gcash', 'transaction_id' => 'PAY-MIG-2',
                 'paymongo_payment_id' => 'pay_mig_identity', 'amount' => 2000, 'payment_type' => 'downpayment', 'status' => 'paid'])));
 
-        $this->assertStringContainsString('Provider payment identities or conflicts are recorded', (string) $this->rollback(2));
+        $this->assertStringContainsString('Provider payment identities or conflicts are recorded', (string) $this->rollback(self::LATER_MIGRATIONS + 2));
         $this->assertSame(1, DB::table('provider_payment_identities')->count());
 
         // Payments-only step: an unapplied receipt without identity still blocks the payments rollback
@@ -176,5 +180,37 @@ class PaymentReceiptMigrationTest extends TestCase
             'amount' => 4000, 'payment_type' => 'downpayment', 'status' => 'paid', 'created_at' => now(), 'updated_at' => now()]);
         $this->assertStringContainsString('Some payments have no booking', (string) $this->rollback(self::B1_MIGRATIONS));
         $this->assertSame(1, DB::table('payments')->whereNull('booking_id')->count());
+    }
+
+    /** An unapplied checkout receipt with its open exception, as B1 records it. */
+    private function openIntentException(string $payId): PaymentException
+    {
+        $intent = $this->checkoutIntent();
+        $receipt = DB::transaction(fn () => app(ReceiptRecorder::class)->record(new ProviderPayment('paymongo', $payId, 400000, 'PHP', false),
+            $intent->id, null, 'test', fn () => Payment::create(['booking_id' => null, 'checkout_intent_id' => $intent->id, 'payment_method' => 'gcash',
+                'transaction_id' => 'PAY-' . strtoupper(Str::random(8)), 'paymongo_payment_id' => $payId, 'amount' => 4000, 'payment_type' => 'downpayment', 'status' => 'paid'])))->payment;
+        $intent->forceFill(['status' => \App\Models\CheckoutIntent::STATUS_PAID_UNALLOCATED])->save();
+
+        return DB::transaction(fn () => app(PaymentExceptionService::class)->open(PaymentException::KIND_INTENT_UNALLOCATED, $receipt, 'test'));
+    }
+
+    public function test_the_guest_choice_migration_keeps_existing_exceptions_and_refuses_rollback_once_choices_exist(): void
+    {
+        // B2.1 applied over existing B1 exceptions: nothing about them changes
+        $this->assertNull($this->rollback(self::LATER_MIGRATIONS));
+        $exception = $this->openIntentException('pay_mig_choice');
+        $before = [DB::table('payment_exceptions')->get()->map(fn ($r) => (array) $r)->all(), DB::table('payment_exception_events')->count(), DB::table('payments')->count()];
+        $this->assertSame(0, Artisan::call('migrate', ['--force' => true]));
+        $this->assertSame($before, [DB::table('payment_exceptions')->get()->map(fn ($r) => (array) $r)->all(), DB::table('payment_exception_events')->count(), DB::table('payments')->count()]);
+
+        // Without choices it rolls back cleanly; once a choice exists the rollback is refused and the choice kept
+        $this->assertNull($this->rollback(self::LATER_MIGRATIONS));
+        $this->assertSame(0, Artisan::call('migrate', ['--force' => true]));
+        $staff = fn () => \App\Models\User::factory()->create(['role' => 'admin', 'status' => 'active', 'must_change_password' => false, 'email' => 'mig.' . uniqid() . '@example.test']);
+        app(\App\Services\Payment\GuestChoiceService::class)->record($exception, $staff(), ['choice' => 'refund_review', 'evidence_channel' => 'email',
+            'evidence_at' => now()->subHour()->toIso8601String(), 'evidence_summary' => 'Synthetic: guest asked for a refund review.',
+            'contact_match_method' => 'email_address', 'contact_match_outcome' => 'matched']);
+        $this->assertStringContainsString('Guest choices are recorded', (string) $this->rollback(self::LATER_MIGRATIONS));
+        $this->assertSame(1, DB::table('payment_exception_choices')->count());
     }
 }

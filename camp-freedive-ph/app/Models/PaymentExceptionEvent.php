@@ -15,6 +15,13 @@ class PaymentExceptionEvent extends Model
     public const BOOKING_CANCELLED = 'booking_cancelled_by_camp';
     public const BATCH_RESCHEDULED = 'batch_rescheduled_by_camp';
 
+    /** Guest choice history (Batch 3-II B2.1); details carry the choice id, never evidence text. */
+    public const CHOICE_RECORDED = 'guest_choice_recorded';
+    public const CHOICE_VERIFIED = 'guest_choice_verified';
+    public const CHOICE_REJECTED = 'guest_choice_rejected';
+    public const CHOICE_WITHDRAWN = 'guest_choice_withdrawn';
+    public const CHOICE_SUPERSEDED = 'guest_choice_superseded';
+
     protected $fillable = ['payment_exception_id', 'type', 'actor_id', 'details'];
 
     protected function casts(): array
