@@ -30,8 +30,8 @@ class PaymentReceiptMigrationTest extends TestCase
     use BuildsCheckoutIntents;
     use RefundFixtures;
 
-    /** Migrations added after B1 (B2.1 guest choices) sit on top: rollbacks to B1 steps pass through them first. */
-    private const LATER_MIGRATIONS = 1;
+    /** Migrations added after B1 (B2.1 guest choices, B2.3/B2.4 actions) sit on top: rollbacks to B1 steps pass through them first. */
+    private const LATER_MIGRATIONS = 2;
     private const B1_MIGRATIONS = 3 + self::LATER_MIGRATIONS;
 
     protected function setUp(): void
@@ -123,8 +123,11 @@ class PaymentReceiptMigrationTest extends TestCase
             $this->assertSame([], DB::select('PRAGMA foreign_key_check'));
         }
         $this->assertEqualsCanonicalizing(array_merge(
-            DB::getDriverName() === 'pgsql' ? ['payment_exception_choices_guard'] // B2.1
-                : ['payment_exception_choices_valid_insert', 'payment_exception_choices_guard_update', 'payment_exception_choices_no_delete'],
+            DB::getDriverName() === 'pgsql' // B2.1 and B2.3/B2.4
+                ? ['payment_exception_choices_guard', 'payment_exception_refund_reviews_immutable', 'payment_exception_allocation_attempts_immutable']
+                : ['payment_exception_choices_valid_insert', 'payment_exception_choices_guard_update', 'payment_exception_choices_no_delete',
+                    'payment_exception_refund_reviews_valid_insert', 'payment_exception_refund_reviews_no_update', 'payment_exception_refund_reviews_no_delete',
+                    'payment_exception_allocation_attempts_valid_insert', 'payment_exception_allocation_attempts_no_update', 'payment_exception_allocation_attempts_no_delete'],
             DB::getDriverName() === 'pgsql'
                 ? ['payments_guard_owner', 'provider_payment_identities_guard', 'payment_exceptions_guard', 'payment_exception_receipts_immutable', 'payment_exception_events_immutable', 'payment_exception_receipts_owner']
                 : ['payments_owner_present', 'payments_guard_owner', 'provider_payment_identities_no_delete', 'provider_payment_identities_guard', 'payment_exceptions_no_delete', 'payment_exceptions_guard',
@@ -210,7 +213,22 @@ class PaymentReceiptMigrationTest extends TestCase
         app(\App\Services\Payment\GuestChoiceService::class)->record($exception, $staff(), ['choice' => 'refund_review', 'evidence_channel' => 'email',
             'evidence_at' => now()->subHour()->toIso8601String(), 'evidence_summary' => 'Synthetic: guest asked for a refund review.',
             'contact_match_method' => 'email_address', 'contact_match_outcome' => 'matched']);
-        $this->assertStringContainsString('Guest choices are recorded', (string) $this->rollback(self::LATER_MIGRATIONS));
+        $this->assertStringContainsString('Guest choices are recorded', (string) $this->rollback(self::LATER_MIGRATIONS)); // passes the B2.3 step, refused at B2.1
         $this->assertSame(1, DB::table('payment_exception_choices')->count());
+    }
+
+    public function test_the_guest_choice_action_migration_refuses_rollback_once_a_choice_was_acted_on(): void
+    {
+        $exception = $this->openIntentException('pay_mig_action');
+        $staff = fn (string $role) => \App\Models\User::factory()->create(['role' => $role, 'status' => 'active', 'must_change_password' => false, 'email' => 'mig.' . uniqid() . '@example.test']);
+        $choices = app(\App\Services\Payment\GuestChoiceService::class);
+        $choice = $choices->record($exception, $staff('admin'), ['choice' => 'refund_review', 'evidence_channel' => 'email',
+            'evidence_at' => now()->subHour()->toIso8601String(), 'evidence_summary' => 'Synthetic: guest asked for a refund review.',
+            'contact_match_method' => 'email_address', 'contact_match_outcome' => 'matched']);
+        $choices->verify($choice, $staff('owner'), 'Synthetic: confirmed with the booking email.', 0);
+        app(\App\Services\Payment\ExceptionResolutionService::class)->routeToRefundReview($choice, $staff('admin'), 1);
+
+        $this->assertStringContainsString('Guest-choice actions, refund reviews', (string) $this->rollback(1));
+        $this->assertSame([1, 'acted_on'], [DB::table('payment_exception_refund_reviews')->count(), DB::table('payment_exception_choices')->value('status')]);
     }
 }

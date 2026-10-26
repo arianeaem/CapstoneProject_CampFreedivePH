@@ -14,6 +14,9 @@ class AppServiceProvider extends ServiceProvider
         // Load the settings once per request/job, not once per setting
         $this->app->scoped(\App\Services\SystemSettingService::class);
 
+        // Batch 3-II B2.4 (P3): no authoritative instructor schedule is approved yet, so allocation fails closed
+        $this->app->bind(\App\Services\Payment\Allocation\InstructorCapacityVerifier::class, \App\Services\Payment\Allocation\UnconfirmedInstructorCapacity::class);
+
         if (file_exists(app_path('Helpers/portal_helpers.php'))) {
             require_once app_path('Helpers/portal_helpers.php');
         }

@@ -65,20 +65,18 @@ class BookingFinalizer
     /** PostgreSQL lock_timeout inside capacity transactions, so a blocked advisory/row lock fails instead of waiting forever. */
     public const DB_LOCK_TIMEOUT = '5s';
     private const BATCH_ALLOCATION_LOCK = 'checkout_batch_allocation';
-    private const BOOKING_NUMBER_ATTEMPTS = 5;
     private const REVIEW_HISTORY_LIMIT = 20;
     private const REVIEW_DETAIL_KEYS = [
         'checkout_session_id', 'expected_session_id', 'claimed_session_id', 'returned_session_id', 'payment_id',
         'expected_centavos', 'actual_centavos', 'expected_currency', 'actual_currency', 'paid_count', 'status', 'http_status', 'missing',
     ];
-    private const PARTICIPANT_FIELDS = ['name', 'birthdate', 'gender', 'age', 'health_condition', 'swimmer_status', 'price_per_person'];
-    private const GUARDIAN_FIELDS = ['contact_birthdate', 'guardian_name', 'guardian_relationship', 'guardian_phone', 'guardian_consent_at'];
 
     public function __construct(
         protected SlotReservationService $slots,
         protected BatchManagementService $batches,
         protected ReceiptRecorder $receipts,
         protected PaymentExceptionService $exceptions,
+        protected IntentBookingBuilder $builder,
     ) {
     }
 
@@ -315,24 +313,7 @@ class BookingFinalizer
                     ]);
                 }
 
-                $booking = $this->createOfficialBooking($intent, $payment, $batch);
-                $payload = $intent->payload;
-
-                foreach ($payload['participants'] ?? [] as $participant) {
-                    $booking->participants()->create(array_intersect_key($participant, array_flip(self::PARTICIPANT_FIELDS)));
-                }
-
-                foreach ($payload['pricing']['adjustments'] ?? [] as $adjustment) {
-                    $booking->priceAdjustments()->create([
-                        'pricing_rule_id' => $adjustment['rule_id'],
-                        'rule_name' => $adjustment['rule_name'],
-                        'rule_type' => $adjustment['rule_type'],
-                        'condition_summary' => $adjustment['condition_summary'],
-                        'base_price' => $adjustment['base_price'],
-                        'adjustment_amount' => $adjustment['delta_per_pax'],
-                        'adjusted_price' => $adjustment['adjusted_price'],
-                    ]);
-                }
+                $booking = $this->builder->build($intent, $payment->amountCentavos, $batch);
 
                 $this->recordReceipt($intent, $payment, $booking, $source);
                 $paidPesos = round($payment->amountCentavos / 100, 2);
@@ -418,60 +399,6 @@ class BookingFinalizer
         $seen = $this->receipts->inspect(ProviderPayment::fromVerified($payment), $intent->id, $intent->booking_id, "checkout:{$source}");
 
         return $seen->isConflict() ? $this->paymentConflict($intent, "receipt_{$seen->status}", $payment, $source) : null;
-    }
-
-    /** The official booking, with a new booking number and PIN (generated only here). */
-    private function createOfficialBooking(CheckoutIntent $intent, VerifiedPayment $payment, Batch $batch): Booking
-    {
-        $payload = $intent->payload;
-        $details = $payload['booking'];
-        $contact = $payload['contact'];
-        $fees = $payload['pricing']['fees'] ?? [];
-        $paidPesos = round($payment->amountCentavos / 100, 2);
-
-        $attributes = [
-            'batch_id' => $batch->id,
-            'class_type' => $details['class_type'],
-            'is_certified_diver' => (bool) ($details['is_certified_diver'] ?? false),
-            'start_date' => $details['start_date'],
-            'end_date' => $details['end_date'],
-            'pickup_option' => $details['pickup_option'],
-            'pickup_location' => $details['pickup_location'] ?? null,
-            'carpool_fee' => $fees['carpool'] ?? 0,
-            'boat_dive' => (bool) ($details['boat_dive'] ?? false),
-            'boat_dive_fee' => $fees['boat_dive'] ?? 0,
-            'lgu_fee' => $fees['lgu'] ?? 0,
-            'environmental_fee' => $fees['environmental'] ?? 0,
-            'subtotal' => $payload['pricing']['subtotal'],
-            'total_amount' => (float) $intent->total_amount,
-            'downpayment_amount' => (float) $intent->downpayment_amount,
-            'balance_amount' => max(0, round((float) $intent->total_amount - $paidPesos, 2)),
-            'contact_name' => $contact['name'],
-            'contact_email' => $contact['email'],
-            'contact_phone' => $contact['phone'],
-            'contact_facebook' => $contact['facebook'] ?? null,
-            'status' => 'confirmed',
-        ] + array_intersect_key($payload['guardian'] ?? [], array_flip(self::GUARDIAN_FIELDS));
-
-        // A booking-number collision is retried inside a savepoint, so the outer transaction stays usable (PostgreSQL)
-        for ($attempt = 1; ; $attempt++) {
-            try {
-                return DB::transaction(function () use ($attributes, $intent) {
-                    $booking = new Booking($attributes + [
-                        'booking_number' => 'CFP-' . now()->format('Y') . '-' . strtoupper(Str::random(5)),
-                        'pin' => str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT),
-                    ]);
-                    $booking->forceFill(['checkout_intent_id' => $intent->id]);
-                    $booking->save();
-
-                    return $booking;
-                });
-            } catch (UniqueConstraintViolationException $e) {
-                if ($attempt >= self::BOOKING_NUMBER_ATTEMPTS || ! str_contains($e->getMessage(), 'booking_number')) {
-                    throw $e;
-                }
-            }
-        }
     }
 
     /**

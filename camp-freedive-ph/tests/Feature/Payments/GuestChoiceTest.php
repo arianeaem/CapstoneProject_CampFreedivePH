@@ -73,7 +73,7 @@ class GuestChoiceTest extends TestCase
             'choice' => PaymentExceptionChoice::REFUND_REVIEW,
             'evidence_channel' => 'email',
             'evidence_at' => now()->subHour()->toIso8601String(),
-            'evidence_reference' => 'synthetic-msg-0001@example.test',
+            'evidence_reference' => 'synthetic-thread-0001',
             'evidence_summary' => 'Synthetic: guest replied asking for a refund review instead of a new date.',
             'contact_match_method' => 'email_address',
             'contact_match_outcome' => 'matched',

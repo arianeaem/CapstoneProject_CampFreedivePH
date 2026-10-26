@@ -23,6 +23,10 @@ class PaymentExceptionChoice extends Model
     public const REJECTED = 'rejected';
     public const WITHDRAWN = 'withdrawn';
     public const SUPERSEDED = 'superseded';
+    /** Terminal: the verified choice was acted on (refund review routed, or the date allocated); resolution_reference set once. */
+    public const ACTED_ON = 'acted_on';
+    /** Terminal: the verified date could not be allocated; a new date needs new consent and verification (P6). */
+    public const ACTION_FAILED = 'action_failed';
     /** At most one per exception (partial unique index). */
     public const ACTIONABLE = [self::RECORDED, self::VERIFIED];
 
@@ -39,7 +43,7 @@ class PaymentExceptionChoice extends Model
         'original_downpayment_centavos', 'received_centavos', 'price_snapshot_source', 'price_snapshot_source_id', 'evidence_channel',
         'evidence_at', 'evidence_reference', 'evidence_summary', 'contact_match_method', 'contact_match_outcome', 'recorded_by',
         'recorded_at', 'verified_by', 'verified_at', 'verification_note', 'closed_by', 'closed_at', 'closed_reason', 'supersedes_choice_id',
-        'lock_version',
+        'lock_version', 'acted_by', 'acted_at', 'resolution_reference',
     ];
 
     protected function casts(): array
@@ -54,6 +58,7 @@ class PaymentExceptionChoice extends Model
             'recorded_at' => 'datetime',
             'verified_at' => 'datetime',
             'closed_at' => 'datetime',
+            'acted_at' => 'datetime',
             'lock_version' => 'integer',
         ];
     }

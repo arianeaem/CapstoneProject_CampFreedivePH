@@ -21,6 +21,13 @@ class PaymentExceptionEvent extends Model
     public const CHOICE_REJECTED = 'guest_choice_rejected';
     public const CHOICE_WITHDRAWN = 'guest_choice_withdrawn';
     public const CHOICE_SUPERSEDED = 'guest_choice_superseded';
+    public const CHOICE_ACTED_ON = 'guest_choice_acted_on';
+    public const CHOICE_ACTION_FAILED = 'guest_choice_action_failed';
+    public const REFUND_REVIEW_ROUTED = 'refund_review_routed';
+    public const ALLOCATED = 'allocated';
+    public const ALLOCATION_FAILED = 'allocation_failed';
+    public const ALLOCATION_BLOCKED = 'allocation_blocked';
+    public const EVIDENCE_VIEWED = 'evidence_viewed';
 
     protected $fillable = ['payment_exception_id', 'type', 'actor_id', 'details'];
 

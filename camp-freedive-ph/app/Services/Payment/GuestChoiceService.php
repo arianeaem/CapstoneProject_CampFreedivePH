@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use LogicException;
 use RuntimeException;
 
 /**
@@ -35,6 +36,18 @@ class GuestChoiceService
     private const NOTE_MAX = 500;
 
     /**
+     * Data that never belongs in evidence or notes (P4, B2.2): card-like numbers, email addresses, Philippine mobile
+     * and Metro Manila landline numbers, and credentials. Contact details stay on the booking; evidence refers to them
+     * ("reply from the booking email") instead of copying them. Matches are refused, never logged or echoed.
+     */
+    private const SENSITIVE_PATTERNS = [
+        'phone numbers' => '/(?<!\d)(?:\+?63|0)[\s.-]?9\d{2}[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)|(?<!\d)(?:\+?63[\s.-]?|0)?\(?2\)?[\s.-]?[38]\d{3}[\s.-]?\d{4}(?!\d)/',
+        'card or account numbers' => '/\d(?:[ -]?\d){11,18}/',
+        'email addresses' => '/[^\s@<>()"\'\[\]]+@[^\s@<>()"\'\[\]]+\.[a-z]{2,}/i',
+        'PINs, passwords or one-time codes' => '/\b(password|passcode|passwd|cvv|cvc|otp)\b|\bpin\b\s*(code)?\s*[:=#-]?\s*\d/i',
+    ];
+
+    /**
      * Record the guest's choice. Refused while another choice is actionable (supersede it instead).
      *
      * @param array{choice: string, requested_start_date?: ?string, requested_end_date?: ?string, evidence_channel: string,
@@ -46,6 +59,7 @@ class GuestChoiceService
         $data = $this->validated($input);
 
         return $this->withLocks($exception, $actor, function (PaymentException $locked, User $staff) use ($data) {
+            $this->assertNotActedOn($locked);
             $current = $this->actionableLocked($locked);
             if ($current !== null) {
                 throw new RuntimeException("Guest choice #{$current->id} ({$current->status}) is already on record for this payment exception. "
@@ -136,8 +150,16 @@ class GuestChoiceService
         ];
     }
 
-    /** One transaction, locks in the established order, staff and exception eligibility re-checked under them. */
-    private function withLocks(PaymentException $exception, User $actor, callable $work): mixed
+    /** Exceptions whose withLocks callback is running in this process => the checked acting staff id. */
+    private array $held = [];
+
+    /**
+     * One transaction, locks in the established order (acting staff, booking, checkout intent, exception), staff and
+     * exception eligibility re-checked under them. Also used by ExceptionResolutionService for the actions on a
+     * verified choice, so every guest-choice write takes the same locks in the same order. lockChoice, actOn and
+     * failAction refuse to run outside this callback (for the same exception and acting staff).
+     */
+    public function withLocks(PaymentException $exception, User $actor, callable $work): mixed
     {
         return DB::transaction(function () use ($exception, $actor, $work) {
             $staff = User::whereKey($actor->id)->sharedLock()->first();
@@ -155,7 +177,17 @@ class GuestChoiceService
             $locked = PaymentException::whereKey($exception->id)->lockForUpdate()->firstOrFail();
             $this->assertEligible($locked);
 
-            return $work($locked, $staff);
+            $outer = $this->held[$locked->id] ?? null;
+            $this->held[$locked->id] = $staff->id;
+            try {
+                return $work($locked, $staff);
+            } finally {
+                if ($outer === null) {
+                    unset($this->held[$locked->id]);
+                } else {
+                    $this->held[$locked->id] = $outer;
+                }
+            }
         });
     }
 
@@ -186,8 +218,9 @@ class GuestChoiceService
     }
 
     /** Lock the choice and require that it belongs to the exception, is in an expected status and unchanged since seen. */
-    private function lockChoice(PaymentExceptionChoice $choice, PaymentException $exception, array $statuses, int $expectedVersion): PaymentExceptionChoice
+    public function lockChoice(PaymentExceptionChoice $choice, PaymentException $exception, array $statuses, int $expectedVersion): PaymentExceptionChoice
     {
+        $this->assertHeld($exception);
         $c = PaymentExceptionChoice::whereKey($choice->id)->lockForUpdate()->firstOrFail();
         if ((int) $c->payment_exception_id !== (int) $exception->id) {
             throw new RuntimeException('This guest choice belongs to another payment exception; nothing was changed.');
@@ -197,6 +230,46 @@ class GuestChoiceService
         }
 
         return $c;
+    }
+
+    /**
+     * The verified choice was acted on (inside the action's transaction, under withLocks): terminal, with the action
+     * reference written once. The database refuses any later change and any new choice for the exception.
+     */
+    public function actOn(PaymentExceptionChoice $choice, PaymentException $exception, User $staff, string $reference): void
+    {
+        $this->assertHeld($exception, $staff, $choice);
+        $this->transition($choice, PaymentExceptionChoice::ACTED_ON, ['acted_by' => $staff->id, 'acted_at' => now(), 'resolution_reference' => $reference]);
+        $this->event($exception, PaymentExceptionEvent::CHOICE_ACTED_ON, $staff, $choice);
+    }
+
+    /** The verified date could not be given: the consent is spent and kept as history; a new date needs a new choice (P6). */
+    public function failAction(PaymentExceptionChoice $choice, PaymentException $exception, User $staff, string $reason): void
+    {
+        $this->assertHeld($exception, $staff, $choice);
+        $this->transition($choice, PaymentExceptionChoice::ACTION_FAILED, ['closed_by' => $staff->id, 'closed_at' => now(), 'closed_reason' => $reason]);
+        $this->event($exception, PaymentExceptionEvent::CHOICE_ACTION_FAILED, $staff, $choice);
+    }
+
+    /**
+     * Inside withLocks for this exception (and, for actions, by its checked staff on a choice locked verified there).
+     * A programming error otherwise: nothing may lock or act on a choice outside the established locks and checks.
+     */
+    private function assertHeld(PaymentException $exception, ?User $staff = null, ?PaymentExceptionChoice $choice = null): void
+    {
+        $held = $this->held[$exception->id] ?? null;
+        if ($held === null || DB::transactionLevel() === 0 || ($staff !== null && (int) $staff->id !== (int) $held)
+            || ($choice !== null && ((int) $choice->payment_exception_id !== (int) $exception->id || $choice->status !== PaymentExceptionChoice::VERIFIED))) {
+            throw new LogicException('Guest choices can only be locked or acted on inside GuestChoiceService::withLocks, by its checked staff, on a choice locked there as verified.');
+        }
+    }
+
+    private function assertNotActedOn(PaymentException $exception): void
+    {
+        $acted = PaymentExceptionChoice::where('payment_exception_id', $exception->id)->where('status', PaymentExceptionChoice::ACTED_ON)->first();
+        if ($acted !== null) {
+            throw new RuntimeException("Guest choice #{$acted->id} was already acted on for this payment exception; a new choice cannot be recorded. Nothing was changed.");
+        }
     }
 
     private function assertNotRecorder(PaymentExceptionChoice $choice, User $staff, string $action): void
@@ -296,9 +369,7 @@ class GuestChoiceService
             $refuse('write a short summary of what the guest said (10 to 500 characters), not the whole conversation');
         }
         foreach ([$summary, (string) $reference] as $value) {
-            if (preg_match('/\d(?:[ -]?\d){11,18}/', $value) || preg_match('/\b(password|passcode|cvv|cvc)\b|\bpin\b\s*[:=#]?\s*\d/i', $value)) {
-                $refuse('do not record card numbers, PINs, passwords or other credentials');
-            }
+            $this->assertNoSensitiveData($value, 'The guest choice was not recorded');
         }
         $method = $input['contact_match_method'] ?? null;
         if (! in_array($method, PaymentExceptionChoice::MATCH_METHODS, true)) {
@@ -327,8 +398,29 @@ class GuestChoiceService
         if (mb_strlen($value) < self::NOTE_MIN || mb_strlen($value) > self::NOTE_MAX) {
             throw new RuntimeException("Give a {$label} of 10 to 500 characters; nothing was changed.");
         }
+        $this->assertNoSensitiveData($value, "The {$label} was not saved");
 
         return $value;
+    }
+
+    /** Refuses card numbers, emails, phone numbers and credentials; the message never repeats the text. */
+    public static function sensitiveDataKind(string $value): ?string
+    {
+        foreach (self::SENSITIVE_PATTERNS as $kind => $pattern) {
+            if (preg_match($pattern, $value) === 1) {
+                return $kind;
+            }
+        }
+
+        return null;
+    }
+
+    private function assertNoSensitiveData(string $value, string $what): void
+    {
+        $kind = self::sensitiveDataKind($value);
+        if ($kind !== null) {
+            throw new RuntimeException("{$what}: do not include {$kind}. Refer to the booking's contact details instead of copying them; nothing was changed.");
+        }
     }
 
     private function isDate(mixed $value): bool

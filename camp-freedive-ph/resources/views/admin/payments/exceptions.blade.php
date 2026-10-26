@@ -24,14 +24,14 @@
     </div>
 
     <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-2xs">
-        <h2 class="font-bold text-base mb-3">Payment exceptions ({{ $exceptions->where('status', 'open')->count() }} open)</h2>
+        <h2 class="font-bold text-base mb-3">Payment exceptions ({{ $exceptions->where('status', 'open')->count() }} open) · <a class="text-[#780000]" href="{{ portal_route('payments.exceptions.queue') }}">Guest choice queue</a></h2>
         <div class="overflow-x-auto">
         <table class="w-full text-left">
             <thead class="text-[#6E6E73] text-xs uppercase tracking-wider"><tr><th class="py-1">#</th><th class="py-1">Kind</th><th class="py-1">Booking / checkout</th><th class="py-1 text-right">Amount</th><th class="py-1">PayMongo payment</th><th class="py-1">Status</th><th class="py-1">Opened</th><th class="py-1">Latest event</th></tr></thead>
             <tbody class="divide-y divide-[#E5E5EA]">
                 @forelse($exceptions as $exception)
                     <tr>
-                        <td class="py-1.5">#{{ $exception->id }}</td>
+                        <td class="py-1.5"><a class="font-semibold text-[#780000]" href="{{ portal_route('payments.exceptions.show', $exception) }}">#{{ $exception->id }}</a></td>
                         <td class="py-1.5">{{ $exception->label() }}</td>
                         <td class="py-1.5">
                             @if($exception->booking)

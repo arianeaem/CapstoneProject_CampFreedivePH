@@ -50,4 +50,13 @@ return [
         'batch_size' => 50,
     ],
 
+    /*
+    | Guest-choice evidence on payment exceptions (Batch 3-II B2): text only, staff-only, every view audited.
+    | Redaction hides the evidence summary and reference on staff screens; it is off until the owner approves it, and
+    | no retention period is set (the records are immutable in the database; deleting them needs an approved policy).
+    */
+    'guest_choice_evidence' => [
+        'redaction_enabled' => false,
+    ],
+
 ];

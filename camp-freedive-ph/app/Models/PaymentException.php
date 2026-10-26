@@ -30,6 +30,9 @@ class PaymentException extends Model
     ];
 
     public const OPEN = 'open';
+    /** Resolved by an authorized B2 allocation of the guest's verified alternative date (resolution "allocated"). */
+    public const RESOLVED = 'resolved';
+    public const RESOLUTION_ALLOCATED = 'allocated';
 
     /** Statuses that still hold their receipts. */
     public const UNRESOLVED_STATUSES = [self::OPEN];
@@ -72,6 +75,21 @@ class PaymentException extends Model
     public function checkoutIntent(): BelongsTo
     {
         return $this->belongsTo(CheckoutIntent::class);
+    }
+
+    public function choices(): HasMany
+    {
+        return $this->hasMany(PaymentExceptionChoice::class)->orderBy('id');
+    }
+
+    public function refundReview(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(PaymentExceptionRefundReview::class);
+    }
+
+    public function allocationAttempts(): HasMany
+    {
+        return $this->hasMany(PaymentExceptionAllocationAttempt::class)->orderBy('id');
     }
 
     public function events(): HasMany

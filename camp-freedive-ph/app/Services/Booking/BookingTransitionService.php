@@ -173,6 +173,51 @@ class BookingTransitionService
         return $booking->fresh();
     }
 
+    /**
+     * Batch 3-II B2.4: place a paid booking that got no place on the guest's verified alternative date. Under the
+     * capacity locks of both dates and the booking row lock: the booking must still be paid_unallocated and unchanged,
+     * the destination must have room ($fits decides, so a full date is reported to the caller, not thrown as a lock
+     * error), then $authorize must resolve its held payment (exception, choice, review flag). The held-payment guard
+     * is then checked as usual, so nothing else held can slip through. Status, dates and batch commit with the
+     * authorization or not at all. The guard is never skipped, only satisfied by the authorized resolution.
+     *
+     * @param callable(Booking, int $pax): void $fits throws when the destination has no room
+     * @param callable(Booking): void $authorize resolves the held payment for this allocation, or throws
+     */
+    public function allocateHeldBooking(Booking $booking, string $startDate, string $endDate, User $actor, callable $fits, callable $authorize): Booking
+    {
+        $this->assertStaff($actor);
+        $start = Carbon::parse($startDate)->format('Y-m-d');
+        $end = Carbon::parse($endDate)->format('Y-m-d');
+        $created = null;
+
+        $this->capacity->transaction([$booking->start_date, $start], function () use ($booking, $start, $end, $actor, $fits, $authorize, &$created) {
+            User::whereKey($actor->id)->sharedLock()->first(); // lock order: dates -> acting staff -> booking
+            $locked = $this->lock($booking, 'paid_unallocated');
+            $pax = $locked->participants()->count();
+            $fits($locked, $pax);
+            $authorize($locked);
+            $this->assertNoHeldPayment($locked, 'confirmed on the guest\'s verified date');
+            $this->capacity->assertRoom($start, $pax, null);
+
+            $from = "{$locked->start_date->format('Y-m-d')} - {$locked->end_date->format('Y-m-d')}";
+            $locked->fill(['start_date' => $start, 'end_date' => $end, 'status' => 'confirmed']);
+            $created = $this->alignBatch($locked, $actor);
+            $locked->save();
+            BookingStatusLog::create([
+                'booking_id' => $locked->id, 'old_status' => 'paid_unallocated', 'new_status' => 'confirmed', 'changed_by' => $actor->id,
+                'note' => "Placed on the guest's independently verified alternative date ({$from} -> {$start} - {$end}); original price and payment terms kept.",
+                'created_at' => now(),
+            ]);
+        });
+
+        if ($created) {
+            $this->batches->completeCreatedBatch($created, $actor);
+        }
+
+        return $booking->fresh();
+    }
+
     /** Lock the row and make sure nobody changed it since the form was loaded. */
     private function lock(Booking $booking, string $expectedStatus): Booking
     {
