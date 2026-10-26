@@ -568,7 +568,7 @@ class BatchManagementController extends Controller
             $actionLabel = match ($validated['status']) {
                 'cancelled_by_camp' => 'Cancelled by Camp. Paid bookings have refund cases waiting for the guest\'s choice or staff review; nothing was refunded automatically',
                 'completed' => 'Marked as Completed',
-                'rescheduled' => 'Rescheduled (Participant email notifications dispatched)',
+                'rescheduled' => 'Rescheduled. Bookings holding a place were emailed; unpaid, cancelled, paid-but-unplaced bookings and bookings with a pending guest request were left unchanged for staff follow-up (see each booking\'s history)',
                 default => 'Updated to ' . ucfirst($validated['status']),
             };
 

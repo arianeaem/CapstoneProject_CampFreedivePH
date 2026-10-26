@@ -11,6 +11,7 @@ use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
 use App\Models\NotificationLog;
 use App\Models\User;
+use App\Services\Booking\CapacityCoordinator;
 use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use Carbon\Carbon;
@@ -313,7 +314,10 @@ class BatchManagementService
         }
 
         DB::transaction(function () use ($batch, $newStatus, $changer, $note, $category, $activityStarted) {
-            $oldStatus = $batch->status;
+            // One status change per batch at a time, with the old status read under the row lock (a repeated or concurrent
+            // change sees the first one). PostgreSQL: NO KEY UPDATE, so bookings joining the batch (key-share locks) are not
+            // blocked and the booking-then-batch order of date moves cannot deadlock with this batch-then-booking cascade.
+            $oldStatus = Batch::whereKey($batch->id)->lock(DB::getDriverName() === 'pgsql' ? 'for no key update' : true)->firstOrFail()->status;
             if ($oldStatus === $newStatus && empty($note)) {
                 return;
             }
@@ -351,6 +355,7 @@ class BatchManagementService
                 ->get();
 
             $cascaded = 0;
+            $notRescheduled = [];
             foreach ($connectedBookings as $listed) {
                 // Re-read under the row lock: a staff decision committed since the list was read (a guest cancellation,
                 // a move to another batch) is never overwritten
@@ -367,6 +372,43 @@ class BatchManagementService
                     $newStatus === 'cancelled_by_camp'
                         ? app(PaymentExceptionService::class)->noteCampCancellation($booking, $batch, $changer, true, $issue)
                         : app(PaymentExceptionService::class)->noteBatchRescheduleSkipped($booking, $batch, $changer, $issue);
+                    if ($newStatus === 'rescheduled') {
+                        $notRescheduled[$booking->status] = ($notRescheduled[$booking->status] ?? 0) + 1;
+                    }
+                    continue;
+                }
+                // "Rescheduled" keeps a place: only bookings that already hold one are rescheduled. An unpaid booking is
+                // never given a place without its payment and a capacity check, a camp-cancelled booking is never
+                // reactivated (its refund case stays as it is), and a paid booking without a place waits for staff.
+                // They keep their status, dates and batch; the skip is logged on the booking for staff follow-up.
+                if ($newStatus === 'rescheduled' && ! CapacityCoordinator::takesPlace($booking->status)) {
+                    $notRescheduled[$booking->status] = ($notRescheduled[$booking->status] ?? 0) + 1;
+                    BookingStatusLog::create([
+                        'booking_id' => $booking->id,
+                        'old_status' => $booking->status,
+                        'new_status' => $booking->status,
+                        'changed_by' => $changer->id,
+                        'note' => "Batch {$batch->name} was rescheduled by camp; this booking was not changed because it does not hold a place ("
+                            . str_replace('_', ' ', $booking->status) . '). No reschedule email was sent; staff follow up.',
+                    ]);
+                    continue;
+                }
+                // A pending guest request (reschedule or cancellation) is the guest's to have decided by staff: the booking
+                // and the request are left exactly as they are, so the request stays actionable in Booking Requests.
+                if ($newStatus === 'rescheduled' && in_array($booking->status, ['reschedule_requested', 'cancellation_requested'], true)) {
+                    $notRescheduled[$booking->status] = ($notRescheduled[$booking->status] ?? 0) + 1;
+                    BookingStatusLog::create([
+                        'booking_id' => $booking->id,
+                        'old_status' => $booking->status,
+                        'new_status' => $booking->status,
+                        'changed_by' => $changer->id,
+                        'note' => "Batch {$batch->name} was rescheduled by camp; this booking was not changed because the guest has a pending "
+                            . ($booking->status === 'reschedule_requested' ? 'reschedule' : 'cancellation') . ' request, which staff still decide in Booking Requests. No reschedule email was sent; staff follow up.',
+                    ]);
+                    continue;
+                }
+                // Repeating the reschedule of an already rescheduled batch: bookings already told are not told again
+                if ($newStatus === 'rescheduled' && $oldStatus === 'rescheduled' && $booking->status === 'rescheduled') {
                     continue;
                 }
                 $bookingOldStatus = $booking->status;
@@ -457,9 +499,12 @@ class BatchManagementService
                 }
             }
 
+            $skipped = $notRescheduled;
+            ksort($skipped);
             AuditLogger::log(
                 'BATCH_STATUS_UPDATED',
-                "Updated status of batch {$batch->batch_code} from '{$oldStatus}' to '{$newStatus}'. Cascaded to {$cascaded} bookings.",
+                "Updated status of batch {$batch->batch_code} from '{$oldStatus}' to '{$newStatus}'. Cascaded to {$cascaded} bookings."
+                    . ($skipped ? ' Not rescheduled (left unchanged for staff follow-up): ' . implode(', ', array_map(fn ($status, $n) => "{$n} " . str_replace('_', ' ', $status), array_keys($skipped), $skipped)) . '.' : ''),
                 $changer,
                 $changer->name
             );
