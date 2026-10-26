@@ -11,6 +11,7 @@ use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
 use App\Models\NotificationLog;
 use App\Models\User;
+use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use Carbon\Carbon;
 use Exception;
@@ -359,11 +360,21 @@ class BatchManagementService
                     || ($newStatus === 'completed' && ! in_array($booking->status, ['confirmed', 'rescheduled'], true))) {
                     continue;
                 }
+                // A paid booking without a place whose money is held waits for the guest's choice: left unchanged, noted.
+                // (Cancelling would decide its money; "rescheduled" would give it a place without a capacity check.)
+                if (in_array($newStatus, ['cancelled_by_camp', 'rescheduled'], true) && $booking->status === 'paid_unallocated'
+                    && ($issue = app(PaymentExceptionService::class)->blockingIssue($booking)) !== null) {
+                    $newStatus === 'cancelled_by_camp'
+                        ? app(PaymentExceptionService::class)->noteCampCancellation($booking, $batch, $changer, true, $issue)
+                        : app(PaymentExceptionService::class)->noteBatchRescheduleSkipped($booking, $batch, $changer, $issue);
+                    continue;
+                }
                 $bookingOldStatus = $booking->status;
                 $cascaded++;
 
                 if ($newStatus === 'cancelled_by_camp') {
                     $booking->update(['status' => 'cancelled_by_camp']);
+                    app(PaymentExceptionService::class)->noteCampCancellation($booking, $batch, $changer, false);
 
                     // Paid bookings get a refund case (reason/progress as confirmed by staff; the guest's choice and an
                     // approved amount come before any money moves). Every receipt counts: online "paid" and manual "completed".

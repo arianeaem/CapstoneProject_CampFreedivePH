@@ -6,11 +6,11 @@ use App\Models\Batch;
 use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
-use App\Models\Payment;
 use App\Models\RefundAttempt;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\BatchManagementService;
+use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use App\Services\Refunds\RefundLedger;
 use Carbon\Carbon;
@@ -25,8 +25,8 @@ use RuntimeException;
  *   pending_downpayment -> confirmed            payment received (receipts minus refunds >= downpayment) and a free place
  *                       -> cancelled_by_guest   only with no money received
  *                       -> cancelled_by_camp    (a refund case is opened if money was received)
- *   paid_unallocated    -> confirmed            a free place (payment already verified); its payment review is resolved
- *                       -> cancelled_by_camp    (refund case)
+ *   paid_unallocated    -> confirmed            a free place (payment already verified), and no held payment (below)
+ *                       -> cancelled_by_camp    (refund case), and no held payment (below)
  *   confirmed / rescheduled -> completed / no_show   only on or after the dive date (nothing is forfeited here)
  *                       -> cancelled_by_camp    (refund case); -> cancelled_by_guest only with no money received
  *                       -> rescheduled / confirmed
@@ -35,6 +35,12 @@ use RuntimeException;
  *   reschedule_requested / cancellation_requested: decided only through the guest's request (Booking Requests)
  *   completed / no_show: final here
  * Money is never moved here: cancellations open (or join) the booking's refund case; refunds stay in Refund Cases.
+ *
+ * Held payments (Batch 3-II B1): while the booking has an unresolved payment exception or a payment awaiting review,
+ * it is not confirmed (placed or restored), not moved to other dates, and not camp-cancelled from paid_unallocated
+ * here. Verified money that could not simply be applied waits for the guest's own choice and staff verification (the
+ * B2 workflow); a staff status change never decides it. The check runs under the date locks and the booking row lock,
+ * the same locks under which a late payment opens its exception, so either order is safe.
  */
 class BookingTransitionService
 {
@@ -53,6 +59,7 @@ class BookingTransitionService
         protected BatchManagementService $batches,
         protected RefundCaseService $cases,
         protected RefundLedger $ledger,
+        protected PaymentExceptionService $exceptions,
     ) {
     }
 
@@ -75,6 +82,9 @@ class BookingTransitionService
 
         $this->capacity->transaction([$booking->start_date], function () use ($booking, $from, $to, $actor, $note, &$created) {
             $locked = $this->lock($booking, $from);
+            if ($to === 'confirmed' || ($from === 'paid_unallocated' && $to === 'cancelled_by_camp')) {
+                $this->assertNoHeldPayment($locked, $to === 'confirmed' ? 'confirmed' : 'cancelled by the camp');
+            }
 
             if ($to === 'confirmed') {
                 if (str_starts_with($from, 'cancelled')) {
@@ -94,10 +104,6 @@ class BookingTransitionService
             }
 
             $locked->update(['status' => $to]);
-            if ($from === 'paid_unallocated' && $to === 'confirmed') {
-                Payment::where('booking_id', $locked->id)->awaitingReview()->where('review_reason', Payment::REVIEW_CAPACITY_UNAVAILABLE)
-                    ->update(['review_resolved_at' => now(), 'review_resolved_by' => $actor->id]);
-            }
             BookingStatusLog::create([
                 'booking_id' => $locked->id, 'old_status' => $from, 'new_status' => $to, 'changed_by' => $actor->id,
                 'note' => $note . ($to === 'no_show' ? ' (no-show recorded; any forfeiture is decided separately)' : ''), 'created_at' => now(),
@@ -136,11 +142,14 @@ class BookingTransitionService
 
         $this->capacity->transaction([$booking->start_date, $start], function () use ($booking, $start, $end, $actor, $newStatus, $before, $after, &$created) {
             $locked = $this->lock($booking, $booking->status);
+            $dateChanged = $locked->start_date->format('Y-m-d') !== $start;
+            if ($dateChanged) {
+                $this->assertNoHeldPayment($locked, 'moved to other dates');
+            }
             if ($before) {
                 $before($locked);
             }
             $status = $newStatus ?? $locked->status;
-            $dateChanged = $locked->start_date->format('Y-m-d') !== $start;
             $startsTakingPlace = CapacityCoordinator::takesPlace($status) && ($dateChanged || ! CapacityCoordinator::takesPlace($locked->status));
             if ($startsTakingPlace) {
                 // The booking's own place on its old date is not counted against the new one
@@ -200,6 +209,12 @@ class BookingTransitionService
             throw new RuntimeException('No downpayment of ₱' . number_format($needed / 100, 2) . ' is on record for this booking (received minus refunded: ₱'
                 . number_format(max(0, $position['paid'] - $position['refunded']) / 100, 2) . '). Record the payment first; nothing was changed.');
         }
+    }
+
+    /** Refuses while a payment of the booking is held (unresolved payment exception or review): see the class notes. */
+    private function assertNoHeldPayment(Booking $booking, string $action): void
+    {
+        $this->exceptions->assertNotHeld($booking, $action);
     }
 
     /** Refuses while the booking has an open refund case or a refund in progress (reactivating it would be unsafe). */

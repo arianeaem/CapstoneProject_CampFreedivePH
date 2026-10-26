@@ -18,7 +18,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-            @if($payment->booking->balance_amount > 0)
+            @if($payment->booking && $payment->booking->balance_amount > 0)
                 <button type="button" 
                         @click="openBalanceModal = true"
                         class="btn-primary px-4 py-2 text-sm sm:text-sm font-bold flex items-center gap-1.5">
@@ -27,9 +27,15 @@
                 </button>
             @endif
 
-            <a href="{{ route('admin.bookings.show', $payment->booking) }}" class="btn-secondary px-4 py-2 text-sm sm:text-sm font-semibold flex items-center gap-1.5">
-                <span>View Booking #{{ $payment->booking->booking_number }}</span>
-            </a>
+            @if($payment->booking)
+                <a href="{{ route('admin.bookings.show', $payment->booking) }}" class="btn-secondary px-4 py-2 text-sm sm:text-sm font-semibold flex items-center gap-1.5">
+                    <span>View Booking #{{ $payment->booking->booking_number }}</span>
+                </a>
+            @else
+                <a href="{{ portal_route('payments.exceptions') }}" class="btn-secondary px-4 py-2 text-sm sm:text-sm font-semibold flex items-center gap-1.5">
+                    <span>Payment Exceptions</span>
+                </a>
+            @endif
         </div>
     </div>
 
@@ -107,6 +113,21 @@
 
         <!-- Linked Booking Summary -->
         <div class="space-y-6">
+            @if(! $payment->booking)
+            <!-- Unapplied receipt: verified money of a checkout that could not be given a place -->
+            <div class="bg-white rounded-xl border border-amber-300 p-6 space-y-3">
+                <h3 class="text-base font-bold text-[#1D1D1F]">Not applied to a booking</h3>
+                <p class="text-sm text-[#6E6E73]">This payment was received for a checkout that could not be given a place. It is kept as received and held until the guest's choice is verified; no booking, refund or balance is recorded against it here.</p>
+                <dl class="space-y-1.5 text-sm">
+                    <div class="flex justify-between gap-3"><dt class="text-[#6E6E73]">Checkout</dt><dd class="font-mono font-bold">{{ $payment->checkoutIntent?->reference ?? '—' }}</dd></div>
+                    <div class="flex justify-between gap-3"><dt class="text-[#6E6E73]">Dive date asked for</dt><dd>{{ $payment->checkoutIntent?->start_date?->format('M d, Y') ?? '—' }}</dd></div>
+                    @foreach($payment->paymentExceptions as $exception)
+                        <div class="flex justify-between gap-3"><dt class="text-[#6E6E73]">Payment exception</dt><dd class="font-bold">#{{ $exception->id }} · {{ $exception->label() }} ({{ $exception->status }})</dd></div>
+                    @endforeach
+                    <div class="flex justify-between gap-3"><dt class="text-[#6E6E73]">Provider facts</dt><dd>{{ $payment->providerIdentity?->isVerified() ? $payment->providerIdentity->currency . ', ' . ($payment->providerIdentity->livemode ? 'live' : 'test') . ' mode, verified' : 'not verified' }}</dd></div>
+                </dl>
+            </div>
+            @else
             
             <!-- Linked Booking Details -->
             <div class="bg-white rounded-xl border border-[#E5E5EA] p-6 space-y-4">
@@ -152,6 +173,7 @@
                     </div>
                 </div>
             </div>
+            @endif
 
         </div>
 
@@ -178,6 +200,7 @@
     </div>
 
     <!-- Balance Settlement Panel -->
+    @if($payment->booking)
     <x-side-panel show="openBalanceModal"
                   :eyebrow="'Booking ' . $payment->booking->booking_number"
                   title="Record balance payment"
@@ -224,6 +247,7 @@
             <button type="submit" form="settle-balance-form" class="btn-primary">Save payment</button>
         </x-slot:footer>
     </x-side-panel>
+    @endif
 
 </div>
 @endsection

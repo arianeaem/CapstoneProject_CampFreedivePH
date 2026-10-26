@@ -335,6 +335,12 @@
                         </button>
                     </form>
                 </div>
+                @elseif($paymentUnderReview ?? false)
+                <!-- A payment under review (Batch 3-II B1): no online changes; the team contacts the guest -->
+                <div class="p-4 rounded-xl space-y-2 bg-[#FFFBEB] border border-amber-200">
+                    <span class="font-bold text-[#1D1D1F]">Payment under review</span>
+                    <p class="text-sm text-[#6E6E73] leading-relaxed">{{ \App\Http\Controllers\ManageBookingController::PAYMENT_UNDER_REVIEW_MESSAGE }}</p>
+                </div>
                 @else
                 <!-- Reschedule Status -->
                 <div class="p-4 rounded-xl space-y-2">

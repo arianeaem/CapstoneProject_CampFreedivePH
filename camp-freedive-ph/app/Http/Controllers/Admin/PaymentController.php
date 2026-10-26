@@ -77,8 +77,9 @@ class PaymentController extends Controller
             'pending_refunds' => RefundRequest::where('status', 'pending')->count() + BookingRefund::whereIn('status', BookingRefund::OPEN_STATUSES)->count(),
         ];
         $stats['total_retained'] = round($stats['total_gross'] - $stats['total_refunded'], 2);
+        $position = FinancialTotals::position();
 
-        return view('admin.payments.index', compact('payments', 'stats'));
+        return view('admin.payments.index', compact('payments', 'stats', 'position'));
     }
 
     /**
@@ -160,7 +161,7 @@ class PaymentController extends Controller
      */
     public function show(Payment $payment): View
     {
-        $payment->load(['booking.participants', 'booking.payments', 'statusLogs.user', 'refundRequests.reviewer', 'createdBy']);
+        $payment->load(['booking.participants', 'booking.payments', 'statusLogs.user', 'refundRequests.reviewer', 'createdBy', 'checkoutIntent', 'paymentExceptions', 'providerIdentity']);
 
         return view('admin.payments.show', compact('payment'));
     }
@@ -172,6 +173,10 @@ class PaymentController extends Controller
     {
         $currentUser = Auth::user();
         $booking = $payment->booking;
+        if ($booking === null) {
+            // An unapplied checkout receipt (no place was left): there is no booking balance to settle
+            return back()->with('error', 'This payment is not applied to any booking yet (a paid checkout under a payment exception), so no balance can be recorded against it. Nothing was saved.');
+        }
 
         $validated = $request->validated();
 

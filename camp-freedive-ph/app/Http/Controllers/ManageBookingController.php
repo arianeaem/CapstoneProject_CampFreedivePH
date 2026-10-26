@@ -8,11 +8,14 @@ use App\Mail\RescheduleRequestedMail;
 use App\Models\Booking;
 use App\Models\CancellationRequest;
 use App\Models\RescheduleRequest;
+use App\Services\Booking\CapacityCoordinator;
 use App\Services\BookingPolicyEngine;
+use App\Services\Payment\PaymentExceptionService;
 use App\Services\WeatherSafetyService;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Mail;
@@ -28,9 +31,19 @@ use App\Http\Requests\ManageBooking\CancelBookingRequest;
  * - weather cancellations (storm warning / Critical Risk) get a full refund
  * - normal cancellations get a refund based on how early they cancel
  * - when rescheduling, we check the weather on the new date too
+ * - a request only changes a booking that already holds its place, and never one whose payment is under review
+ *   (Batch 3-II B1): checked again under the booking row lock, so a request can neither place a paid booking that got
+ *   no place nor get around a payment exception. Those guests are told the team will contact them about their options.
  */
 class ManageBookingController extends Controller
 {
+    /** Shown instead of request forms while a payment of the booking is held (no remedy is chosen here). */
+    public const PAYMENT_UNDER_REVIEW_MESSAGE = 'We are reviewing a payment on this booking, so it cannot be changed or cancelled online right now. '
+        . 'Our team will contact you about your options, including another date or a refund. Nothing has been changed. '
+        . 'If you would like to talk to us sooner, please contact the camp directly.';
+
+    private const CHANGED_MEANWHILE_MESSAGE = 'Your booking changed while you were sending this request, so nothing was changed. Please review your booking and try again, or contact the camp.';
+
     public function __construct(
         protected BookingPolicyEngine $policyEngine,
         protected WeatherSafetyService $weatherService
@@ -208,11 +221,42 @@ class ManageBookingController extends Controller
 
         // What the participant is allowed to do right now (reschedule/cancel)
         $policy = $this->policyEngine->evaluate($booking);
+        $paymentUnderReview = $this->paymentUnderReview($booking);
 
         // Weather for the booking date
         $currentForecast = $this->weatherService->getForecast($booking->start_date, $booking->end_date);
 
-        return view('manage.detail', compact('booking', 'policy', 'currentForecast'));
+        return view('manage.detail', compact('booking', 'policy', 'currentForecast', 'paymentUnderReview'));
+    }
+
+    /** A paid booking that got no place, or one with a held payment (unresolved payment exception or review). */
+    private function paymentUnderReview(Booking $booking): bool
+    {
+        return $booking->status === 'paid_unallocated' || app(PaymentExceptionService::class)->blockingIssue($booking) !== null;
+    }
+
+    /**
+     * Run $create with the booking row locked, only while the booking still has the status the guest saw, already takes
+     * its place (so the request status changes no capacity) and has no held payment. Returns the created request, or
+     * the error to show (nothing created or changed).
+     *
+     * @template T of RescheduleRequest|CancellationRequest
+     * @param callable(Booking): T $create
+     * @return T|string
+     */
+    private function lockedGuestRequest(Booking $booking, callable $create): RescheduleRequest|CancellationRequest|string
+    {
+        return DB::transaction(function () use ($booking, $create) {
+            $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
+            if ($this->paymentUnderReview($locked)) {
+                return self::PAYMENT_UNDER_REVIEW_MESSAGE;
+            }
+            if ($locked->status !== $booking->status || ! CapacityCoordinator::takesPlace($locked->status)) {
+                return self::CHANGED_MEANWHILE_MESSAGE;
+            }
+
+            return $create($locked);
+        });
     }
 
     /**
@@ -237,6 +281,9 @@ class ManageBookingController extends Controller
         if ($booking->status === 'pending_downpayment') {
             return back()->with('error', 'Your booking cannot be rescheduled because the required downpayment has not been paid.');
         }
+        if ($this->paymentUnderReview($booking)) {
+            return back()->with('error', self::PAYMENT_UNDER_REVIEW_MESSAGE);
+        }
 
         $policy = $this->policyEngine->evaluate($booking);
         if (!$policy['reschedule_allowed']) {
@@ -249,19 +296,24 @@ class ManageBookingController extends Controller
             return back()->with('error', 'The requested new date has a Critical Storm Warning. Please pick an alternative safe date.');
         }
 
-        $rescheduleRequest = RescheduleRequest::create([
-            'booking_id' => $booking->id,
-            'current_start_date' => $booking->start_date,
-            'current_end_date' => $booking->end_date,
-            'requested_start_date' => $validated['requested_start_date'],
-            'requested_end_date' => $validated['requested_end_date'],
-            'reason' => $validated['reason'] ?? 'Participant requested reschedule',
-            'status' => 'pending',
-        ]);
+        $rescheduleRequest = $this->lockedGuestRequest($booking, function (Booking $locked) use ($validated) {
+            $created = RescheduleRequest::create([
+                'booking_id' => $locked->id,
+                'current_start_date' => $locked->start_date,
+                'current_end_date' => $locked->end_date,
+                'requested_start_date' => $validated['requested_start_date'],
+                'requested_end_date' => $validated['requested_end_date'],
+                'reason' => $validated['reason'] ?? 'Participant requested reschedule',
+                'status' => 'pending',
+            ]);
+            $locked->update(['status' => 'reschedule_requested']);
 
-        $booking->update([
-            'status' => 'reschedule_requested',
-        ]);
+            return $created;
+        });
+        if (is_string($rescheduleRequest)) {
+            return back()->with('error', $rescheduleRequest);
+        }
+        $booking->refresh();
 
         try {
             Mail::to($booking->contact_email)->send(new RescheduleRequestedMail($booking, $rescheduleRequest));
@@ -298,6 +350,9 @@ class ManageBookingController extends Controller
         if ($booking->status === 'pending_downpayment') {
             return back()->with('error', 'Your booking cannot be cancelled because the required downpayment has not been paid.');
         }
+        if ($this->paymentUnderReview($booking)) {
+            return back()->with('error', self::PAYMENT_UNDER_REVIEW_MESSAGE);
+        }
 
         $policy = $this->policyEngine->evaluate($booking);
         if ($booking->status === 'cancelled' || $booking->status === 'cancellation_requested') {
@@ -309,18 +364,23 @@ class ManageBookingController extends Controller
 
         // calculated_refund_amount is the amount the applicable terms quote now (kept as shown); the policy version
         // says which terms (NULL = the earlier published terms). No refund is decided or paid here.
-        $cancellationRequest = CancellationRequest::create([
-            'booking_id' => $booking->id,
-            'calculated_refund_amount' => $policy['calculated_refund'],
-            'reason' => $validated['reason'] ?? 'Participant requested cancellation',
-            'force_majeure_flag' => $policy['is_force_majeure'],
-            'status' => 'pending',
-            'policy_version' => $booking->refund_policy_version,
-        ]);
+        $cancellationRequest = $this->lockedGuestRequest($booking, function (Booking $locked) use ($validated, $policy) {
+            $created = CancellationRequest::create([
+                'booking_id' => $locked->id,
+                'calculated_refund_amount' => $policy['calculated_refund'],
+                'reason' => $validated['reason'] ?? 'Participant requested cancellation',
+                'force_majeure_flag' => $policy['is_force_majeure'],
+                'status' => 'pending',
+                'policy_version' => $locked->refund_policy_version,
+            ]);
+            $locked->update(['status' => 'cancellation_requested']);
 
-        $booking->update([
-            'status' => 'cancellation_requested',
-        ]);
+            return $created;
+        });
+        if (is_string($cancellationRequest)) {
+            return back()->with('error', $cancellationRequest);
+        }
+        $booking->refresh();
 
         try {
             Mail::to($booking->contact_email)->send(new CancellationRequestedMail($booking, $cancellationRequest));

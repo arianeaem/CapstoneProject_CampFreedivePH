@@ -48,9 +48,14 @@ class DatabaseSeeder extends Seeder
         // ---------------------------------------------------------------
         // 0. Clear the tables
         // ---------------------------------------------------------------
-        if (DB::getDriverName() === 'mysql') {
-            DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        // Payments are RESTRICTed to their booking (Batch 3-II B1), so the tables are cleared with foreign keys off on
+        // every driver. Recorded provider identities and payment exceptions are permanent (SQLite cannot clear them
+        // around their triggers): reseed such a database with migrate:fresh instead.
+        if (DB::getDriverName() === 'sqlite' && collect(['provider_payment_identities', 'payment_exceptions'])
+            ->contains(fn (string $table) => Schema::hasTable($table) && DB::table($table)->exists())) {
+            throw new \RuntimeException('This database has recorded payment identities or exceptions; reseed it with migrate:fresh --seed instead. Nothing was changed.');
         }
+        Schema::disableForeignKeyConstraints();
 
         $tables = [
             'audit_logs',
@@ -86,9 +91,7 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        if (DB::getDriverName() === 'mysql') {
-            DB::statement('SET FOREIGN_KEY_CHECKS=1;');
-        }
+        Schema::enableForeignKeyConstraints();
 
         // ---------------------------------------------------------------
         // 1. Staff and coach accounts

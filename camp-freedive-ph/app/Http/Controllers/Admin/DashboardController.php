@@ -162,6 +162,7 @@ class DashboardController extends Controller
         $netRevenue = max(0, $grossRevenue - $refundsProcessed);
 
         $financials = [
+            'held' => \App\Services\Refunds\FinancialTotals::position()['held'], // received money waiting for a decision (Payment Exceptions)
             'gross_revenue' => $grossRevenue,
             'downpayment_revenue' => $downpaymentRevenue,
             'balance_revenue' => $balanceRevenue,

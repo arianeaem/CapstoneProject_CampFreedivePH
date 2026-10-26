@@ -3,6 +3,7 @@
 namespace App\Services\Payment;
 
 use App\Enums\BookingStatus;
+use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
 use App\Models\PaymentStatusLog;
@@ -33,13 +34,20 @@ class RefundService
         return $this->cases->openFromLegacyRequest($refundRequest, $operator);
     }
 
-    /** Turn the request down: the booking goes back to confirmed only if it was waiting on this cancellation. */
+    /**
+     * Turn the request down: the booking goes back to confirmed only if it was waiting on this cancellation, and never
+     * while one of its payments is held (Batch 3-II B1: refused, nothing changed). The booking row is locked before the
+     * request, the same order as the other request decisions.
+     */
     public function reject(RefundRequest $refundRequest, User $operator, string $notes): void
     {
         DB::transaction(function () use ($refundRequest, $operator, $notes) {
+            $booking = Booking::whereKey($refundRequest->booking_id)->lockForUpdate()->firstOrFail();
+            if ($booking->status === BookingStatus::CancellationRequested->value) {
+                app(PaymentExceptionService::class)->assertNotHeld($booking, 'returned to confirmed by rejecting this refund request');
+            }
             $request = $this->claim($refundRequest);
             $this->guard->assertMayReject($request, $operator, $notes);
-            $booking = $request->booking;
 
             $request->update(['status' => 'rejected', 'notes' => $notes, 'reviewed_by' => $operator->id, 'reviewed_at' => now()]);
 

@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\Payment;
 use App\Models\RefundAttempt;
+use App\Services\Payment\PaymentExceptionService;
 use Illuminate\Support\Collection;
 
 /**
@@ -18,18 +19,23 @@ use Illuminate\Support\Collection;
  *   reserved  = ledger refunds not finished yet (prepared, submitting, provider pending, unknown, offline awaiting):
  *               not refunded, but held so the same money is never submitted twice
  *   refundable per payment = paid - refunded - reserved (never negative; 0 for forfeited payments)
+ *   held      = refundable money of receipts held by an unresolved payment exception or review flag (Batch 3-II B1):
+ *               still part of every figure above, but never spent by an ordinary booking refund
+ *   spendable = refundable - held: what allocate() may use. When a case's policy cap needs held money, approval is
+ *               refused with the reason (the entitlement is never quietly reduced); it waits for the exception.
  */
 class RefundLedger
 {
     /**
-     * @return array{payments: Collection, paid: int, refunded: int, reserved: int, retained: int, refundable: int, reconciliation_needed: bool}
+     * @return array{payments: Collection, paid: int, refunded: int, reserved: int, retained: int, refundable: int, held: int, spendable: int, held_by: array<int, string>, reconciliation_needed: bool}
      */
     public function position(Booking $booking): array
     {
         $payments = $booking->payments()->whereIn('status', Payment::RECEIPT_STATUSES)->orderBy('id')->get();
         $attempts = RefundAttempt::whereIn('payment_id', $payments->pluck('id'))->get()->groupBy('payment_id');
+        $heldBy = PaymentExceptionService::held($payments);
 
-        $rows = $payments->map(function (Payment $payment) use ($attempts) {
+        $rows = $payments->map(function (Payment $payment) use ($attempts, $heldBy) {
             $own = $attempts->get($payment->id, collect());
             $paid = $payment->amountCentavos();
             $refunded = $payment->legacyRefundedCentavos() + (int) $own->whereIn('status', RefundAttempt::COMPLETED)->sum('amount_centavos');
@@ -41,6 +47,7 @@ class RefundLedger
                 'refunded' => $refunded,
                 'reserved' => $reserved,
                 'refundable' => in_array($payment->status, Payment::REFUNDABLE_STATUSES, true) ? max(0, $paid - $refunded - $reserved) : 0,
+                'held' => $heldBy[$payment->id] ?? null,
                 'over_refunded' => $refunded + $reserved > $paid,
             ];
         });
@@ -53,6 +60,8 @@ class RefundLedger
 
         $paid = (int) $rows->sum('paid');
         $refunded = (int) $rows->sum('refunded');
+        $refundable = (int) $rows->sum('refundable');
+        $held = (int) $rows->whereNotNull('held')->sum('refundable');
 
         return [
             'payments' => $rows,
@@ -60,7 +69,10 @@ class RefundLedger
             'refunded' => $refunded,
             'reserved' => (int) $rows->sum('reserved'),
             'retained' => $paid - $refunded,
-            'refundable' => (int) $rows->sum('refundable'),
+            'refundable' => $refundable,
+            'held' => $held,
+            'spendable' => $refundable - $held,
+            'held_by' => $rows->whereNotNull('held')->mapWithKeys(fn ($row) => [$row['payment']->id => $row['held']])->all(),
             'reconciliation_needed' => $reconcile,
         ];
     }
@@ -76,11 +88,35 @@ class RefundLedger
      *  - booking made under the earlier published terms: 0 until staff decide; "honor previous terms" allows up to
      *    the amount quoted then (never more than what is still refundable).
      *
+     * Receipts held by an unresolved payment exception are never spent here: when the cap needs held money, the case is
+     * blocked with the held amount (nothing is approved, and the cap itself is not reduced).
+     *
      * @return array{cap: int, balance_unresolved: bool, blocked: ?string}
      */
     public function entitlement(BookingRefund $case): array
     {
         $position = $this->position($case->booking);
+        $allowed = $this->policyEntitlement($case, $position);
+        if ($allowed['blocked'] === null && $allowed['cap'] > $position['spendable']) {
+            return ['cap' => 0, 'balance_unresolved' => $allowed['balance_unresolved'], 'blocked' => self::heldMessage($position, $allowed['cap'])];
+        }
+
+        return $allowed;
+    }
+
+    /** Why money that would otherwise be refundable cannot be used yet. */
+    public static function heldMessage(array $position, int $needed): string
+    {
+        $why = implode(', ', array_unique(array_values($position['held_by'])));
+
+        return '₱' . number_format(max(0, $needed - $position['spendable']) / 100, 2) . ' of this refund depends on received money that is held ('
+            . str_replace('review', 'a payment awaiting review', $why) . '). It stays held until that payment is resolved; nothing was approved or paid. '
+            . 'Undisputed money available now: ₱' . number_format($position['spendable'] / 100, 2) . '.';
+    }
+
+    /** The client-confirmed policy cap for this case, from the booking's position (held money included). */
+    private function policyEntitlement(BookingRefund $case, array $position): array
+    {
         $refundable = $position['refundable'];
         $confirmed = $case->reason_confirmed_by !== null;
 
@@ -135,7 +171,8 @@ class RefundLedger
 
     /**
      * Split $amount across the booking's refundable payments, oldest first, never more than each payment's
-     * refundable amount. Returns [payment, centavos] pairs, or null when there is not enough left.
+     * refundable amount and never from a held receipt. Returns [payment, centavos] pairs, or null when there is not
+     * enough undisputed money left.
      *
      * @return list<array{0: Payment, 1: int}>|null
      */
@@ -146,7 +183,7 @@ class RefundLedger
             if ($amount <= 0) {
                 break;
             }
-            $take = min($amount, $row['refundable']);
+            $take = $row['held'] === null ? min($amount, $row['refundable']) : 0;
             if ($take > 0) {
                 $parts[] = [$row['payment'], $take];
                 $amount -= $take;

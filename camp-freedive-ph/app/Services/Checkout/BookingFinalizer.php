@@ -8,8 +8,14 @@ use App\Models\Booking;
 use App\Models\BookingStatusLog;
 use App\Models\CheckoutIntent;
 use App\Models\Payment;
+use App\Models\PaymentException;
+use App\Models\ProviderPaymentIdentity;
 use App\Services\AuditLogger;
 use App\Services\BatchManagementService;
+use App\Services\Payment\PaymentExceptionService;
+use App\Services\Payment\ProviderPayment;
+use App\Services\Payment\ReceiptOutcome;
+use App\Services\Payment\ReceiptRecorder;
 use App\Services\SlotReservationService;
 use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -19,6 +25,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -33,6 +40,12 @@ use Throwable;
  *   Phase B (own transaction): lock the intent row again, re-check payment identity and capacity
  *           (excluding its own hold), then either create batch/booking/participants/adjustments/payment
  *           and mark the intent `finalized`, or mark it `paid_unallocated`. All or nothing.
+ *           Either way the payment becomes exactly one receipt through ReceiptRecorder (Batch 3-II B1): of the
+ *           new booking, or, with no place left, an unapplied receipt of the intent with a payment exception
+ *           (kept and held for staff; never allocated, refunded or closed here).
+ *
+ * A replay for a finalized or paid_unallocated intent is answered only after its recorded receipt matches the verified
+ * payment (amount, currency, mode, owner); a mismatch is recorded for review and changes nothing.
  *
  * Payment review never shortens or extends a hold: a pending intent under review keeps its original
  * hold (it still counts toward capacity until then), and a paid intent is never moved to review by an
@@ -64,6 +77,8 @@ class BookingFinalizer
     public function __construct(
         protected SlotReservationService $slots,
         protected BatchManagementService $batches,
+        protected ReceiptRecorder $receipts,
+        protected PaymentExceptionService $exceptions,
     ) {
     }
 
@@ -167,13 +182,17 @@ class BookingFinalizer
 
                 switch ($intent->status) {
                     case CheckoutIntent::STATUS_FINALIZED:
-                        return $samePayment
-                            ? FinalizationResult::alreadyFinalized($intent->booking)
-                            : $this->paymentConflict($intent, 'different_payment_for_finalized_intent', $payment, $source);
+                        if (! $samePayment) {
+                            return $this->paymentConflict($intent, 'different_payment_for_finalized_intent', $payment, $source);
+                        }
+
+                        return $this->replayConflict($intent, $payment, $source) ?? FinalizationResult::alreadyFinalized($intent->booking);
                     case CheckoutIntent::STATUS_PAID_UNALLOCATED:
-                        return $samePayment
-                            ? FinalizationResult::paidUnallocated($intent->unallocated_reason ?? 'capacity_unavailable')
-                            : $this->paymentConflict($intent, 'different_payment_for_unallocated_intent', $payment, $source);
+                        if (! $samePayment) {
+                            return $this->paymentConflict($intent, 'different_payment_for_unallocated_intent', $payment, $source);
+                        }
+
+                        return $this->replayConflict($intent, $payment, $source) ?? FinalizationResult::paidUnallocated($intent->unallocated_reason ?? 'capacity_unavailable');
                     case CheckoutIntent::STATUS_PAID:
                         // Retry after Phase B did not complete: continue with the same payment only
                         return $samePayment ? null : $this->paymentConflict($intent, 'different_payment_for_paid_intent', $payment, $source);
@@ -190,7 +209,7 @@ class BookingFinalizer
                 if (CheckoutIntent::where('paymongo_payment_id', $payment->paymentId)->whereKeyNot($intent->id)->exists()) {
                     return $this->paymentConflict($intent, 'payment_id_used_by_other_intent', $payment, $source);
                 }
-                if (Payment::where('paymongo_payment_id', $payment->paymentId)->exists()) {
+                if ($this->providerPaymentKnown($payment)) {
                     return $this->paymentConflict($intent, 'payment_id_used_by_payment_record', $payment, $source);
                 }
 
@@ -262,7 +281,7 @@ class BookingFinalizer
                 if ($intent->paymongo_payment_id !== $payment->paymentId) {
                     return [$this->paymentConflict($intent, 'different_payment_for_paid_intent', $payment, $source), null];
                 }
-                if (Payment::where('paymongo_payment_id', $payment->paymentId)->exists()) {
+                if ($this->providerPaymentKnown($payment)) {
                     // Conclusive conflict (another payment record already has this id): review, evidence and hold kept
                     return [$this->paymentConflict($intent, 'payment_id_used_by_payment_record', $payment, $source), null];
                 }
@@ -274,9 +293,13 @@ class BookingFinalizer
                         'unallocated_reason' => 'capacity_unavailable',
                         'hold_expires_at' => now(),
                     ]);
+                    // The money is kept as the intent's own receipt (no booking) and held under a payment exception
+                    $receipt = $this->recordReceipt($intent, $payment, null, $source);
+                    $exception = $this->exceptions->open(PaymentException::KIND_INTENT_UNALLOCATED, $receipt, "checkout:{$source}",
+                        ['reason' => 'capacity_unavailable', 'checkout_reference' => $intent->reference, 'start_date' => $date]);
                     $this->slots->assertLockStillHeld($lock);
                     $intent->save();
-                    AuditLogger::log('CHECKOUT_PAID_UNALLOCATED', "Checkout {$intent->reference} was paid but no capacity was left for {$date}; no booking created. Needs staff resolution.", null, 'Checkout finalizer');
+                    AuditLogger::log('CHECKOUT_PAID_UNALLOCATED', "Checkout {$intent->reference} was paid but no capacity was left for {$date}; no booking created. The payment is kept as receipt #{$receipt->id} under payment exception #{$exception->id}. Needs staff resolution.", null, 'Checkout finalizer');
 
                     return [FinalizationResult::paidUnallocated('capacity_unavailable'), null];
                 }
@@ -311,22 +334,8 @@ class BookingFinalizer
                     ]);
                 }
 
-                // PayMongo amounts are centavos; booking and payment amounts are pesos
+                $this->recordReceipt($intent, $payment, $booking, $source);
                 $paidPesos = round($payment->amountCentavos / 100, 2);
-                $feePesos = $payment->feeCentavos !== null ? round($payment->feeCentavos / 100, 2) : 0.0;
-                Payment::create([
-                    'booking_id' => $booking->id,
-                    'payment_method' => $payment->paymentMethod ?? 'paymongo',
-                    'transaction_id' => 'PAY-' . strtoupper(Str::random(10)),
-                    'paymongo_payment_id' => $payment->paymentId,
-                    'paymongo_resource_id' => $payment->checkoutSessionId,
-                    'amount' => $paidPesos,
-                    'fee_amount' => $feePesos,
-                    'net_amount' => round($paidPesos - $feePesos, 2),
-                    'payment_type' => 'downpayment',
-                    'status' => 'paid',
-                    'paid_at' => $payment->paidAt ?? $payment->verifiedAt,
-                ]);
 
                 BookingStatusLog::create([
                     'booking_id' => $booking->id,
@@ -359,6 +368,56 @@ class BookingFinalizer
 
             return [FinalizationResult::retryable('booking_creation_failed'), null];
         }
+    }
+
+    /**
+     * The verified payment as exactly one receipt of this intent (and its new booking, if any). Anything but a new
+     * recording (another worker or record already has this payment id) rolls Phase B back; the retry then finds the
+     * conflict in Phase A and records it for review.
+     */
+    private function recordReceipt(CheckoutIntent $intent, VerifiedPayment $payment, ?Booking $booking, string $source): Payment
+    {
+        // PayMongo amounts are centavos; booking and payment amounts are pesos
+        $paidPesos = round($payment->amountCentavos / 100, 2);
+        $feePesos = $payment->feeCentavos !== null ? round($payment->feeCentavos / 100, 2) : 0.0;
+        $outcome = $this->receipts->record(ProviderPayment::fromVerified($payment), $intent->id, $booking?->id, "checkout:{$source}", fn () => Payment::create([
+            'booking_id' => $booking?->id,
+            'checkout_intent_id' => $intent->id,
+            'payment_method' => $payment->paymentMethod ?? 'paymongo',
+            'transaction_id' => 'PAY-' . strtoupper(Str::random(10)),
+            'paymongo_payment_id' => $payment->paymentId,
+            'paymongo_resource_id' => $payment->checkoutSessionId,
+            'amount' => $paidPesos,
+            'fee_amount' => $feePesos,
+            'net_amount' => round($paidPesos - $feePesos, 2),
+            'payment_type' => 'downpayment',
+            'status' => 'paid',
+            'paid_at' => $payment->paidAt ?? $payment->verifiedAt,
+        ]));
+        if ($outcome->status !== ReceiptOutcome::RECORDED) {
+            throw new RuntimeException("The verified payment could not be recorded as this checkout's receipt ({$outcome->describe()}).");
+        }
+
+        return $outcome->payment;
+    }
+
+    /** A payment record or a provider identity already has this payment id. */
+    private function providerPaymentKnown(VerifiedPayment $payment): bool
+    {
+        return Payment::where('paymongo_payment_id', $payment->paymentId)->exists()
+            || ProviderPaymentIdentity::where('provider', ProviderPaymentIdentity::PROVIDER_PAYMONGO)->where('provider_payment_id', $payment->paymentId)->exists();
+    }
+
+    /**
+     * A replay for a finalized or paid_unallocated intent: its recorded receipt must match the verified payment.
+     * Returns a review result on a conflict (status unchanged), or null to answer as before. An intent from before
+     * receipts were recorded this way (no receipt) is left for the separately approved backfill.
+     */
+    private function replayConflict(CheckoutIntent $intent, VerifiedPayment $payment, string $source): ?FinalizationResult
+    {
+        $seen = $this->receipts->inspect(ProviderPayment::fromVerified($payment), $intent->id, $intent->booking_id, "checkout:{$source}");
+
+        return $seen->isConflict() ? $this->paymentConflict($intent, "receipt_{$seen->status}", $payment, $source) : null;
     }
 
     /** The official booking, with a new booking number and PIN (generated only here). */

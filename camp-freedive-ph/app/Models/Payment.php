@@ -5,15 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * A payment for a booking (downpayment or balance).
  * Has the PayMongo ids and can be refunded, partly refunded or forfeited (no-show).
+ * A verified checkout payment that could not be given a place is a receipt of its checkout intent with no booking
+ * (unapplied); it is never moved to another booking (database trigger) and gets a payment exception.
  *
  * @property int $id
- * @property int $booking_id
+ * @property ?int $booking_id null only for an unapplied checkout receipt
+ * @property ?int $checkout_intent_id
  * @property string $payment_method gcash, maya, card, bpi_bank_transfer, cash
  * @property string $transaction_id
  * @property string $paymongo_payment_id
@@ -41,6 +45,7 @@ class Payment extends Model
 
     protected $fillable = [
         'booking_id',
+        'checkout_intent_id',
         'payment_method',
         'transaction_id',
         'paymongo_payment_id',
@@ -90,9 +95,31 @@ class Payment extends Model
         return $query->whereNotNull('review_reason')->whereNull('review_resolved_at');
     }
 
+    /** Receipts with no booking yet (a paid checkout that could not be given a place). */
+    public function scopeUnapplied($query)
+    {
+        return $query->whereNull('booking_id');
+    }
+
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
+    }
+
+    public function checkoutIntent(): BelongsTo
+    {
+        return $this->belongsTo(CheckoutIntent::class);
+    }
+
+    public function providerIdentity(): HasOne
+    {
+        return $this->hasOne(ProviderPaymentIdentity::class);
+    }
+
+    /** The payment exception this receipt belongs to, if any (at most one). */
+    public function paymentExceptions(): BelongsToMany
+    {
+        return $this->belongsToMany(PaymentException::class, 'payment_exception_receipts');
     }
 
     public function createdBy(): BelongsTo

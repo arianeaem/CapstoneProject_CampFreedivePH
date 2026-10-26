@@ -382,7 +382,12 @@ class BookingLifecycleIntegrityTest extends TestCase
         $this->assertSame(['cancellation_requested', 'confirmed', 'confirmed'], [$requested->fresh()->status, $future->fresh()->status, $paid->fresh()->status]);
     }
 
-    public function test_staff_camp_cancellation_opens_a_refund_case_and_a_placed_paid_unallocated_booking_resolves_its_review(): void
+    /**
+     * Batch 3-II B1 changed the second half: a paid booking without a place whose payment is still under review is no
+     * longer placed by a staff status change (it waits for the guest's choice and staff verification, B2). The review
+     * stays unresolved and nothing changes.
+     */
+    public function test_staff_camp_cancellation_opens_a_refund_case_and_a_held_paid_unallocated_booking_is_not_placed_by_staff(): void
     {
         $paid = $this->pax(2);
         $this->receipt($paid, 2000);
@@ -396,9 +401,10 @@ class BookingLifecycleIntegrityTest extends TestCase
         $this->patch("/admin/bookings/{$paid->id}/status", ['status' => 'cancelled_by_camp', 'note' => 'Boat engine failure'])->assertSessionHas('success');
         $this->assertSame([BookingRefund::AWAITING_STAFF_REVIEW, 'unknown'], [BookingRefund::where('booking_id', $paid->id)->value('status'), BookingRefund::where('booking_id', $paid->id)->value('reason_category')]);
 
-        $this->patch("/admin/bookings/{$waiting->id}/status", ['status' => 'confirmed', 'note' => 'A place opened up'])->assertSessionHas('success');
-        $this->assertSame('confirmed', $waiting->fresh()->status);
-        $this->assertSame(0, Payment::awaitingReview()->where('booking_id', $waiting->id)->count(), 'review resolved by the placement');
+        $this->patch("/admin/bookings/{$waiting->id}/status", ['status' => 'confirmed', 'note' => 'A place opened up'])
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'awaiting review') && str_contains($m, "guest's choice"));
+        $this->assertSame('paid_unallocated', $waiting->fresh()->status);
+        $this->assertSame(1, Payment::awaitingReview()->where('booking_id', $waiting->id)->count(), 'the review stays open');
     }
 
     public function test_L_bookings_never_join_a_batch_of_another_date(): void

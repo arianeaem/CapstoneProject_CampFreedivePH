@@ -80,9 +80,21 @@
     @if(!empty($v['review_history']))
         <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-2xs">
             <h2 class="font-bold text-base mb-3">Review events</h2>
+            <p class="text-xs text-[#6E6E73] mb-2">Payment-review evidence, as PayMongo reported it during verification. It is not a recorded receipt, is not counted as cash, and nothing here moves money.</p>
             <ul class="space-y-1">
-                @foreach($v['review_history'] as $event)
-                    <li><span class="font-semibold">{{ $event['reason'] ?? 'review' }}</span> <span class="text-[#6E6E73]">via {{ $event['source'] ?? '—' }}{{ isset($event['payment_id']) ? ', payment ' . $event['payment_id'] : '' }}{{ isset($event['recorded_at']) ? ', ' . \Carbon\Carbon::parse($event['recorded_at'])->setTimezone('Asia/Manila')->format('M d, Y g:i A') : '' }}</span></li>
+                @foreach(is_array($v['review_history']) ? $v['review_history'] : [] as $event)
+                    @continue(! is_array($event))
+                    @php
+                        $d = is_array($event['details'] ?? null) ? $event['details'] : [];
+                        $actual = is_int($d['actual_centavos'] ?? null) ? $d['actual_centavos'] : null;
+                        $expected = is_int($d['expected_centavos'] ?? null) ? $d['expected_centavos'] : null;
+                        $currency = is_string($d['actual_currency'] ?? null) ? $d['actual_currency'] : null;
+                    @endphp
+                    <li><span class="font-semibold">{{ is_string($event['reason'] ?? null) ? $event['reason'] : 'review' }}</span> <span class="text-[#6E6E73]">via {{ is_string($event['source'] ?? null) ? $event['source'] : '—' }}{{ is_string($event['payment_id'] ?? null) ? ', payment ' . $event['payment_id'] : '' }}{{ is_string($event['recorded_at'] ?? null) ? ', ' . \Carbon\Carbon::parse($event['recorded_at'])->setTimezone('Asia/Manila')->format('M d, Y g:i A') : '' }}{{ is_int($event['occurrences'] ?? null) && $event['occurrences'] > 1 ? ' (seen ' . $event['occurrences'] . ' times)' : '' }}</span>
+                        @if($actual !== null || $currency !== null)
+                            <span class="block text-xs">PayMongo reported: {{ $actual !== null ? '₱' . number_format($actual / 100, 2) : 'amount not recorded' }}{{ $expected !== null ? ' (expected ₱' . number_format($expected / 100, 2) . ')' : '' }}{{ $currency !== null ? ', currency ' . $currency : '' }}</span>
+                        @endif
+                    </li>
                 @endforeach
             </ul>
         </div>

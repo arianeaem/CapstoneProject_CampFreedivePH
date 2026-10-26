@@ -18,6 +18,7 @@ use App\Services\BatchManagementService;
 use App\Services\BookingPolicyEngine;
 use App\Services\Booking\BookingTransitionService;
 use App\Services\CoachNotificationService;
+use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use App\Services\Refunds\RefundGuard;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +32,12 @@ use RuntimeException;
  * Staff decisions on participants' reschedule and cancellation requests.
  * Each decision updates the booking and request together, writes the status log,
  * tells the affected coaches and emails the participant.
+ *
+ * Held payments (Batch 3-II B1): a decision that would leave the booking confirmed (approving a reschedule, rejecting
+ * either request) is refused while a payment of the booking is held (unresolved payment exception or review). It is
+ * checked with the booking row locked (booking first, then the request), the lock under which a late payment opens its
+ * exception, so either order is safe. Approving a cancellation stays possible (the guest's own request; the booking
+ * stops taking a place, and held money is still never spent by the refund case).
  */
 class BookingRequestService
 {
@@ -40,6 +47,7 @@ class BookingRequestService
         protected RefundCaseService $cases,
         protected CoachNotificationService $coachNotifier,
         protected RefundGuard $guard,
+        protected PaymentExceptionService $exceptions,
     ) {}
 
     /**
@@ -64,6 +72,7 @@ class BookingRequestService
             before: function (Booking $locked) use ($rescheduleRequest) {
                 // moveDates holds the booking row lock here (booking first, then the request: one lock order everywhere)
                 $this->assertAwaiting($locked, BookingStatus::RescheduleRequested);
+                $this->exceptions->assertNotHeld($locked, 'confirmed on new dates');
                 $this->claimPending($rescheduleRequest);
                 app(BookingTransitionService::class)->assertNoUnresolvedRefund($locked);
             },
@@ -100,7 +109,9 @@ class BookingRequestService
 
         DB::transaction(function () use ($rescheduleRequest, $booking, $reason, $operator) {
             // Back to confirmed only while the booking is still waiting on this request (never reactivates a cancelled one)
+            // and has no held payment (never confirmed around a payment exception)
             $locked = $this->lockAwaiting($booking, BookingStatus::RescheduleRequested);
+            $this->exceptions->assertNotHeld($locked, 'returned to confirmed by rejecting this request');
             $this->claimPending($rescheduleRequest);
             $locked->update(['status' => BookingStatus::Confirmed->value]);
 
@@ -224,6 +235,7 @@ class BookingRequestService
 
         DB::transaction(function () use ($cancellationRequest, $booking, $reason, $operator, $adminNotes) {
             $locked = $this->lockAwaiting($booking, BookingStatus::CancellationRequested);
+            $this->exceptions->assertNotHeld($locked, 'returned to confirmed by rejecting this request');
             $this->claimPending($cancellationRequest);
             $this->guard->assertMayReject($cancellationRequest, $operator, $adminNotes);
             $locked->update(['status' => BookingStatus::Confirmed->value]);

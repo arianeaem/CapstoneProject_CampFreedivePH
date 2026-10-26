@@ -15,6 +15,7 @@ use App\Models\ManualOverride;
 use App\Models\BookingRefund;
 use App\Models\NotificationLog;
 use App\Models\User;
+use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use App\Services\ExternalApi\ExternalApiClient;
 use Carbon\Carbon;
@@ -759,8 +760,16 @@ class WeatherForecastService
                     || in_array($locked->status, ['cancelled', 'cancelled_by_guest', 'cancelled_by_camp', 'completed', 'no_show'], true)) {
                     return null;
                 }
+                // A paid booking without a place whose money is held waits for the guest's choice: left unchanged, noted
+                $exceptions = app(PaymentExceptionService::class);
+                if ($locked->status === 'paid_unallocated' && ($issue = $exceptions->blockingIssue($locked)) !== null) {
+                    $exceptions->noteCampCancellation($locked, $batch, $operator, true, $issue);
+
+                    return null;
+                }
                 $oldStatus = $locked->status;
                 $locked->update(['status' => 'cancelled_by_camp']);
+                $exceptions->noteCampCancellation($locked, $batch, $operator, false);
                 app(RefundCaseService::class)->openForCampCancellation($locked, BookingRefund::REASON_WEATHER_PRE_DIVE, $activityStarted, $operator, "Weather cancellation of batch {$batch->batch_code}: {$cancellationReason}");
 
                 return [$locked, $oldStatus];

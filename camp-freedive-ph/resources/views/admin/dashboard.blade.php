@@ -311,6 +311,12 @@
                         <dt class="text-[#6E6E73]">Money collected</dt>
                         <dd class="font-bold text-[#780000]">{{ $peso($financials['gross_revenue']) }}</dd>
                     </div>
+                    @if(($financials['held'] ?? 0) > 0)
+                        <div class="flex items-center justify-between py-2.5">
+                            <dt class="text-[#6E6E73]">Of which held for a decision</dt>
+                            <dd class="font-bold text-[#B45309]">{{ $peso($financials['held']) }}</dd>
+                        </div>
+                    @endif
                     <div class="flex items-center justify-between py-2.5">
                         <dt class="text-[#6E6E73]">Still to be paid</dt>
                         <dd class="font-bold text-[#B45309]">{{ $peso($financials['outstanding_balances']) }}</dd>

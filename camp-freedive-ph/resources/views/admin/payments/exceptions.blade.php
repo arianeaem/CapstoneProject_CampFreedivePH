@@ -20,7 +20,38 @@
 <div class="space-y-6 text-sm">
     <div>
         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1D1D1F] tracking-tight">Payment Exceptions</h1>
-        <p class="text-[#6E6E73] mt-1">Money that was received but could not simply be applied. It is kept as received and counted as paid; nothing here moves money. A paid booking waiting for a place is confirmed from its booking page (Change status → Confirmed) once a place is free; refunds go through Refund Cases.</p>
+        <p class="text-[#6E6E73] mt-1">Money that was received but could not simply be applied. It is kept as received and counted as cash received, and it is held: no ordinary refund spends it, and the booking cannot be confirmed, moved or restored by a status change while its exception is open. It waits for the guest's own choice (another date or a refund) and staff verification. Nothing here moves money.</p>
+    </div>
+
+    <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-2xs">
+        <h2 class="font-bold text-base mb-3">Payment exceptions ({{ $exceptions->where('status', 'open')->count() }} open)</h2>
+        <div class="overflow-x-auto">
+        <table class="w-full text-left">
+            <thead class="text-[#6E6E73] text-xs uppercase tracking-wider"><tr><th class="py-1">#</th><th class="py-1">Kind</th><th class="py-1">Booking / checkout</th><th class="py-1 text-right">Amount</th><th class="py-1">PayMongo payment</th><th class="py-1">Status</th><th class="py-1">Opened</th><th class="py-1">Latest event</th></tr></thead>
+            <tbody class="divide-y divide-[#E5E5EA]">
+                @forelse($exceptions as $exception)
+                    <tr>
+                        <td class="py-1.5">#{{ $exception->id }}</td>
+                        <td class="py-1.5">{{ $exception->label() }}</td>
+                        <td class="py-1.5">
+                            @if($exception->booking)
+                                <a class="font-semibold text-[#780000]" href="{{ portal_route('bookings.show', $exception->booking) }}">{{ $exception->booking->booking_number }}</a> ({{ str_replace('_', ' ', $exception->booking->status) }})
+                            @else
+                                Checkout {{ $exception->checkoutIntent?->reference }} · no booking{{ $exception->checkoutIntent?->start_date ? ' · asked for ' . $exception->checkoutIntent->start_date->format('M d, Y') : '' }}
+                            @endif
+                        </td>
+                        <td class="py-1.5 text-right">{{ $exception->currency ?? '' }} ₱{{ number_format($exception->amount_centavos / 100, 2) }}</td>
+                        <td class="py-1.5 font-mono text-xs">@if($exception->primaryPayment)<a href="{{ portal_route('payments.show', $exception->primaryPayment) }}">{{ $exception->provider_payment_id ?? ('#' . $exception->primary_payment_id) }}</a>@endif</td>
+                        <td class="py-1.5">{{ $exception->status }}</td>
+                        <td class="py-1.5">{{ $exception->opened_at?->setTimezone('Asia/Manila')->format('M d, Y g:i A') }}</td>
+                        <td class="py-1.5">{{ str_replace('_', ' ', (string) $exception->events->last()?->type) }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="8" class="py-2 text-[#6E6E73]">None.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+        </div>
     </div>
 
     <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-2xs">

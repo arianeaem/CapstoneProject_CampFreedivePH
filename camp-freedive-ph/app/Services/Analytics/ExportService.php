@@ -180,7 +180,7 @@ class ExportService
                 ['Date', 'Booking', 'Booking contact', 'Package', 'Payment', 'Amount', 'Refunded', 'Method', 'Status'],
                 $payments->map(fn ($p) => [
                     $p->created_at->copy()->setTimezone('Asia/Manila')->format('M d, Y g:i A'),
-                    $p->booking?->booking_number ?? '#' . $p->booking_id,
+                    $p->booking?->booking_number ?? ($p->booking_id === null ? 'Not applied (checkout #' . $p->checkout_intent_id . ')' : '#' . $p->booking_id),
                     $p->booking?->contact_name ?? '',
                     ucfirst($p->booking?->class_type ?? ''),
                     match ($p->payment_type) { 'downpayment' => 'Deposit', 'full' => 'Paid in full', 'balance_settlement' => 'Balance', default => ucwords(str_replace('_', ' ', (string) $p->payment_type)) },

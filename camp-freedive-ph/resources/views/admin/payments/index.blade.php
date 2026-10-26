@@ -58,6 +58,24 @@
         </div>
     </div>
 
+    @isset($position)
+    <!-- Where received money stands (FinancialTotals::position): operational terms, each receipt counted once -->
+    <div class="bg-white rounded-xl border border-[#E5E5EA] p-2.5 sm:p-4 shadow-2xs text-sm">
+        <h2 class="font-bold text-[#1D1D1F] mb-2">Where received money stands</h2>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1.5">
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Cash received</dt><dd class="font-bold">₱{{ number_format($position['cash_received'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Applied to bookings</dt><dd class="font-bold">₱{{ number_format($position['applied'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Not applied to a booking ({{ $position['unapplied_count'] }})</dt><dd class="font-bold">₱{{ number_format($position['unapplied'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Held for a decision ({{ $position['held_count'] }})</dt><dd class="font-bold text-[#B45309]">₱{{ number_format($position['held'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Retained, decision open</dt><dd class="font-bold text-[#B45309]">₱{{ number_format($position['retained_unresolved'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Refunds completed</dt><dd class="font-bold">₱{{ number_format($position['completed_refunds'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Refunds in progress</dt><dd class="font-bold">₱{{ number_format($position['reserved_refunds'], 2) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-[#6E6E73]">Currency not verified ({{ $position['currency_unverified_count'] }})</dt><dd class="font-bold">₱{{ number_format($position['currency_unverified'], 2) }}</dd></div>
+        </dl>
+        <p class="text-[#8E8E93] mt-2">Held and not-applied money is still with the camp while a decision about it is open: it is not income and not refunded. See <a class="font-semibold text-[#780000]" href="{{ portal_route('payments.exceptions') }}">Payment Exceptions</a>.</p>
+    </div>
+    @endisset
+
     <!-- Payments table -->
     <div class="bg-white rounded-xl border border-[#E5E5EA] overflow-hidden shadow-2xs">
         

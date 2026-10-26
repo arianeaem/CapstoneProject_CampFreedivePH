@@ -51,9 +51,13 @@ class RefundExecutor
                 return 0;
             }
 
+            // Held receipts (unresolved payment exception or review) are never spent here, even for an approved case
             $parts = $this->ledger->allocate($locked->booking, $missing);
             if ($parts === null) {
-                throw new RuntimeException('Not enough refundable money is left on this booking for the approved amount.');
+                $position = $this->ledger->position($locked->booking);
+                throw new RuntimeException($position['held'] > 0 && $position['spendable'] < $missing
+                    ? RefundLedger::heldMessage($position, $missing)
+                    : 'Not enough refundable money is left on this booking for the approved amount.');
             }
 
             foreach ($parts as [$payment, $centavos]) {

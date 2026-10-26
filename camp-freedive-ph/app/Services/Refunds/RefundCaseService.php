@@ -5,6 +5,7 @@ namespace App\Services\Refunds;
 use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\CancellationRequest;
+use App\Models\Payment;
 use App\Models\RefundAttempt;
 use App\Models\RefundRequest;
 use App\Models\User;
@@ -158,6 +159,9 @@ class RefundCaseService
     public function approve(BookingRefund $case, int $centavos, User $operator, string $note): BookingRefund
     {
         return $this->step($case, $operator, 'REFUND_APPROVED', function (BookingRefund $c) use ($centavos, $operator, $note) {
+            // Same lock order as RefundExecutor (case, then the booking's payments): the cap and any held receipts are
+            // read with no payment exception or payout changing them meanwhile
+            Payment::where('booking_id', $c->booking_id)->lockForUpdate()->get();
             $allowed = $this->ledger->entitlement($c);
             if ($allowed['blocked'] !== null) {
                 throw new RuntimeException($allowed['blocked']);
