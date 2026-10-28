@@ -122,18 +122,22 @@ class BookingPolicyEngine
         $hasPendingReschedule = ($booking->status === 'reschedule_requested');
         $hasPendingCancellation = ($booking->status === 'cancellation_requested');
         $isCancelled = in_array($booking->status, ['cancelled', 'cancelled_by_camp', 'cancelled_by_guest']);
+        // B5: one guest request at a time (a pending reschedule and a pending cancellation never coexist), and none once
+        // the booking has taken place
+        $pendingMessage = $hasPendingReschedule
+            ? 'You already have a pending reschedule request under review by the camp. You can send another request once it is decided.'
+            : ($hasPendingCancellation ? 'A cancellation request is currently under review by the camp. You can send another request once it is decided.' : null);
+        $closedMessage = $isCancelled ? 'This booking is already cancelled.'
+            : (in_array($booking->status, ['completed', 'no_show'], true) ? 'This booking has already taken place.' : null);
+        $blockedMessage = $pendingMessage ?? $closedMessage;
 
         return [
             'days_until_dive' => $daysUntilDive,
             'is_force_majeure' => $isForceMajeure,
-            'reschedule_allowed' => $isCancelled ? false : ($hasPendingReschedule ? false : $rescheduleAllowed),
-            'reschedule_message' => $hasPendingReschedule 
-                ? 'You already have a pending reschedule request under review by the camp.' 
-                : ($isCancelled ? 'This booking is already cancelled.' : $rescheduleMessage),
-            'cancel_allowed' => $isCancelled ? false : ($hasPendingCancellation ? false : $cancelAllowed),
-            'cancel_message' => $hasPendingCancellation 
-                ? 'A cancellation request is currently under review by the camp.' 
-                : ($isCancelled ? 'This booking is already cancelled.' : $cancelMessage),
+            'reschedule_allowed' => $blockedMessage === null && $rescheduleAllowed,
+            'reschedule_message' => $blockedMessage ?? $rescheduleMessage,
+            'cancel_allowed' => $blockedMessage === null && $cancelAllowed,
+            'cancel_message' => $blockedMessage ?? $cancelMessage,
             'refund_percentage' => $refundPercentage,
             'calculated_refund' => $calculatedRefund,
             'policy_tier' => $policyTier,

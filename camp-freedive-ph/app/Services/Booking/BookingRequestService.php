@@ -58,6 +58,7 @@ class BookingRequestService
      */
     public function approveReschedule(RescheduleRequest $rescheduleRequest, User $operator, ?string $adminNotes): Booking
     {
+        $this->assertDecider($operator);
         $booking = $rescheduleRequest->booking;
         $previousBatch = $booking->batch()->first();
         $oldDates = "{$booking->start_date->format('M d, Y')} - {$booking->end_date->format('M d, Y')}";
@@ -104,6 +105,7 @@ class BookingRequestService
     /** Keep the original dates. */
     public function rejectReschedule(RescheduleRequest $rescheduleRequest, User $operator, ?string $adminNotes): string
     {
+        $this->assertDecider($operator);
         $booking = $rescheduleRequest->booking;
         $reason = $adminNotes ?: 'Reschedule request rejected by camp administration.';
 
@@ -147,6 +149,7 @@ class BookingRequestService
      */
     public function approveCancellation(CancellationRequest $cancellationRequest, User $operator, string $actionType, ?float $customAmount, ?string $adminNotes): array
     {
+        $this->assertDecider($operator);
         $booking = $cancellationRequest->booking;
         $previousBatch = $booking->batch()->first();
         $isForfeited = $actionType === 'forfeit';
@@ -218,18 +221,36 @@ class BookingRequestService
         }
     }
 
-    /** Lock a request row and make sure nobody decided it already (double submit, two staff members at once). */
+    /**
+     * Lock a request row and make sure nobody decided it already (double submit, two staff members at once). B5: only the
+     * guest's newest pending request of its kind is decided: an older one left pending (e.g. the camp cancelled and later
+     * restored the booking) is out of date and never decided against the booking's newer request. Requests are created
+     * under the booking row lock, which every caller holds here, so the check cannot race a new submission.
+     */
     private function claimPending(Model $request): void
     {
         $locked = $request::whereKey($request->getKey())->lockForUpdate()->first();
         if (! $locked || $locked->status !== 'pending') {
             throw new RuntimeException('This request was already decided.');
         }
+        if ($request::where('booking_id', $locked->booking_id)->where('status', 'pending')->where($locked->getKeyName(), '>', $locked->getKey())->exists()) {
+            throw new RuntimeException('This request is out of date: the guest sent a newer request for this booking. Decide the newer one instead. Nothing was changed.');
+        }
+    }
+
+    /** B5: decisions are made by an active owner or admin (checked again here, not only by the route). */
+    private function assertDecider(User $operator): void
+    {
+        $staff = User::find($operator->id);
+        if ($staff === null || $staff->status !== 'active' || ! in_array($staff->role, ['owner', 'admin'], true)) {
+            throw new RuntimeException('Only an active owner or admin can decide guest requests. Nothing was changed.');
+        }
     }
 
     /** Keep the booking active. */
     public function rejectCancellation(CancellationRequest $cancellationRequest, User $operator, ?string $adminNotes): string
     {
+        $this->assertDecider($operator);
         $booking = $cancellationRequest->booking;
         $reason = $adminNotes ?: 'Cancellation request rejected by camp administration.';
 

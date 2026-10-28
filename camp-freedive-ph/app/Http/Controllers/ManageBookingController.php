@@ -8,7 +8,6 @@ use App\Mail\RescheduleRequestedMail;
 use App\Models\Booking;
 use App\Models\CancellationRequest;
 use App\Models\RescheduleRequest;
-use App\Services\Booking\CapacityCoordinator;
 use App\Services\BookingPolicyEngine;
 use App\Services\Payment\PaymentExceptionService;
 use App\Services\WeatherSafetyService;
@@ -41,6 +40,9 @@ class ManageBookingController extends Controller
     public const PAYMENT_UNDER_REVIEW_MESSAGE = 'We are reviewing a payment on this booking, so it cannot be changed or cancelled online right now. '
         . 'Our team will contact you about your options, including another date or a refund. Nothing has been changed. '
         . 'If you would like to talk to us sooner, please contact the camp directly.';
+
+    /** Statuses from which a guest may send a request (both already hold their place). */
+    public const REQUESTABLE_STATUSES = ['confirmed', 'rescheduled'];
 
     private const CHANGED_MEANWHILE_MESSAGE = 'Your booking changed while you were sending this request, so nothing was changed. Please review your booking and try again, or contact the camp.';
 
@@ -251,7 +253,9 @@ class ManageBookingController extends Controller
             if ($this->paymentUnderReview($locked)) {
                 return self::PAYMENT_UNDER_REVIEW_MESSAGE;
             }
-            if ($locked->status !== $booking->status || ! CapacityCoordinator::takesPlace($locked->status)) {
+            // B5: one request at a time, only on an active booking that is not waiting on a request (a pending reschedule
+            // and cancellation never coexist) and has not taken place yet
+            if ($locked->status !== $booking->status || ! in_array($locked->status, self::REQUESTABLE_STATUSES, true)) {
                 return self::CHANGED_MEANWHILE_MESSAGE;
             }
 
