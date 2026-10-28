@@ -220,6 +220,7 @@
 
         <form id="settle-balance-form" action="{{ route('admin.payments.settle_balance', $payment) }}" method="POST" class="space-y-4">
             @csrf
+            <input type="hidden" name="expected_balance" value="{{ $payment->booking->balance_amount }}">
 
             <div>
                 <label for="settle-amount" class="form-label form-label-required">Amount received (PHP)</label>

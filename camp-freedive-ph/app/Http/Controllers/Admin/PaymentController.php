@@ -7,16 +7,15 @@ use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\Payment;
 use App\Services\Refunds\FinancialTotals;
-use App\Models\PaymentStatusLog;
 use App\Models\RefundRequest;
-use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use App\Http\Requests\Admin\Payments\StorePaymentRequest;
 use App\Http\Requests\Admin\Payments\SettleBalanceRequest;
+use App\Services\Payment\ManualPaymentService;
+use RuntimeException;
 
 class PaymentController extends Controller
 {
@@ -100,60 +99,20 @@ class PaymentController extends Controller
     }
 
     /**
-     * Save a manual payment.
+     * Save a manual payment (B4: ManualPaymentService - owner/admin, payable booking, never more than is due, unique
+     * non-PayMongo reference, stale-form check). A manual payment never confirms a booking by itself.
      */
-    public function store(StorePaymentRequest $request): RedirectResponse
+    public function store(StorePaymentRequest $request, ManualPaymentService $payments): RedirectResponse
     {
-        $currentUser = Auth::user();
-
         $validated = $request->validated();
-
-        $booking = Booking::findOrFail($validated['booking_id']);
-        $amount = (float) $validated['amount'];
-        $txnId = $validated['transaction_id'] ?: ('OFFLINE-TXN-' . strtoupper(bin2hex(random_bytes(5))));
-
-        $payment = DB::transaction(function () use ($booking, $validated, $amount, $txnId, $currentUser) {
-            $payment = Payment::create([
-                'booking_id' => $booking->id,
-                'payment_method' => $validated['payment_method'],
-                'transaction_id' => $txnId,
-                'amount' => $amount,
-                'fee_amount' => 0.00,
-                'net_amount' => $amount,
-                'payment_type' => $validated['payment_type'],
-                'status' => 'completed',
-                'paid_at' => now(),
-                'created_by' => $currentUser->id,
-            ]);
-
-            // Update the booking balance
-            $totalPaid = $booking->payments()->whereIn('status', ['completed', 'paid'])->sum('amount');
-            $newBalance = max(0, $booking->total_amount - $totalPaid);
-            $booking->update(['balance_amount' => $newBalance]);
-
-            // Status log
-            PaymentStatusLog::create([
-                'payment_id' => $payment->id,
-                'old_status' => 'new',
-                'new_status' => 'completed',
-                'changed_by' => $currentUser->id,
-                'note' => 'Manual payment received by ' . $currentUser->name . ($validated['notes'] ? ' - ' . $validated['notes'] : ''),
-                'created_at' => now(),
-            ]);
-
-            return $payment;
-        });
-
-        AuditLogger::log(
-            'PAYMENT_RECORDED_MANUALLY',
-            "Payment of ₱" . number_format($amount, 2) . " recorded manually for Booking #{$booking->booking_number} ({$validated['payment_method']}) by {$currentUser->name}",
-            $currentUser,
-            $currentUser->name,
-            $request
-        );
+        try {
+            $payment = $payments->record(Booking::findOrFail($validated['booking_id']), Auth::user(), $validated);
+        } catch (RuntimeException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
 
         return redirect()->route('admin.payments.show', $payment)
-            ->with('success', "Payment of ₱" . number_format($amount, 2) . " recorded successfully!");
+            ->with('success', 'Payment of ₱' . number_format((float) $payment->amount, 2) . ' recorded successfully!');
     }
 
     /**
@@ -167,58 +126,21 @@ class PaymentController extends Controller
     }
 
     /**
-     * Pay the remaining balance of a booking.
+     * Pay the remaining balance of a booking (same safeguards as store()).
      */
-    public function settleBalance(SettleBalanceRequest $request, Payment $payment): RedirectResponse
+    public function settleBalance(SettleBalanceRequest $request, Payment $payment, ManualPaymentService $payments): RedirectResponse
     {
-        $currentUser = Auth::user();
         $booking = $payment->booking;
         if ($booking === null) {
             // An unapplied checkout receipt (no place was left): there is no booking balance to settle
             return back()->with('error', 'This payment is not applied to any booking yet (a paid checkout under a payment exception), so no balance can be recorded against it. Nothing was saved.');
         }
+        try {
+            $settled = $payments->record($booking, Auth::user(), $request->validated() + ['payment_type' => 'balance_settlement'], 'BAL-TXN');
+        } catch (RuntimeException $e) {
+            return back()->withInput()->with('error', $e->getMessage());
+        }
 
-        $validated = $request->validated();
-
-        $amount = (float) $validated['amount'];
-        $txnId = $validated['transaction_id'] ?: ('BAL-TXN-' . strtoupper(bin2hex(random_bytes(5))));
-
-        DB::transaction(function () use ($booking, $validated, $amount, $txnId, $currentUser) {
-            $newPayment = Payment::create([
-                'booking_id' => $booking->id,
-                'payment_method' => $validated['payment_method'],
-                'transaction_id' => $txnId,
-                'amount' => $amount,
-                'fee_amount' => 0.00,
-                'net_amount' => $amount,
-                'payment_type' => 'balance_settlement',
-                'status' => 'completed',
-                'paid_at' => now(),
-                'created_by' => $currentUser->id,
-            ]);
-
-            $totalPaid = $booking->payments()->whereIn('status', ['completed', 'paid'])->sum('amount');
-            $newBalance = max(0, $booking->total_amount - $totalPaid);
-            $booking->update(['balance_amount' => $newBalance]);
-
-            PaymentStatusLog::create([
-                'payment_id' => $newPayment->id,
-                'old_status' => 'new',
-                'new_status' => 'completed',
-                'changed_by' => $currentUser->id,
-                'note' => "Balance settlement of ₱" . number_format($amount, 2) . " received by {$currentUser->name}" . ($validated['notes'] ? " - {$validated['notes']}" : ''),
-                'created_at' => now(),
-            ]);
-        });
-
-        AuditLogger::log(
-            'BALANCE_SETTLED',
-            "Balance settlement of ₱" . number_format($amount, 2) . " processed for Booking #{$booking->booking_number} by {$currentUser->name}",
-            $currentUser,
-            $currentUser->name,
-            $request
-        );
-
-        return back()->with('success', "Balance settlement of ₱" . number_format($amount, 2) . " successfully recorded!");
+        return back()->with('success', 'Balance settlement of ₱' . number_format((float) $settled->amount, 2) . ' successfully recorded!');
     }
 }

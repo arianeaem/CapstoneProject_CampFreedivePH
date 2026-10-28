@@ -54,6 +54,7 @@ class AdminPaymentsAndRefundsTest extends TestCase
             'payment_type' => 'balance_settlement',
             'transaction_id' => 'MANUAL-CASH-TEST-001',
             'notes' => 'Collected in cash at dive camp',
+            'expected_balance' => $initialBalance, // B4: the balance the form showed
         ]);
 
         $response->assertRedirect();

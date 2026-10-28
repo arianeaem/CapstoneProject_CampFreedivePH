@@ -413,6 +413,7 @@ class BookingController extends Controller
                 'payment_type' => $validated['payment_stage'],
                 'status' => 'completed',
                 'paid_at' => now(),
+                'created_by' => $currentUser->id, // B4: provenance of a staff-recorded payment
             ]);
 
             // First status log

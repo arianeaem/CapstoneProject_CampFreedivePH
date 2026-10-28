@@ -6,6 +6,8 @@ use App\Enums\BookingStatus;
 use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
+use App\Models\Payment;
+use App\Models\PaymentExceptionRefundReview;
 use App\Models\PaymentStatusLog;
 use App\Models\RefundRequest;
 use App\Models\User;
@@ -95,7 +97,13 @@ class RefundService
                 throw new RuntimeException('A camp cancellation cannot be forfeited: the guest may move dates or be refunded. Open the refund case instead.');
             }
             $this->guard->assertMayForfeit($request); // earlier-terms quote or open refund case: never forfeited here
-            $payment = $request->payment;
+            $this->guard->assertApprover($operator);
+            $payment = Payment::whereKey($request->payment_id)->lockForUpdate()->firstOrFail();
+            // B4: money held by a payment exception, or reserved for an approved exception refund (B3 P3/P6), is never kept
+            if (PaymentExceptionService::heldByException([$payment->id]) !== []
+                || PaymentExceptionRefundReview::where('primary_payment_id', $payment->id)->where('status', PaymentExceptionRefundReview::APPROVED_AWAITING_PAYOUT)->exists()) {
+                throw new RuntimeException('This payment is held by a payment exception (or its refund is approved), so it cannot be forfeited. Resolve it in Payment Exceptions; nothing was changed.');
+            }
             $booking = $request->booking;
             $amount = (float) $payment->amount;
 

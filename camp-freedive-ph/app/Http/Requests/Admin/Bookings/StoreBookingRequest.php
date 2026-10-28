@@ -84,7 +84,8 @@ class StoreBookingRequest extends FormRequest
             'boat_dive' => 'boolean',
             'payment_method' => 'required|in:gcash,bpi_bank_transfer,maya,bdo,unionbank,cash,other',
             'payment_stage' => 'required|in:downpayment,full',
-            'payment_reference' => 'nullable|string|max:100',
+            // B4: the staff reference is not proof; unique and never shaped like a PayMongo id
+            'payment_reference' => ['nullable', 'string', 'max:64', 'not_regex:' . \App\Services\Payment\ManualPaymentService::PROVIDER_ID_PATTERN, 'unique:payments,transaction_id'],
             'admin_notes' => 'nullable|string|max:1000',
         ] + $this->minorConsentRules();
     }

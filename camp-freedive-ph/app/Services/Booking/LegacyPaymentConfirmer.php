@@ -179,6 +179,12 @@ class LegacyPaymentConfirmer
             $newStatus = $placed ? 'confirmed' : self::PAID_UNALLOCATED;
             $locked->update(['status' => $newStatus]);
             $this->slots->releaseHold($date, $locked->booking_number);
+            // B4: the downpayment was already received another way (e.g. recorded by staff as cash) while the booking still
+            // waited. The booking is placed as usual; this second payment is held for review (paid again), never silently kept.
+            $prior = (int) round((float) Payment::where('booking_id', $locked->id)->whereKeyNot($payment->id)->whereIn('status', ['paid', 'completed'])->sum('amount') * 100);
+            if ($placed && $prior >= (int) round((float) $locked->downpayment_amount * 100)) {
+                $this->flag($payment, Payment::REVIEW_PAID_AGAIN, $source, ['booking_status' => $locked->status, 'prior_received_centavos' => $prior]);
+            }
             if (! $placed) {
                 $operating
                     ? $this->flag($payment, Payment::REVIEW_CAPACITY_UNAVAILABLE, $source, ['start_date' => $date, 'pax' => $pax])

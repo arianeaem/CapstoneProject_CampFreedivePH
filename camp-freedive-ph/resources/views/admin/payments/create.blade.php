@@ -12,7 +12,8 @@
 <div class="max-w-3xl mx-auto space-y-6 text-sm" 
      x-data="{
          selectedBookingId: '{{ $selectedBooking ? $selectedBooking->id : '' }}',
-         amount: '{{ $selectedBooking ? $selectedBooking->balance_amount : '' }}'
+         amount: '{{ $selectedBooking ? $selectedBooking->balance_amount : '' }}',
+         balances: @js($eligibleBookings->merge($selectedBooking ? [$selectedBooking] : [])->mapWithKeys(fn ($b) => [$b->id => (string) $b->balance_amount]))
      }">
     
     <!-- Top Header -->
@@ -26,6 +27,8 @@
     <div class="bg-white rounded-xl border border-[#E5E5EA] p-6 sm:p-8 space-y-6">
         <form action="{{ route('admin.payments.store') }}" method="POST" class="space-y-4">
             @csrf
+            {{-- B4: the balance this form showed; a stale or repeated submission is refused --}}
+            <input type="hidden" name="expected_balance" :value="balances[selectedBookingId] ?? ''">
 
             <!-- Target Booking -->
             <div>
