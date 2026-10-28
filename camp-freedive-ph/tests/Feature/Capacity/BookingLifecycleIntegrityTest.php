@@ -140,7 +140,8 @@ class BookingLifecycleIntegrityTest extends TestCase
         $this->fakePaidSession($late, 'pay_late_b', $this->paidAttributes());
 
         $this->returnTo($late)->assertRedirect(route('manage.show', ['booking_number' => $late->booking_number]))
-            ->assertSessionHas('info', fn ($m) => str_contains($m, 'filled up'));
+            ->assertSessionHas('info', "We've received your payment, but we couldn't confirm your reservation for the selected dates. Our team will review your booking "
+                . 'and contact you about the available next steps. Please keep your payment reference for your records. You do not need to pay again.');
 
         $this->assertSame('paid_unallocated', $late->fresh()->status);
         $this->assertSame(1, Payment::where('paymongo_payment_id', 'pay_late_b')->count());

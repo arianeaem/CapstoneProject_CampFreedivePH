@@ -18,6 +18,7 @@ use App\Services\BatchManagementService;
 use App\Services\Booking\BookingTransitionService;
 use App\Services\Booking\CapacityCoordinator;
 use App\Services\Booking\CapacityException;
+use App\Services\Booking\DateNotOperatingException;
 use App\Services\BookingPolicyEngine;
 use App\Services\Exports\ManagementListExporter;
 use App\Services\WeatherSafetyService;
@@ -426,7 +427,7 @@ class BookingController extends Controller
 
             return $booking;
         });
-        } catch (CapacityException $e) {
+        } catch (CapacityException|DateNotOperatingException $e) {
             return back()->withInput()->with('error', 'Cannot create this booking. ' . $e->getMessage());
         }
         if ($newBatch) {

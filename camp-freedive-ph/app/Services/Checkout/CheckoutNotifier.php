@@ -286,7 +286,8 @@ class CheckoutNotifier
             ),
             CheckoutNotification::STAFF_PAID_UNALLOCATED => new AdminOperationalNotificationMail(
                 'Paid checkout needs a booking decision',
-                "Checkout {$intent->reference} was paid, but the date was full, so no booking was created. Review it in Payments > Checkout review.",
+                "Checkout {$intent->reference} was paid, but " . ($intent->unallocated_reason === 'date_not_operating' ? 'the camp is not running on that date' : 'the date was full')
+                    . ', so no booking was created. Review it in Payments > Checkout review.',
                 ['Checkout' => $intent->reference, 'Dates' => $dates, 'Participants' => (string) $intent->pax_count],
                 'critical',
             ),

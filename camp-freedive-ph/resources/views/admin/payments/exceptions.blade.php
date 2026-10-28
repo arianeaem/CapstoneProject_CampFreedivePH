@@ -12,6 +12,7 @@
 @php
     $reasons = [
         'capacity_unavailable' => 'Paid after the date filled up',
+        'date_not_operating' => 'Paid for a camp date that is not running',
         'paid_after_cancellation' => 'Paid after the booking was cancelled',
         'amount_mismatch' => 'Amount differs from the downpayment',
         'paid_again' => 'Paid again (booking already settled)',

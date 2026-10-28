@@ -4,6 +4,8 @@ namespace App\Services\Checkout;
 
 use App\Models\CheckoutIntent;
 use App\Services\AuditLogger;
+use App\Services\BatchManagementService;
+use App\Services\Booking\OperatingDate;
 use App\Services\Gateways\PayMongoGateway;
 use App\Services\SlotReservationService;
 use Carbon\Carbon;
@@ -31,6 +33,7 @@ class CheckoutService
     public function __construct(
         protected SlotReservationService $slots,
         protected PayMongoGateway $gateway,
+        protected BatchManagementService $batches,
     ) {
     }
 
@@ -50,6 +53,12 @@ class CheckoutService
             $created = $this->slots->withCapacityLock($date, function (Lock $lock) use ($intent, $payload, $date) {
                 return DB::transaction(function () use ($intent, $payload, $date, $lock) {
                     BookingFinalizer::lockCapacityInTransaction($this->slots, $date);
+
+                    // G1: no hold or payment for a date the camp is not running (checked under the date lock)
+                    $operating = $this->batches->operatingDate($date);
+                    if (! $operating->isOperating()) {
+                        return $operating;
+                    }
 
                     $available = $this->slots->getAvailableSlots($date);
                     if ($intent['pax_count'] > $available) {
@@ -71,6 +80,9 @@ class CheckoutService
             throw $e;
         }
 
+        if ($created instanceof OperatingDate) {
+            return ['ok' => false, 'status' => 422, 'message' => "The camp is not running on {$intent['start_date']}. Please select another date."];
+        }
         if (! $created instanceof CheckoutIntent) {
             return ['ok' => false, 'status' => 422, 'message' => "Capacity limit reached for {$intent['start_date']}. Only {$created} slot(s) remaining for this weekend trip. Please select another date or reduce group size."];
         }

@@ -284,22 +284,17 @@ class BookingFinalizer
                     return [$this->paymentConflict($intent, 'payment_id_used_by_payment_record', $payment, $source), null];
                 }
 
+                // G1: the camp must still be running on the date (a cancellation or reschedule takes the same date lock)
+                $operating = $this->batches->operatingDate($date);
+                if (! $operating->isOperating()) {
+                    return [$this->paidUnallocated($intent, $payment, $source, $date, $lock, 'date_not_operating',
+                        "the camp is not running on {$date} (its session was " . str_replace('_', ' ', $operating->closedStatus()) . ')',
+                        ['batch_id' => $operating->closedBy->id, 'batch_status' => $operating->closedStatus()]), null];
+                }
+
                 // Capacity, leaving this intent's own hold out of the count
                 if ($this->slots->getAvailableSlots($date, $intent->id) < $intent->pax_count) {
-                    $intent->fill([
-                        'status' => CheckoutIntent::STATUS_PAID_UNALLOCATED,
-                        'unallocated_reason' => 'capacity_unavailable',
-                        'hold_expires_at' => now(),
-                    ]);
-                    // The money is kept as the intent's own receipt (no booking) and held under a payment exception
-                    $receipt = $this->recordReceipt($intent, $payment, null, $source);
-                    $exception = $this->exceptions->open(PaymentException::KIND_INTENT_UNALLOCATED, $receipt, "checkout:{$source}",
-                        ['reason' => 'capacity_unavailable', 'checkout_reference' => $intent->reference, 'start_date' => $date]);
-                    $this->slots->assertLockStillHeld($lock);
-                    $intent->save();
-                    AuditLogger::log('CHECKOUT_PAID_UNALLOCATED', "Checkout {$intent->reference} was paid but no capacity was left for {$date}; no booking created. The payment is kept as receipt #{$receipt->id} under payment exception #{$exception->id}. Needs staff resolution.", null, 'Checkout finalizer');
-
-                    return [FinalizationResult::paidUnallocated('capacity_unavailable'), null];
+                    return [$this->paidUnallocated($intent, $payment, $source, $date, $lock, 'capacity_unavailable', "no capacity was left for {$date}"), null];
                 }
 
                 ['batch' => $batch, 'created' => $batchCreated] = $this->batches->findOrCreateBatchRecord($intent->start_date, $intent->end_date);
@@ -349,6 +344,28 @@ class BookingFinalizer
 
             return [FinalizationResult::retryable('booking_creation_failed'), null];
         }
+    }
+
+    /**
+     * Paid but no booking can be made (no capacity, or the camp is not running on the date): the money is kept as the
+     * intent's own receipt (no booking) and held under a payment exception for staff. Inside Phase B's transaction.
+     */
+    private function paidUnallocated(CheckoutIntent $intent, VerifiedPayment $payment, string $source, string $date, Lock $lock, string $reason,
+        string $why, array $evidence = []): FinalizationResult
+    {
+        $intent->fill([
+            'status' => CheckoutIntent::STATUS_PAID_UNALLOCATED,
+            'unallocated_reason' => $reason,
+            'hold_expires_at' => now(),
+        ]);
+        $receipt = $this->recordReceipt($intent, $payment, null, $source);
+        $exception = $this->exceptions->open(PaymentException::KIND_INTENT_UNALLOCATED, $receipt, "checkout:{$source}",
+            ['reason' => $reason, 'checkout_reference' => $intent->reference, 'start_date' => $date] + $evidence);
+        $this->slots->assertLockStillHeld($lock);
+        $intent->save();
+        AuditLogger::log('CHECKOUT_PAID_UNALLOCATED', "Checkout {$intent->reference} was paid but {$why}; no booking created. The payment is kept as receipt #{$receipt->id} under payment exception #{$exception->id}. Needs staff resolution.", null, 'Checkout finalizer');
+
+        return FinalizationResult::paidUnallocated($reason);
     }
 
     /**

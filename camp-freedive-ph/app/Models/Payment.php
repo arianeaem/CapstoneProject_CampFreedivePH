@@ -85,6 +85,7 @@ class Payment extends Model
 
     /** Why a received payment waits for staff (Batch 3-II A); it stays a receipt meanwhile. */
     public const REVIEW_CAPACITY_UNAVAILABLE = 'capacity_unavailable';
+    public const REVIEW_DATE_NOT_OPERATING = 'date_not_operating'; // G1: paid for a camp date that is not running
     public const REVIEW_PAID_AFTER_CANCELLATION = 'paid_after_cancellation';
     public const REVIEW_AMOUNT_MISMATCH = 'amount_mismatch';
     public const REVIEW_PAID_AGAIN = 'paid_again';

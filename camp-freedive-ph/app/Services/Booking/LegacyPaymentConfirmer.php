@@ -2,12 +2,14 @@
 
 namespace App\Services\Booking;
 
+use App\Models\Batch;
 use App\Models\Booking;
 use App\Models\BookingStatusLog;
 use App\Models\Payment;
 use App\Models\PaymentException;
 use App\Models\ProviderPaymentIdentity;
 use App\Services\AuditLogger;
+use App\Services\BatchManagementService;
 use App\Services\Checkout\CheckoutNotifier;
 use App\Services\Payment\PaymentExceptionService;
 use App\Services\Payment\ProviderPayment;
@@ -15,6 +17,7 @@ use App\Services\Payment\ReceiptOutcome;
 use App\Services\Payment\ReceiptRecorder;
 use App\Services\PayMongoService;
 use App\Services\SlotReservationService;
+use RuntimeException;
 
 /**
  * Applies a PayMongo payment to a legacy booking (one created by the booking form before checkout intents). The only
@@ -28,6 +31,8 @@ use App\Services\SlotReservationService;
  *       - waiting for its downpayment, right amount, a place still free  -> confirmed (the only "confirmed" outcome)
  *       - waiting, right amount, the date is full (the 15-minute hold ran out) -> paid_unallocated: payment kept,
  *         booking not confirmed, flagged for staff (never overbooked)
+ *       - waiting, right amount, but the camp is not running on its date, or its batch was cancelled, rescheduled or
+ *         completed (G1) -> paid_unallocated the same way (date_not_operating), never confirmed onto that batch
  *       - cancelled                     -> payment kept and flagged; the booking stays cancelled
  *       - amount different / paid again -> payment kept and flagged; the booking is unchanged
  *  3. Only a real confirmation queues the guest's confirmation (durable outbox, once per booking).
@@ -46,6 +51,7 @@ class LegacyPaymentConfirmer
     /** The payment exception each review flag opens. */
     private const EXCEPTION_KINDS = [
         Payment::REVIEW_CAPACITY_UNAVAILABLE => PaymentException::KIND_LEGACY_UNALLOCATED,
+        Payment::REVIEW_DATE_NOT_OPERATING => PaymentException::KIND_LEGACY_UNALLOCATED,
         Payment::REVIEW_PAID_AFTER_CANCELLATION => PaymentException::KIND_PAID_AFTER_CANCELLATION,
         Payment::REVIEW_AMOUNT_MISMATCH => PaymentException::KIND_AMOUNT_MISMATCH,
         Payment::REVIEW_PAID_AGAIN => PaymentException::KIND_PAID_AGAIN,
@@ -58,6 +64,7 @@ class LegacyPaymentConfirmer
         protected SlotReservationService $slots,
         protected ReceiptRecorder $receipts,
         protected PaymentExceptionService $exceptions,
+        protected BatchManagementService $batches,
     ) {
     }
 
@@ -96,7 +103,8 @@ class LegacyPaymentConfirmer
 
         $verified = new ProviderPayment(ProviderPaymentIdentity::PROVIDER_PAYMONGO, $paymentId, (int) $attributes['amount'], 'PHP', $attributes['livemode'] ?? $eventLivemode);
 
-        $outcome = $this->capacity->transaction([$booking->start_date], function () use ($booking, $paymentId, $attributes, $sessionId, $source, $fallbackMethod, $verified) {
+        $lockedDate = $booking->start_date->format('Y-m-d');
+        $outcome = $this->capacity->transaction([$lockedDate], function () use ($booking, $paymentId, $attributes, $sessionId, $source, $fallbackMethod, $verified, $lockedDate) {
             $locked = Booking::whereKey($booking->id)->lockForUpdate()->firstOrFail();
 
             $amountCentavos = (int) $attributes['amount'];
@@ -158,13 +166,24 @@ class LegacyPaymentConfirmer
             }
 
             $date = $locked->start_date->format('Y-m-d');
+            if ($date !== $lockedDate) {
+                throw new RuntimeException("Booking #{$locked->booking_number} moved to another date meanwhile; nothing was applied. The payment will be applied on retry.");
+            }
             $pax = $locked->participants()->count();
-            $placed = $pax <= $this->capacity->remaining($date, $locked); // its own legacy hold is not counted against it
+            // G1: the camp must be running on the date and the booking's own batch (if any) must still be that date's
+            // open or confirmed batch: a batch rescheduled or cancelled after the booking was made never takes it on
+            $batch = $locked->batch_id ? Batch::find($locked->batch_id) : null;
+            $operating = $this->batches->operatingDate($date)->isOperating()
+                && ($batch === null || (in_array($batch->status, BatchManagementService::OPERATING_STATUSES, true) && $batch->start_date?->format('Y-m-d') === $date));
+            $placed = $operating && $pax <= $this->capacity->remaining($date, $locked); // its own legacy hold is not counted against it
             $newStatus = $placed ? 'confirmed' : self::PAID_UNALLOCATED;
             $locked->update(['status' => $newStatus]);
             $this->slots->releaseHold($date, $locked->booking_number);
             if (! $placed) {
-                $this->flag($payment, Payment::REVIEW_CAPACITY_UNAVAILABLE, $source, ['start_date' => $date, 'pax' => $pax]);
+                $operating
+                    ? $this->flag($payment, Payment::REVIEW_CAPACITY_UNAVAILABLE, $source, ['start_date' => $date, 'pax' => $pax])
+                    : $this->flag($payment, Payment::REVIEW_DATE_NOT_OPERATING, $source, ['start_date' => $date, 'pax' => $pax,
+                        'batch_id' => $batch?->id, 'batch_status' => $batch?->status]);
             }
             BookingStatusLog::create([
                 'booking_id' => $locked->id,
@@ -173,12 +192,16 @@ class LegacyPaymentConfirmer
                 'changed_by' => null,
                 'note' => $placed
                     ? "Booking confirmed after a verified PayMongo downpayment of {$peso} ({$source})."
-                    : "Verified PayMongo downpayment of {$peso} ({$source}) arrived after the date filled up: payment kept, no place taken. Needs staff review.",
+                    : ($operating
+                        ? "Verified PayMongo downpayment of {$peso} ({$source}) arrived after the date filled up: payment kept, no place taken. Needs staff review."
+                        : "Verified PayMongo downpayment of {$peso} ({$source}) arrived, but the camp is not running on {$date} (session " . str_replace('_', ' ', (string) $batch?->status) . '): payment kept, no place taken. Needs staff review.'),
                 'created_at' => now(),
             ]);
             AuditLogger::log($placed ? 'PAYMONGO_WEBHOOK_PAID' : 'PAYMONGO_PAYMENT_UNALLOCATED', $placed
                 ? "Booking #{$locked->booking_number} confirmed after a verified payment of {$peso} ({$source})."
-                : "Booking #{$locked->booking_number} paid {$peso} but {$date} is full ({$pax} pax): not confirmed, payment kept for staff review.", null, "PayMongo {$source}");
+                : ($operating
+                    ? "Booking #{$locked->booking_number} paid {$peso} but {$date} is full ({$pax} pax): not confirmed, payment kept for staff review."
+                    : "Booking #{$locked->booking_number} paid {$peso} but the camp is not running on {$date}: not confirmed, payment kept for staff review."), null, "PayMongo {$source}");
 
             return $placed ? self::CONFIRMED : self::PAID_UNALLOCATED;
         });

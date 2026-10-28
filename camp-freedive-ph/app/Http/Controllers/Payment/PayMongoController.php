@@ -173,7 +173,7 @@ class PayMongoController extends Controller
         return match (true) {
             CapacityCoordinator::takesPlace($booking->status) => redirect()->route('booking.create', ['confirmed' => $booking->booking_number])
                 ->with('success', 'Your downpayment has been received via PayMongo and your booking is confirmed. A confirmation email is on its way.'),
-            $booking->status === LegacyPaymentConfirmer::PAID_UNALLOCATED => $manage('We received your payment, but the date filled up before it arrived, so your booking is not confirmed yet. Our team will contact you about your options; your payment is safe.'),
+            $booking->status === LegacyPaymentConfirmer::PAID_UNALLOCATED => $manage("We've received your payment, but we couldn't confirm your reservation for the selected dates. Our team will review your booking and contact you about the available next steps. Please keep your payment reference for your records. You do not need to pay again."),
             in_array($booking->status, ['pending_downpayment', 'pending'], true) => $manage("We're still waiting for PayMongo to confirm your payment. We'll e-mail you once your booking is confirmed."),
             default => $manage('This booking is not active. If you paid, our team has your payment on record and will contact you.'),
         };

@@ -38,7 +38,7 @@
 
             <div class="status-box">
                 <strong>Your booking is not confirmed yet</strong><br>
-                <span style="font-size: 13px;">The dates you chose filled up before your booking could be completed, so no booking has been created. Our team has been notified and will contact you about the next steps. You do not need to pay again.</span>
+                <span style="font-size: 13px;">We've received your payment, but we couldn't confirm your reservation for the selected dates. Our team will review your booking and contact you about the available next steps. Please keep your payment reference for your records. You do not need to pay again.</span>
             </div>
 
             <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; border: none !important;">

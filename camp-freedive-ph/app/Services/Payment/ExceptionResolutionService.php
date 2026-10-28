@@ -2,7 +2,6 @@
 
 namespace App\Services\Payment;
 
-use App\Models\Batch;
 use App\Models\BatchStatusLog;
 use App\Models\Booking;
 use App\Models\BookingRefund;
@@ -49,9 +48,6 @@ use RuntimeException;
  */
 class ExceptionResolutionService
 {
-    /** A camp batch in one of these states means the camp is not running that date. */
-    private const NOT_OPERATING = ['cancelled_by_camp', 'cancelled', 'rescheduled', 'completed'];
-
     public function __construct(
         protected GuestChoiceService $choices,
         protected CapacityCoordinator $capacity,
@@ -193,8 +189,7 @@ class ExceptionResolutionService
         if ($start <= Carbon::today('Asia/Manila')->toDateString()) {
             throw AllocationRefused::failed('date_passed', 'The verified date has passed: a new date needs the guest\'s new choice and an independent verification.');
         }
-        $notOperating = Batch::whereDate('start_date', $start)->whereIn('status', self::NOT_OPERATING)->exists();
-        if ($notOperating && ! Batch::whereDate('start_date', $start)->whereIn('status', ['open', 'confirmed'])->exists()) {
+        if (! $this->batches->operatingDate($start)->isOperating()) { // the shared G1 rule, read under the date's capacity lock
             throw AllocationRefused::blocked('date_not_operating', 'The camp\'s session on the verified date is cancelled or moved, so nothing was allocated. '
                 . 'The verified choice stays on record for staff review.');
         }

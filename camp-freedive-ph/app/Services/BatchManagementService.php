@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\BatchRescheduledMail;
 use App\Mail\BatchWeatherCancellationMail;
+use App\Enums\BatchStatus;
 use App\Models\Batch;
 use App\Models\BatchStatusLog;
 use App\Models\Booking;
@@ -12,6 +13,8 @@ use App\Models\BookingStatusLog;
 use App\Models\NotificationLog;
 use App\Models\User;
 use App\Services\Booking\CapacityCoordinator;
+use App\Services\Booking\DateNotOperatingException;
+use App\Services\Booking\OperatingDate;
 use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use Carbon\Carbon;
@@ -140,6 +143,8 @@ class BatchManagementService
      * Database-only part of findOrCreateBatchForDates(): the open/confirmed batch for the start date,
      * or a new one with a temporary code. No renumbering, status log, or external calls, so it is
      * safe inside a database transaction (checkout finalization).
+     * G1: never creates a batch on a date the camp is not running (cancelled, rescheduled or completed, and not
+     * explicitly reopened): throws DateNotOperatingException instead, so the caller's transaction writes nothing.
      *
      * @return array{batch: Batch, created: bool}
      */
@@ -159,14 +164,12 @@ class BatchManagementService
 
     private function findOrCreateBatchRecordLocked(Carbon $startDate, Carbon $endDate, ?User $creator): array
     {
-
-        // Check if there is already an open/confirmed batch for this start date
-        $existing = Batch::whereDate('start_date', $startDate->toDateString())
-            ->whereIn('status', ['confirmed', 'open'])
-            ->first();
-
-        if ($existing) {
-            return ['batch' => $existing, 'created' => false];
+        $operating = $this->operatingDate($startDate->toDateString());
+        if ($operating->batch) {
+            return ['batch' => $operating->batch, 'created' => false];
+        }
+        if (! $operating->isOperating()) {
+            throw new DateNotOperatingException($operating);
         }
 
         $creatorId = $creator?->id ?? \Illuminate\Support\Facades\Auth::id() ?? null;
@@ -184,6 +187,31 @@ class BatchManagementService
         ]);
 
         return ['batch' => $batch, 'created' => true];
+    }
+
+    /**
+     * Batch statuses that mean the camp runs on the batch's start date (G1): open, confirmed and full (a full camp still
+     * runs; the participant-capacity check refuses new places). Completed, cancelled, cancelled_by_camp, rescheduled and
+     * any unknown status close the date.
+     */
+    public const OPERATING_STATUSES = [BatchStatus::Open->value, BatchStatus::Confirmed->value, BatchStatus::Full->value];
+
+    /**
+     * Whether the camp runs on a start date (see OperatingDate). Read-only; call it while holding the date's capacity
+     * lock wherever the answer decides a booking, so a concurrent cancellation, reschedule or reopening (which take
+     * the same lock, see updateStatus) cannot change it before commit.
+     */
+    public function operatingDate(Carbon|string|\DateTimeInterface $startDate): OperatingDate
+    {
+        $date = Carbon::parse($startDate)->toDateString();
+        $batches = Batch::whereDate('start_date', $date)->orderBy('id')->get();
+
+        // The date's batch: the earliest open or confirmed one (as before G1), otherwise the earliest full one (reused,
+        // never duplicated)
+        return new OperatingDate($date,
+            $batches->first(fn (Batch $b) => in_array($b->status, [BatchStatus::Open->value, BatchStatus::Confirmed->value], true))
+                ?? $batches->first(fn (Batch $b) => $b->status === BatchStatus::Full->value),
+            $batches->reverse()->first(fn (Batch $b) => ! in_array($b->status, self::OPERATING_STATUSES, true)));
     }
 
     /**
@@ -208,6 +236,9 @@ class BatchManagementService
         return DB::transaction(function () use ($data, $bookingIds, $creator) {
             $startDate = Carbon::parse($data['start_date'])->startOfDay();
             $endDate = isset($data['end_date']) ? Carbon::parse($data['end_date'])->startOfDay() : $startDate->copy()->addDay();
+            // An explicit staff batch may reopen a closed date (G1): under the date's capacity lock, so it serializes with
+            // checkout, finalization and the shared batch look-up for that date
+            app(SlotReservationService::class)->lockDateInTransaction($startDate->toDateString());
 
             $batchNumberInput = trim($data['batch_number'] ?? $data['name'] ?? $data['batch_code'] ?? '');
             $hasCustomNumber = false;
@@ -314,10 +345,22 @@ class BatchManagementService
         }
 
         DB::transaction(function () use ($batch, $newStatus, $changer, $note, $category, $activityStarted) {
+            // G1: the batch's date capacity lock first (lock order: date -> batch -> bookings, as every booking path takes
+            // date -> booking), so a checkout, finalization or legacy payment for this date either commits before this
+            // change (and is in the cascade below) or runs after it and sees the new status. Taken before anything else
+            // in the transaction (no message is sent before it), without the checkout lock_timeout, so a busy date only
+            // delays this change and never rolls it back half-way.
+            $date = Batch::whereKey($batch->id)->value('start_date');
+            app(SlotReservationService::class)->lockDateInTransaction(Carbon::parse($date)->toDateString());
+
             // One status change per batch at a time, with the old status read under the row lock (a repeated or concurrent
             // change sees the first one). PostgreSQL: NO KEY UPDATE, so bookings joining the batch (key-share locks) are not
             // blocked and the booking-then-batch order of date moves cannot deadlock with this batch-then-booking cascade.
-            $oldStatus = Batch::whereKey($batch->id)->lock(DB::getDriverName() === 'pgsql' ? 'for no key update' : true)->firstOrFail()->status;
+            $current = Batch::whereKey($batch->id)->lock(DB::getDriverName() === 'pgsql' ? 'for no key update' : true)->firstOrFail();
+            if ($current->start_date?->toDateString() !== Carbon::parse($date)->toDateString()) {
+                throw new Exception("{$batch->name}'s dates changed meanwhile. Reload the page and try again; nothing was changed.");
+            }
+            $oldStatus = $current->status;
             if ($oldStatus === $newStatus && empty($note)) {
                 return;
             }

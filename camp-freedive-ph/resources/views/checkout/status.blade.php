@@ -7,7 +7,7 @@
     // Only safe fields reach this view (no PIN, contact details or payment ids)
     $content = match ($state) {
         'finalized' => ['tone' => 'success', 'title' => 'Booking confirmed', 'lead' => 'Your payment was verified and your slot is confirmed.'],
-        'paid_unallocated' => ['tone' => 'warning', 'title' => 'Payment received — booking not yet confirmed', 'lead' => 'We received your payment, but the slots for this date were taken before your booking could be completed. Our team will review it and contact you. Your slot is not confirmed yet.'],
+        'paid_unallocated' => ['tone' => 'warning', 'title' => 'Payment received — booking not yet confirmed', 'lead' => "We've received your payment, but we couldn't confirm your reservation for the selected dates. Our team will review your booking and contact you about the available next steps. Please keep your payment reference for your records. You do not need to pay again."],
         'payment_review' => ['tone' => 'warning', 'title' => 'Payment under review', 'lead' => 'We could not automatically match your payment to this checkout. Our team will review it and contact you. Your booking is not confirmed yet.'],
         'not_paid' => ['tone' => 'neutral', 'title' => 'Payment not yet confirmed', 'lead' => 'We have not received a confirmed payment for this checkout yet. If you just paid, it can take a moment for PayMongo to confirm it.'],
         'retryable' => ['tone' => 'neutral', 'title' => 'Checking your payment', 'lead' => 'We are still checking the status of your payment. Please do not pay again. Refresh this page in a few minutes.'],

@@ -474,6 +474,9 @@ class BookingController extends Controller
                 'success' => false,
                 'message' => 'The booking system is currently processing high-volume simultaneous checkouts. Please retry in a few moments.',
             ], 429);
+        } catch (\App\Services\Booking\DateNotOperatingException) {
+            // G1: no reservation, hold or payment for a date the camp is not running
+            return response()->json(['success' => false, 'message' => "The camp is not running on {$startDate}. Please select another date."], 422);
         }
         if ($created instanceof JsonResponse) {
             return $created;

@@ -114,6 +114,7 @@ class ReceiptBackfillPlanner
     {
         $kinds = [
             Payment::REVIEW_CAPACITY_UNAVAILABLE => PaymentException::KIND_LEGACY_UNALLOCATED,
+            Payment::REVIEW_DATE_NOT_OPERATING => PaymentException::KIND_LEGACY_UNALLOCATED,
             Payment::REVIEW_PAID_AFTER_CANCELLATION => PaymentException::KIND_PAID_AFTER_CANCELLATION,
             Payment::REVIEW_AMOUNT_MISMATCH => PaymentException::KIND_AMOUNT_MISMATCH,
             Payment::REVIEW_PAID_AGAIN => PaymentException::KIND_PAID_AGAIN,
