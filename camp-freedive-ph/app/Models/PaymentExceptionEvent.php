@@ -24,6 +24,8 @@ class PaymentExceptionEvent extends Model
     public const CHOICE_ACTED_ON = 'guest_choice_acted_on';
     public const CHOICE_ACTION_FAILED = 'guest_choice_action_failed';
     public const REFUND_REVIEW_ROUTED = 'refund_review_routed';
+    public const REFUND_APPROVED = 'refund_approved';
+    public const REFUND_REJECTED = 'refund_rejected';
     public const ALLOCATED = 'allocated';
     public const ALLOCATION_FAILED = 'allocation_failed';
     public const ALLOCATION_BLOCKED = 'allocation_blocked';

@@ -13,6 +13,7 @@ use App\Models\PaymentExceptionRefundReview;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\Checkout\CheckoutNotifier;
+use App\Services\Payment\ExceptionRefundService;
 use App\Services\Payment\ExceptionResolutionService;
 use App\Services\Payment\GuestChoiceService;
 use Illuminate\Database\QueryException;
@@ -37,9 +38,9 @@ use RuntimeException;
 class PaymentExceptionController extends Controller
 {
     /** Free-text fields never flashed back to the session (a refused text may hold the very data it was refused for). */
-    private const FREE_TEXT = ['evidence_summary', 'evidence_reference', 'verification_note', 'reason'];
+    private const FREE_TEXT = ['evidence_summary', 'evidence_reference', 'verification_note', 'reason', 'approval_note'];
 
-    public function __construct(protected GuestChoiceService $choices, protected ExceptionResolutionService $resolutions)
+    public function __construct(protected GuestChoiceService $choices, protected ExceptionResolutionService $resolutions, protected ExceptionRefundService $refunds)
     {
     }
 
@@ -62,7 +63,8 @@ class PaymentExceptionController extends Controller
         return view('admin.payments.exception_queue', [
             'awaitingVerification' => PaymentExceptionChoice::where('status', PaymentExceptionChoice::RECORDED)->with(['paymentException', 'recorder'])->orderBy('recorded_at')->get(),
             'awaitingAction' => PaymentExceptionChoice::where('status', PaymentExceptionChoice::VERIFIED)->with(['paymentException', 'verifier'])->orderBy('verified_at')->get(),
-            'reviews' => PaymentExceptionRefundReview::where('status', PaymentExceptionRefundReview::AWAITING_OWNER_REVIEW)->with('paymentException')->orderBy('routed_at')->get(),
+            'reviews' => PaymentExceptionRefundReview::whereIn('status', [PaymentExceptionRefundReview::AWAITING_OWNER_REVIEW, PaymentExceptionRefundReview::APPROVED_AWAITING_PAYOUT])
+                ->with('paymentException')->orderBy('routed_at')->get(),
             'unresolved' => $open->groupBy('kind')->map(fn ($rows) => [
                 'count' => $rows->count(), 'centavos' => $rows->sum('amount_centavos'), 'oldest' => $rows->min('opened_at'),
             ]),
@@ -86,6 +88,9 @@ class PaymentExceptionController extends Controller
             'current' => $this->choices->current($paymentException),
             'staff' => $staff,
             'redacted' => (bool) config('checkout.guest_choice_evidence.redaction_enabled'),
+            // B3: the server's own entitlement (never a form value) for the refund decision
+            'refundEntitlement' => $paymentException->refundReview?->status === PaymentExceptionRefundReview::AWAITING_OWNER_REVIEW
+                ? $this->refunds->entitlement($paymentException->refundReview) : null,
         ]);
     }
 
@@ -129,6 +134,24 @@ class PaymentExceptionController extends Controller
         $this->owned($paymentException, $choice);
         return $this->attempt($request, $paymentException, fn () => $this->resolutions->routeToRefundReview($choice, $request->user(), $this->version($request)),
             'Sent to owner refund review. The money stays held; no amount was set and nothing was refunded.');
+    }
+
+    /** B3: approve the full verified entitlement (computed by the server). Reserves it; nothing is paid or resolved. */
+    public function approveRefund(Request $request, PaymentException $paymentException, PaymentExceptionRefundReview $review): RedirectResponse
+    {
+        abort_unless((int) $review->payment_exception_id === (int) $paymentException->id, 404);
+
+        return $this->attempt($request, $paymentException, fn () => $this->refunds->approve($review, $request->user(), $this->version($request), $request->input('approval_note')),
+            'Refund approved for the full verified amount and reserved for payout. Nothing was paid; the exception stays open until a verified payout.');
+    }
+
+    /** B3: reject an invalid or duplicate request with a reason. The payment stays held; nothing is forfeited. */
+    public function rejectRefund(Request $request, PaymentException $paymentException, PaymentExceptionRefundReview $review): RedirectResponse
+    {
+        abort_unless((int) $review->payment_exception_id === (int) $paymentException->id, 404);
+
+        return $this->attempt($request, $paymentException, fn () => $this->refunds->reject($review, $request->user(), (string) $request->input('reason'), $this->version($request)),
+            'Refund request rejected as invalid. The verified payment stays held under the open exception.');
     }
 
     public function allocate(Request $request, PaymentException $paymentException, PaymentExceptionChoice $choice): RedirectResponse

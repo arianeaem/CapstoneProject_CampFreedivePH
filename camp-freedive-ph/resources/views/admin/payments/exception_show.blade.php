@@ -39,6 +39,35 @@
         @endif
     </div>
 
+    @if($review = $exception->refundReview)
+        <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-2xs space-y-3">
+            <h2 class="font-bold text-base">Refund decision</h2>
+            <p class="text-[#6E6E73]">Received {{ $exception->currency }} {{ $peso($review->received_centavos) }} (verified payment, receipt #{{ $review->primary_payment_id }}{{ $review->booking_id ? '' : ', no booking' }}).
+                Approval reserves the full verified amount with no deductions; it pays nothing out and does not close the exception. Payout and its verification are a separate step that is not available yet.</p>
+            @if($review->status === 'approved_awaiting_payout')
+                <p class="font-semibold">Approved {{ $review->approved_currency }} {{ $peso($review->approved_centavos) }} by {{ $review->approver_role }} #{{ $review->approved_by }} on {{ $when($review->approved_at) }} · awaiting payout (not paid).</p>
+            @elseif($review->status === 'rejected_invalid')
+                <p class="font-semibold">Rejected as invalid by #{{ $review->rejected_by }} on {{ $when($review->rejected_at) }}: {{ $review->rejection_reason }} The verified payment stays held.</p>
+            @elseif($refundEntitlement)
+                @if($refundEntitlement['blocked'])
+                    <p class="text-[#780000]">{{ $refundEntitlement['blocked'] }}</p>
+                @else
+                    <form method="POST" action="{{ portal_route('payments.exceptions.refund_reviews.approve', [$exception, $review]) }}" class="space-y-2">
+                        @csrf <input type="hidden" name="lock_version" value="{{ $review->lock_version }}">
+                        <p>Entitlement now: <strong>{{ $refundEntitlement['currency'] }} {{ $peso($refundEntitlement['centavos']) }}</strong> (calculated by the system).</p>
+                        <label class="block">Note (optional)<textarea name="approval_note" maxlength="500" class="{{ $input }}"></textarea></label>
+                        <button class="btn-primary px-3 py-1.5 font-semibold">Approve refund</button>
+                    </form>
+                @endif
+                <form method="POST" action="{{ portal_route('payments.exceptions.refund_reviews.reject', [$exception, $review]) }}" class="space-y-2">
+                    @csrf <input type="hidden" name="lock_version" value="{{ $review->lock_version }}">
+                    <label class="block">Reject as invalid or duplicate: reason (10–500 characters; the payment stays held)<textarea name="reason" required minlength="10" maxlength="500" class="{{ $input }}"></textarea></label>
+                    <button class="btn-secondary px-3 py-1.5 font-semibold">Reject request</button>
+                </form>
+            @endif
+        </div>
+    @endif
+
     <div class="bg-white rounded-xl border border-[#E5E5EA] p-4 shadow-2xs">
         <h2 class="font-bold text-base mb-3">Guest choices</h2>
         <div class="overflow-x-auto">

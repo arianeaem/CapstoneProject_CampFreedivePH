@@ -57,7 +57,7 @@
             <thead class="text-[#6E6E73] text-xs uppercase tracking-wider"><tr><th class="py-1">Item</th><th class="py-1">Exception</th><th class="py-1 text-right">Received</th><th class="py-1">Linked refund case</th><th class="py-1">Routed</th></tr></thead>
             <tbody class="divide-y divide-[#E5E5EA]">
                 @forelse($reviews as $review)
-                    <tr><td class="py-1.5">#{{ $review->id }}</td><td class="py-1.5"><a class="font-semibold text-[#780000]" href="{{ portal_route('payments.exceptions.show', $review->payment_exception_id) }}">#{{ $review->payment_exception_id }}</a></td>
+                    <tr><td class="py-1.5">#{{ $review->id }} · {{ str_replace('_', ' ', $review->status) }}</td><td class="py-1.5"><a class="font-semibold text-[#780000]" href="{{ portal_route('payments.exceptions.show', $review->payment_exception_id) }}">#{{ $review->payment_exception_id }}</a></td>
                         <td class="py-1.5 text-right">₱{{ number_format($review->received_centavos / 100, 2) }}</td><td class="py-1.5">{{ $review->existing_booking_refund_id ? '#' . $review->existing_booking_refund_id : '—' }}</td><td class="py-1.5">{{ $when($review->routed_at) }}</td></tr>
                 @empty
                     <tr><td colspan="5" class="py-2 text-[#6E6E73]">None.</td></tr>

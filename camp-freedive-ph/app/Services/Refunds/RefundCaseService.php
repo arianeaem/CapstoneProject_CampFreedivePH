@@ -158,6 +158,7 @@ class RefundCaseService
     /** Approve an amount (<= what policy allows now). No money moves here. */
     public function approve(BookingRefund $case, int $centavos, User $operator, string $note): BookingRefund
     {
+        $operator = $this->guard->assertApprover($operator); // P2: only an active owner or admin approves
         return $this->step($case, $operator, 'REFUND_APPROVED', function (BookingRefund $c) use ($centavos, $operator, $note) {
             // Same lock order as RefundExecutor (case, then the booking's payments): the cap and any held receipts are
             // read with no payment exception or payout changing them meanwhile

@@ -29,18 +29,20 @@ class RefundExecutor
     public function __construct(
         protected RefundLedger $ledger,
         protected PayMongoService $paymongo,
+        protected RefundGuard $guard,
     ) {
     }
 
     /** @return array{prepared: int, submitted: int, outcomes: array<string, int>} */
     public function execute(BookingRefund $case, User $operator): array
     {
+        $operator = $this->guard->assertApprover($operator); // P2: only an active owner or admin pays out
         $prepared = DB::transaction(function () use ($case, $operator) {
             $locked = BookingRefund::whereKey($case->id)->lockForUpdate()->firstOrFail();
             if ($locked->status === BookingRefund::COMPLETED) {
                 return 0; // already paid out (a second click): nothing to send
             }
-            if ($locked->status !== BookingRefund::APPROVED || (int) $locked->approved_centavos <= 0) {
+            if ($locked->status !== BookingRefund::APPROVED || (int) $locked->approved_centavos <= 0 || $locked->approved_by === null) {
                 throw new RuntimeException('Only an approved refund with an amount can be paid out.');
             }
             Payment::where('booking_id', $locked->booking_id)->lockForUpdate()->get(); // one allocation per booking at a time

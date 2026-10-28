@@ -126,6 +126,20 @@ class RefundGuard
         }
     }
 
+    /**
+     * B3 (P2): every refund approval and payout is done by an active owner or admin, checked on the server (the route
+     * middleware is not the only line). Reads the account fresh, so a deactivated or demoted account is refused.
+     */
+    public function assertApprover(User $user): User
+    {
+        $fresh = User::find($user->id);
+        if ($fresh === null || $fresh->status !== 'active' || ! in_array($fresh->role, ['owner', 'admin'], true)) {
+            throw new RuntimeException('Only an active owner or admin can approve or pay out a refund; nothing was changed.');
+        }
+
+        return $fresh;
+    }
+
     private function legacyPercentage(RefundRequest $request): float
     {
         if ($request->requested_by === 'camp_force_majeure') {

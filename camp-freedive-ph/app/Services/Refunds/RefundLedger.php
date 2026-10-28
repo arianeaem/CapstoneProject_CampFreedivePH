@@ -5,6 +5,7 @@ namespace App\Services\Refunds;
 use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\Payment;
+use App\Models\PaymentExceptionRefundReview;
 use App\Models\RefundAttempt;
 use App\Services\Payment\PaymentExceptionService;
 use Illuminate\Support\Collection;
@@ -16,8 +17,9 @@ use Illuminate\Support\Collection;
  *   paid      = receipts (Payment::RECEIPT_STATUSES), before any refund
  *   refunded  = old-model refunds on the payment row (Payment::legacyRefundedCentavos) + ledger refunds that
  *               PayMongo confirmed or staff documented as paid out offline. Nothing else counts as refunded.
- *   reserved  = ledger refunds not finished yet (prepared, submitting, provider pending, unknown, offline awaiting):
- *               not refunded, but held so the same money is never submitted twice
+ *   reserved  = ledger refunds not finished yet (prepared, submitting, provider pending, unknown, offline awaiting),
+ *               and exception refunds approved but not paid out (B3): not refunded, but held so the same money is
+ *               never approved or submitted twice
  *   refundable per payment = paid - refunded - reserved (never negative; 0 for forfeited payments)
  *   held      = refundable money of receipts held by an unresolved payment exception or review flag (Batch 3-II B1):
  *               still part of every figure above, but never spent by an ordinary booking refund
@@ -32,25 +34,9 @@ class RefundLedger
     public function position(Booking $booking): array
     {
         $payments = $booking->payments()->whereIn('status', Payment::RECEIPT_STATUSES)->orderBy('id')->get();
-        $attempts = RefundAttempt::whereIn('payment_id', $payments->pluck('id'))->get()->groupBy('payment_id');
         $heldBy = PaymentExceptionService::held($payments);
 
-        $rows = $payments->map(function (Payment $payment) use ($attempts, $heldBy) {
-            $own = $attempts->get($payment->id, collect());
-            $paid = $payment->amountCentavos();
-            $refunded = $payment->legacyRefundedCentavos() + (int) $own->whereIn('status', RefundAttempt::COMPLETED)->sum('amount_centavos');
-            $reserved = (int) $own->whereIn('status', RefundAttempt::RESERVED)->sum('amount_centavos');
-
-            return [
-                'payment' => $payment,
-                'paid' => $paid,
-                'refunded' => $refunded,
-                'reserved' => $reserved,
-                'refundable' => in_array($payment->status, Payment::REFUNDABLE_STATUSES, true) ? max(0, $paid - $refunded - $reserved) : 0,
-                'held' => $heldBy[$payment->id] ?? null,
-                'over_refunded' => $refunded + $reserved > $paid,
-            ];
-        });
+        $rows = $payments->map(fn (Payment $payment) => $this->paymentRow($payment) + ['held' => $heldBy[$payment->id] ?? null]);
 
         // Old model: one refund id copied onto several payments, or "refunded" without an amount, cannot be trusted
         $legacyIds = $payments->pluck('paymongo_refund_id')->filter();
@@ -74,6 +60,33 @@ class RefundLedger
             'spendable' => $refundable - $held,
             'held_by' => $rows->whereNotNull('held')->mapWithKeys(fn ($row) => [$row['payment']->id => $row['held']])->all(),
             'reconciliation_needed' => $reconcile,
+        ];
+    }
+
+    /**
+     * One payment's position, the same for booking receipts and bookingless checkout receipts (B3, one balance per
+     * payment): reserved also counts an exception refund an owner or admin approved but that is not paid out yet, so
+     * the same money is never approved or spent twice through the booking and the exception workflows.
+     * $exceptReviewId leaves that review's own approval out (when re-checking it).
+     *
+     * @return array{payment: Payment, paid: int, refunded: int, reserved: int, refundable: int, over_refunded: bool}
+     */
+    public function paymentRow(Payment $payment, ?int $exceptReviewId = null): array
+    {
+        $attempts = RefundAttempt::where('payment_id', $payment->id)->get();
+        $paid = $payment->amountCentavos();
+        $refunded = $payment->legacyRefundedCentavos() + (int) $attempts->whereIn('status', RefundAttempt::COMPLETED)->sum('amount_centavos');
+        $reserved = (int) $attempts->whereIn('status', RefundAttempt::RESERVED)->sum('amount_centavos')
+            + (int) PaymentExceptionRefundReview::where('primary_payment_id', $payment->id)->where('status', PaymentExceptionRefundReview::APPROVED_AWAITING_PAYOUT)
+                ->when($exceptReviewId, fn ($q) => $q->whereKeyNot($exceptReviewId))->sum('approved_centavos');
+
+        return [
+            'payment' => $payment,
+            'paid' => $paid,
+            'refunded' => $refunded,
+            'reserved' => $reserved,
+            'refundable' => in_array($payment->status, Payment::REFUNDABLE_STATUSES, true) ? max(0, $paid - $refunded - $reserved) : 0,
+            'over_refunded' => $refunded + $reserved > $paid,
         ];
     }
 

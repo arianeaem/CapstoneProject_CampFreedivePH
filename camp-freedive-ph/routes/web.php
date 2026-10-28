@@ -196,7 +196,7 @@ $registerBackofficeRoutes = function (string $portalRole) {
     // Guest choices on a payment exception (Batch 3-II B2): evidence only in POST bodies; no money movement or guest message
     Route::get('/payments/exceptions/queue', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'queue'])->name('payments.exceptions.queue');
     Route::get('/payments/exceptions/{paymentException}', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'show'])->whereNumber('paymentException')->name('payments.exceptions.show');
-    Route::middleware('throttle:30,1')->whereNumber(['paymentException', 'choice'])->group(function () {
+    Route::middleware('throttle:30,1')->whereNumber(['paymentException', 'choice', 'review'])->group(function () {
         Route::post('/payments/exceptions/{paymentException}/choices', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'record'])->name('payments.exceptions.choices.record');
         Route::post('/payments/exceptions/{paymentException}/choices/{choice}/supersede', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'supersede'])->name('payments.exceptions.choices.supersede');
         Route::post('/payments/exceptions/{paymentException}/choices/{choice}/verify', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'verify'])->name('payments.exceptions.choices.verify');
@@ -204,6 +204,9 @@ $registerBackofficeRoutes = function (string $portalRole) {
         Route::post('/payments/exceptions/{paymentException}/choices/{choice}/withdraw', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'withdraw'])->name('payments.exceptions.choices.withdraw');
         Route::post('/payments/exceptions/{paymentException}/choices/{choice}/refund-review', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'routeRefundReview'])->name('payments.exceptions.choices.refund_review');
         Route::post('/payments/exceptions/{paymentException}/choices/{choice}/allocate', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'allocate'])->name('payments.exceptions.choices.allocate');
+        // B3: owner/admin decision on an exception refund review (approval reserves the money; no payout here)
+        Route::post('/payments/exceptions/{paymentException}/refund-reviews/{review}/approve', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'approveRefund'])->name('payments.exceptions.refund_reviews.approve');
+        Route::post('/payments/exceptions/{paymentException}/refund-reviews/{review}/reject', [\App\Http\Controllers\Admin\PaymentExceptionController::class, 'rejectRefund'])->name('payments.exceptions.refund_reviews.reject');
     });
     // Checkout payments that need staff review (paid but no room, payment review, unresolved); no money movement
     Route::get('/payments/checkout-review', [\App\Http\Controllers\Admin\CheckoutReviewController::class, 'index'])->name('payments.checkout_review');
