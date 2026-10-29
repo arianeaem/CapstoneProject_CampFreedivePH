@@ -16,7 +16,7 @@ class UpdateOperationsRequest extends FormRequest
     {
         return [
             'max_batch_capacity' => 'required|integer|min:5|max:200',
-            'coach_student_ratio' => 'required|integer|min:1|max:20',
+            'coach_student_ratio' => 'required|integer|min:1|max:4',
             'min_coaches_per_batch' => 'required|integer|min:1|max:10',
         ];
     }

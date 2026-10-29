@@ -164,7 +164,7 @@ class SystemSettingTest extends TestCase
         // Operations
         $opResponse = $this->actingAs($this->owner)->put(route('owner.settings.operations.update'), [
             'max_batch_capacity' => 50,
-            'coach_student_ratio' => 5,
+            'coach_student_ratio' => 4,
             'min_coaches_per_batch' => 3,
         ]);
         $opResponse->assertRedirect();

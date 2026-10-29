@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\BookingController as AdminBookingController;
 use App\Http\Controllers\Admin\BookingRequestController;
 use App\Http\Controllers\Admin\CoachMatchingController;
 use App\Http\Controllers\Admin\CoachRosterController;
+use App\Http\Controllers\Admin\CoachSchedulingController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\RefundController as AdminRefundController;
@@ -232,6 +233,13 @@ $registerBackofficeRoutes = function (string $portalRole) {
     Route::post('/coaches/release-requests/{releaseRequest}/reject', [CoachMatchingController::class, 'rejectReleaseRequest'])->name('coaches.release_requests.reject');
     Route::get('/coaches/{coach}', [CoachRosterController::class, 'show'])->name('coaches.show');
     Route::post('/coaches/{coach}/reassign-student', [CoachRosterController::class, 'reassignStudent'])->name('coaches.reassign_student');
+
+    // S2: Authoritative coach scheduling
+    Route::get('/coaches/scheduling/{batch}', [CoachSchedulingController::class, 'batchStaffing'])->name('coaches.scheduling.batch');
+    Route::post('/coaches/scheduling/confirm/{coach}', [CoachSchedulingController::class, 'confirmAvailability'])->name('coaches.scheduling.confirm');
+    Route::post('/coaches/scheduling/revoke/{coach}', [CoachSchedulingController::class, 'revokeConfirmation'])->name('coaches.scheduling.revoke');
+    Route::post('/coaches/scheduling/{batch}/assign', [CoachSchedulingController::class, 'assignCoach'])->name('coaches.scheduling.assign');
+    Route::post('/coaches/scheduling/{batch}/remove', [CoachSchedulingController::class, 'removeCoach'])->name('coaches.scheduling.remove');
 
     // Weather and safety
     Route::get('/safety-monitoring', [\App\Http\Controllers\Admin\WeatherSafetyController::class, 'index'])->name('weather.index');

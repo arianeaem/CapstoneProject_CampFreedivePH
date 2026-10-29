@@ -29,4 +29,24 @@ class CoachSchedulingException extends RuntimeException
 
         return new self("Coach {$coach->full_name} already has a commitment on one of: {$dateList}.");
     }
+
+    public static function selfConfirmation(Coach $coach): self
+    {
+        return new self("Coach {$coach->full_name} cannot confirm their own availability.");
+    }
+
+    public static function noAvailabilityToConfirm(Coach $coach, string $date): self
+    {
+        return new self("Coach {$coach->full_name} has no available declaration on {$date} to confirm.");
+    }
+
+    public static function noConfirmationToRevoke(Coach $coach, string $date): self
+    {
+        return new self("Coach {$coach->full_name} has no confirmed availability on {$date} to revoke.");
+    }
+
+    public static function commitmentBlocksRevocation(Coach $coach, string $date): self
+    {
+        return new self("Coach {$coach->full_name} has an active commitment on {$date}. Remove the commitment before revoking confirmation.");
+    }
 }

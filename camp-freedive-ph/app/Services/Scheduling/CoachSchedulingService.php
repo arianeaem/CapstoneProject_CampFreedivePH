@@ -7,18 +7,19 @@ use App\Models\Coach;
 use App\Models\CoachAvailability;
 use App\Models\CoachDateCommitment;
 use App\Models\User;
+use App\Services\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * S1 foundational scheduling domain logic.
+ * Authoritative coach scheduling domain logic (S1 foundation + S2 staff workflows).
  *
- * Calculates required coach counts, checks availability and conflicts, and manages
- * authoritative date commitments. Does NOT activate the booking capacity gate — the
- * InstructorCapacityVerifier binding stays fail-closed until S1–S5 verification and
- * separate rollout approval.
+ * Calculates required coach counts, checks availability and conflicts, manages
+ * authoritative date commitments, and handles staff confirmation of availability.
+ * Does NOT activate the booking capacity gate — the InstructorCapacityVerifier binding
+ * stays fail-closed until S1–S5 verification and separate rollout approval.
  */
 class CoachSchedulingService
 {
@@ -190,5 +191,120 @@ class CoachSchedulingService
         }
 
         return $dates;
+    }
+
+    // ---------------------------------------------------------------- S2: Staff confirmation
+
+    /**
+     * Staff-confirm a coach's self-declared availability. The coach must have an existing
+     * availability record with status 'available' on that date.
+     */
+    public function confirmAvailability(Coach $coach, string $date, User $confirmedBy): CoachAvailability
+    {
+        $this->assertStaffRole($confirmedBy);
+        if ($confirmedBy->id === $coach->user_id) {
+            throw CoachSchedulingException::selfConfirmation($coach);
+        }
+
+        $availability = CoachAvailability::where('coach_id', $coach->user_id)
+            ->whereDate('date', $date)
+            ->where('status', 'available')
+            ->first();
+
+        if (! $availability) {
+            throw CoachSchedulingException::noAvailabilityToConfirm($coach, $date);
+        }
+
+        if ($availability->isStaffConfirmed()) {
+            return $availability;
+        }
+
+        $availability->update([
+            'staff_confirmed_by' => $confirmedBy->id,
+            'staff_confirmed_at' => now(),
+        ]);
+
+        AuditLogger::log('COACH_AVAILABILITY_CONFIRMED', "Staff confirmed {$coach->full_name}'s availability on {$date}.", $confirmedBy, $confirmedBy->name);
+
+        return $availability->fresh();
+    }
+
+    /**
+     * Revoke staff confirmation. If the coach has an active commitment on that date, revocation
+     * is refused — remove the commitment first.
+     */
+    public function revokeConfirmation(Coach $coach, string $date, User $revokedBy): CoachAvailability
+    {
+        $this->assertStaffRole($revokedBy);
+
+        $availability = CoachAvailability::where('coach_id', $coach->user_id)
+            ->whereDate('date', $date)
+            ->whereNotNull('staff_confirmed_by')
+            ->first();
+
+        if (! $availability) {
+            throw CoachSchedulingException::noConfirmationToRevoke($coach, $date);
+        }
+
+        if ($this->hasConflict($coach->id, $date)) {
+            throw CoachSchedulingException::commitmentBlocksRevocation($coach, $date);
+        }
+
+        $availability->update([
+            'staff_confirmed_by' => null,
+            'staff_confirmed_at' => null,
+        ]);
+
+        AuditLogger::log('COACH_AVAILABILITY_REVOKED', "Staff revoked {$coach->full_name}'s confirmed availability on {$date}.", $revokedBy, $revokedBy->name);
+
+        return $availability->fresh();
+    }
+
+    // ---------------------------------------------------------------- S2: Coach roster for batch staffing
+
+    /**
+     * Active coaches with their availability and commitment status for each date of a batch.
+     *
+     * @return Collection<int, array{coach: Coach, dates: array<string, array{available: bool, confirmed: bool, committed: bool, conflict_batch: ?string}>}>
+     */
+    public function coachesForBatch(Batch $batch): Collection
+    {
+        $dates = $this->batchDates($batch);
+        $coaches = Coach::where('status', 'active')->with('user')->get();
+
+        $availabilities = CoachAvailability::whereIn('coach_id', $coaches->pluck('user_id'))
+            ->whereIn(DB::raw("DATE(date)"), $dates)
+            ->get()
+            ->keyBy(fn ($a) => $a->coach_id . '|' . $a->date->format('Y-m-d'));
+
+        $commitments = CoachDateCommitment::whereIn('coach_id', $coaches->pluck('id'))
+            ->whereIn(DB::raw("DATE(date)"), $dates)
+            ->with('batch')
+            ->get()
+            ->keyBy(fn ($c) => $c->coach_id . '|' . $c->date->format('Y-m-d'));
+
+        return $coaches->map(function (Coach $coach) use ($dates, $availabilities, $commitments, $batch) {
+            $perDate = [];
+            foreach ($dates as $date) {
+                $avail = $availabilities->get($coach->user_id . '|' . $date);
+                $commit = $commitments->get($coach->id . '|' . $date);
+                $perDate[$date] = [
+                    'available' => $avail !== null && $avail->status === 'available',
+                    'confirmed' => $avail !== null && $avail->isStaffConfirmed(),
+                    'committed' => $commit !== null,
+                    'committed_to_this_batch' => $commit !== null && $commit->batch_id === $batch->id,
+                    'conflict_batch' => $commit !== null && $commit->batch_id !== $batch->id ? $commit->batch->name : null,
+                ];
+            }
+
+            return ['coach' => $coach, 'dates' => $perDate];
+        });
+    }
+
+    private function assertStaffRole(User $user): void
+    {
+        if (! in_array($user->role, ['admin', 'owner'], true) || $user->status !== 'active') {
+            throw CoachSchedulingException::unauthorizedAssigner($user);
+        }
     }
 }
