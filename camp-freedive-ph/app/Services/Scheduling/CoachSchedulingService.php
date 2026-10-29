@@ -22,10 +22,14 @@ use Illuminate\Support\Facades\DB;
  */
 class CoachSchedulingService
 {
+    private const MAX_RATIO = 4;
+
     public function ratio(): int
     {
-        return max(1, (int) (app(\App\Services\SystemSettingService::class)
-            ->get('camp_operations.coach_student_ratio', 4) ?? 4));
+        $configured = (int) (app(\App\Services\SystemSettingService::class)
+            ->get('camp_operations.coach_student_ratio', self::MAX_RATIO) ?? self::MAX_RATIO);
+
+        return max(1, min(self::MAX_RATIO, $configured));
     }
 
     public function requiredCoachCount(int $eligibleParticipants): int

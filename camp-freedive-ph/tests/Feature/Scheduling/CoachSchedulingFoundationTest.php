@@ -8,6 +8,7 @@ use App\Models\BookingParticipant;
 use App\Models\Coach;
 use App\Models\CoachAvailability;
 use App\Models\CoachDateCommitment;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Scheduling\CoachSchedulingException;
 use App\Services\Scheduling\CoachSchedulingService;
@@ -383,5 +384,91 @@ class CoachSchedulingFoundationTest extends TestCase
             'coach_id' => $coach->id, 'batch_id' => $batch2->id,
             'date' => '2026-12-05', 'assigned_by' => $this->admin->id,
         ]);
+    }
+
+    // ---------------------------------------------------------------- V1: ratio cap at business maximum
+
+    private function setRatioAndAssert(int $input, int $expected): void
+    {
+        SystemSetting::updateOrCreate(
+            ['key' => 'camp_operations.coach_student_ratio'],
+            ['group' => 'camp_operations', 'value' => (string) $input, 'type' => 'integer'],
+        );
+        // Fresh service instance to clear in-memory cache
+        $svc = new CoachSchedulingService();
+        app(\App\Services\SystemSettingService::class)->clearCache();
+        $this->assertSame($expected, $svc->ratio());
+    }
+
+    public function test_ratio_never_exceeds_business_maximum_of_four(): void
+    {
+        $this->setRatioAndAssert(6, 4);
+        $this->setRatioAndAssert(10, 4);
+    }
+
+    public function test_ratio_respects_configured_value_within_bounds(): void
+    {
+        $this->setRatioAndAssert(3, 3);
+        $this->setRatioAndAssert(1, 1);
+    }
+
+    public function test_ratio_floors_at_one(): void
+    {
+        $this->setRatioAndAssert(0, 1);
+        $this->setRatioAndAssert(-2, 1);
+    }
+
+    // ---------------------------------------------------------------- V2: coach identity chain (user_id vs id)
+
+    public function test_availability_uses_user_id_and_commitment_uses_coach_id(): void
+    {
+        $user = User::factory()->create(['role' => 'coach', 'status' => 'active', 'must_change_password' => false]);
+        $coach = Coach::create([
+            'user_id' => $user->id, 'full_name' => 'Identity Coach',
+            'email' => 'identity@example.test', 'phone' => '09170000099',
+            'certification_level' => 'AIDA 4 Master', 'certification_number' => 'ID-1',
+            'certification_expiry' => now()->addYear(), 'status' => 'active',
+        ]);
+
+        // Ensure user_id != coach id (they diverge when other records exist)
+        $this->assertNotEquals($coach->id, $coach->user_id, 'Test requires user_id != coaches.id');
+
+        // Availability keyed on user_id
+        CoachAvailability::create([
+            'coach_id' => $coach->user_id, 'date' => '2026-12-05', 'status' => 'available',
+            'staff_confirmed_by' => $this->admin->id, 'staff_confirmed_at' => now(),
+        ]);
+        $this->assertTrue($this->svc->hasConfirmedAvailability($coach, '2026-12-05'));
+
+        // Commitment keyed on coaches.id
+        $batch = $this->batch();
+        $commitments = $this->svc->commitCoach($coach, $batch, ['2026-12-05'], $this->admin);
+        $this->assertSame($coach->id, $commitments[0]->coach_id);
+        $this->assertNotEquals($coach->user_id, $commitments[0]->coach_id);
+    }
+
+    public function test_availability_on_coach_id_column_is_rejected_or_invisible(): void
+    {
+        $user = User::factory()->create(['role' => 'coach', 'status' => 'active', 'must_change_password' => false]);
+        $coach = Coach::create([
+            'user_id' => $user->id, 'full_name' => 'Wrong FK Coach',
+            'email' => 'wrongfk@example.test', 'phone' => '09170000098',
+            'certification_level' => 'AIDA 4 Master', 'certification_number' => 'WFK-1',
+            'certification_expiry' => now()->addYear(), 'status' => 'active',
+        ]);
+        $this->assertNotEquals($coach->id, $coach->user_id);
+
+        if (DB::getDriverName() === 'pgsql') {
+            // PG enforces FK: coaches.id is not a valid users.id — insert is rejected
+            $this->expectException(\Illuminate\Database\QueryException::class);
+        }
+
+        CoachAvailability::create([
+            'coach_id' => $coach->id, 'date' => '2026-12-05', 'status' => 'available',
+            'staff_confirmed_by' => $this->admin->id, 'staff_confirmed_at' => now(),
+        ]);
+
+        // SQLite doesn't enforce FKs by default — service still won't find it (queries by user_id)
+        $this->assertFalse($this->svc->hasConfirmedAvailability($coach, '2026-12-05'));
     }
 }

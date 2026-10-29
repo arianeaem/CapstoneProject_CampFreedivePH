@@ -8,6 +8,7 @@ use App\Models\CoachAvailability;
 use App\Models\CoachDateCommitment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
+use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -43,6 +44,14 @@ class CoachSchedulingPgsqlTest extends TestCase
         }
         config(['database.connections.pgsql_race' => config('database.connections.' . config('database.default'))]);
         $this->admin = User::factory()->create(['role' => 'admin', 'status' => 'active', 'must_change_password' => false]);
+    }
+
+    public static function tearDownAfterClass(): void
+    {
+        if (static::class === self::class) {
+            RefreshDatabaseState::$migrated = false;
+        }
+        parent::tearDownAfterClass();
     }
 
     private function guardDisposableDatabase(): void
