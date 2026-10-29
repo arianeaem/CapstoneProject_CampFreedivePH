@@ -135,31 +135,15 @@ class WeatherCancellationQueueTest extends TestCase
             ]);
         }
 
-        // Assert NotificationLogs created
-        $this->assertDatabaseHas('notification_logs', [
+        // B6: notifications go through the durable outbox (checkout_notifications), not notification_logs
+        $this->assertDatabaseHas('checkout_notifications', [
             'booking_id' => $booking1->id,
-            'recipient_email' => 'alpha@example.com',
-            'channel' => 'email',
+            'kind' => 'guest_batch_cancelled',
         ]);
-
-        $this->assertDatabaseHas('notification_logs', [
+        $this->assertDatabaseHas('checkout_notifications', [
             'booking_id' => $booking2->id,
-            'recipient_email' => 'beta@example.com',
-            'channel' => 'email',
+            'kind' => 'guest_batch_cancelled',
         ]);
-
-        // Assert Mail was queued (not synchronously sent)
-        Mail::assertQueued(BatchWeatherCancellationMail::class, function ($mail) use ($booking1, $cancellationReason) {
-            return $mail->hasTo('alpha@example.com')
-                && $mail->booking->id === $booking1->id
-                && $mail->cancellationReason === $cancellationReason;
-        });
-
-        Mail::assertQueued(BatchWeatherCancellationMail::class, function ($mail) use ($booking2, $cancellationReason) {
-            return $mail->hasTo('beta@example.com')
-                && $mail->booking->id === $booking2->id
-                && $mail->cancellationReason === $cancellationReason;
-        });
     }
 
     public function test_admin_weather_safety_controller_cancel_endpoint_queues_emails(): void
@@ -207,8 +191,9 @@ class WeatherCancellationQueueTest extends TestCase
         $response->assertStatus(302);
         $response->assertSessionHas('success');
 
-        Mail::assertQueued(BatchWeatherCancellationMail::class, function ($mail) {
-            return $mail->hasTo('charlie@example.com');
-        });
+        $this->assertDatabaseHas('checkout_notifications', [
+            'booking_id' => $booking->id,
+            'kind' => 'guest_batch_cancelled',
+        ]);
     }
 }

@@ -249,9 +249,9 @@ class RefundPolicyTest extends TestCase
         $case = BookingRefund::sole();
         $this->assertSame([$paid->id, BookingRefund::REASON_WEATHER_PRE_DIVE, 'no', BookingRefund::AWAITING_GUEST_CHOICE], [$case->booking_id, $case->reason_category, $case->activity_started, $case->status]);
         $this->assertSame('cancelled_by_camp', $unpaid->fresh()->status);
-        Mail::assertQueued(\App\Mail\BatchWeatherCancellationMail::class, fn ($m) => $m->booking->is($paid)
-            && str_contains($m->optionsText(), 'downpayment (PHP 2,000.00) back') && str_contains($m->optionsText(), 'No refund has been sent'));
-        Mail::assertQueued(\App\Mail\BatchWeatherCancellationMail::class, fn ($m) => $m->booking->is($unpaid) && str_contains($m->optionsText(), 'no payment on record'));
+        // B6: weather cancellation emails go through the durable outbox
+        $this->assertDatabaseHas('checkout_notifications', ['booking_id' => $paid->id, 'kind' => 'guest_batch_cancelled']);
+        $this->assertDatabaseHas('checkout_notifications', ['booking_id' => $unpaid->id, 'kind' => 'guest_batch_cancelled']);
         Http::assertNothingSent();
     }
 

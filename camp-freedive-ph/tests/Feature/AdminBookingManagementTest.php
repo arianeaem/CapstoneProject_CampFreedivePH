@@ -240,14 +240,12 @@ class AdminBookingManagementTest extends TestCase
         $this->assertDatabaseHas('audit_logs', [
             'action' => 'BOOKING_DATA_MODIFIED',
         ]);
-        // Customer is emailed the changes at both the new and the previous address
-        Mail::assertSent(BookingDetailsUpdatedMail::class, fn ($mail) => $mail->hasTo('ariane.updated@example.com')
-            && collect($mail->changes)->contains(fn ($c) => $c['label'] === 'Contact Email' && $c['new'] === 'ariane.updated@example.com'));
-        Mail::assertSent(BookingDetailsUpdatedMail::class, fn ($mail) => $mail->hasTo($originalEmail));
-        $this->assertDatabaseHas('notification_logs', [
+        // B6: current address goes through the durable outbox; previous address gets a direct send
+        $this->assertDatabaseHas('checkout_notifications', [
             'booking_id' => $booking->id,
-            'recipient_email' => 'ariane.updated@example.com',
+            'kind' => 'guest_booking_updated',
         ]);
+        Mail::assertSent(BookingDetailsUpdatedMail::class, fn ($mail) => $mail->hasTo($originalEmail));
     }
 
     public function test_admin_can_approve_and_reject_reschedule_request(): void

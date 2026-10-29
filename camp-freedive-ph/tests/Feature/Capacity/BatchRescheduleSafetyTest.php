@@ -101,9 +101,9 @@ class BatchRescheduleSafetyTest extends TestCase
             $this->assertSame([$this->date, $batch->id], [$kept->fresh()->start_date->toDateString(), $kept->fresh()->batch_id], 'dates and batch unchanged');
         }
 
-        Mail::assertSent(BatchRescheduledMail::class, 1);
-        Mail::assertSent(BatchRescheduledMail::class, fn ($mail) => $mail->hasTo($going->contact_email));
-        $this->assertSame([$going->id], NotificationLog::pluck('booking_id')->map(fn ($id) => (int) $id)->all(), 'no misleading notification for skipped bookings');
+        // B6: reschedule notifications go through the durable outbox
+        $outboxRows = \App\Models\CheckoutNotification::where('kind', 'guest_batch_rescheduled')->pluck('booking_id')->map(fn ($id) => (int) $id)->all();
+        $this->assertSame([$going->id], $outboxRows, 'no misleading notification for skipped bookings');
     }
 
     public function test_skips_are_visible_on_each_booking_and_in_the_audit_log(): void

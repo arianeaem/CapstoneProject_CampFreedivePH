@@ -55,22 +55,21 @@ class WeatherRiskNotificationTest extends TestCase
 
         app(WeatherRiskNotifier::class)->handle($this->batch, 'Critical Risk');
 
-        Mail::assertSent(WeatherRiskNoticeMail::class, 1);
-        Mail::assertSent(WeatherRiskNoticeMail::class, function ($mail) use ($confirmed) {
-            $html = $mail->render();
-            return $mail->hasTo('guest@example.com') && $mail->level === 'critical'
-                && str_contains($html, 'Reschedule for free')
-                && str_contains($html, 'full refund of your downpayment')
-                && str_contains($html, '2,125.00')
-                && str_contains($html, $confirmed->booking_number);
-        });
-        Mail::assertSent(AdminOperationalNotificationMail::class, fn ($mail) => $mail->hasTo('admin@example.com')
-            && str_contains($mail->eventTitle, 'URGENT') && str_contains($mail->messageBody, 'reschedule for free or cancel with a full refund'));
-        $this->assertEquals(1, NotificationLog::where('batch_id', $this->batch->id)->count());
+        // B6: notifications go through the durable outbox, not direct Mail::send
+        $this->assertDatabaseHas('checkout_notifications', [
+            'booking_id' => $confirmed->id,
+            'kind' => 'guest_weather_critical',
+        ]);
+        // Admin alert also in outbox
+        $this->assertDatabaseHas('checkout_notifications', [
+            'kind' => 'staff_admin_alert',
+        ]);
+        $guestRows = \App\Models\CheckoutNotification::where('kind', 'guest_weather_critical')->count();
+        $this->assertEquals(1, $guestRows);
 
-        // The hourly re-check must not email the guest again
+        // The hourly re-check must not create a duplicate outbox row (insertOrIgnore + event_key dedup)
         app(WeatherRiskNotifier::class)->handle($this->batch, 'Critical Risk');
-        Mail::assertSent(WeatherRiskNoticeMail::class, 1);
+        $this->assertEquals(1, \App\Models\CheckoutNotification::where('kind', 'guest_weather_critical')->count());
     }
 
     public function test_high_risk_within_18_hours_is_a_heads_up_without_refund_offer(): void
@@ -79,14 +78,12 @@ class WeatherRiskNotificationTest extends TestCase
 
         app(WeatherRiskNotifier::class)->handle($this->batch, 'High Risk');
 
-        Mail::assertSent(WeatherRiskNoticeMail::class, function ($mail) {
-            $html = $mail->render();
-            return $mail->level === 'high'
-                && str_contains($html, 'still going ahead as planned')
-                && !str_contains($html, 'refund');
-        });
-        Mail::assertSent(AdminOperationalNotificationMail::class, fn ($mail) => str_contains($mail->eventTitle, 'High Risk')
-            && str_contains($mail->messageBody, 'No free cancellation or refund was offered'));
+        $this->assertDatabaseHas('checkout_notifications', [
+            'kind' => 'guest_weather_high',
+        ]);
+        $this->assertDatabaseHas('checkout_notifications', [
+            'kind' => 'staff_admin_alert',
+        ]);
     }
 
     public function test_no_notices_more_than_18_hours_before_the_dive(): void

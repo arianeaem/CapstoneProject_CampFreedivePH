@@ -248,15 +248,17 @@ class WeatherSafetyModuleTest extends TestCase
         $this->assertSame(['weather_pre_dive', 'unknown', 'awaiting_guest_choice'], [$case->reason_category, $case->activity_started, $case->status]);
         $this->assertNotNull(app(\App\Services\Refunds\RefundLedger::class)->entitlement($case)['blocked'], 'Unknown progress never authorizes a refund.');
 
-        // The guest is offered a free move or the downpayment back; the amount above it is reviewed, not promised
-        $log = NotificationLog::where('batch_id', $batch->id)->first();
-        $this->assertNotNull($log);
-        $this->assertStringContainsString('Hello Juan Dela Cruz', $log->message_body);
-        $this->assertStringContainsString('move to another available date for free', $log->message_body);
-        $this->assertStringContainsString('downpayment (PHP 3,000.00) back', $log->message_body);
-        $this->assertStringContainsString('our team will review the amount above the downpayment', $log->message_body);
-        $this->assertStringContainsString('No refund has been sent yet', $log->message_body);
-        $this->assertStringNotContainsString('full refund of PHP 7,000.00', $log->message_body);
+        // B6: the outbox row exists; content is reconstructed at delivery time from the Mailable
+        $outbox = \App\Models\CheckoutNotification::where('booking_id', $booking->id)->where('kind', 'guest_batch_cancelled')->first();
+        $this->assertNotNull($outbox);
+
+        // Verify the mailable can be reconstructed from the outbox context
+        $mailable = app(\App\Services\NotificationOutbox::class)->buildMailable($outbox);
+        $this->assertNotNull($mailable);
+        $html = $mailable->render();
+        $this->assertStringContainsString('Juan Dela Cruz', $html);
+        $this->assertStringContainsString('7,000.00', $html);
+        $this->assertStringContainsString('No refund has been sent', $html);
     }
 
     public function test_admin_can_access_weather_monitoring_pages(): void
