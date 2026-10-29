@@ -32,10 +32,12 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
-        <!-- Never call PayMongo from tests; tests that need the API set a fake key and use Http::fake() -->
-        <env name="PAYMONGO_SECRET_KEY" value=""/>
-        <env name="PAYMONGO_PUBLIC_KEY" value=""/>
-        <env name="PAYMONGO_WEBHOOK_SIGNATURE_SECRET" value=""/>
+        <!-- Never call PayMongo from tests; tests that need the API set a fake key and use Http::fake().
+             force="true" so parent-shell env vars (e.g. from a prior race run) cannot leak in. -->
+        <env name="PAYMONGO_SECRET_KEY" value="" force="true"/>
+        <env name="PAYMONGO_PUBLIC_KEY" value="" force="true"/>
+        <env name="PAYMONGO_WEBHOOK_SIGNATURE_SECRET" value="" force="true"/>
+        <env name="PAYMONGO_BASE_URL" value="" force="true"/>
         <!-- Synthetic ML API token for the ML sync tests. Without it the tests used the developer's real token from
              .env, and failed in CI where .env.example leaves it empty (the cause of the failing "Laravel CI" runs). -->
         <env name="ML_API_TOKEN" value="synthetic-test-ml-token" force="true"/>
