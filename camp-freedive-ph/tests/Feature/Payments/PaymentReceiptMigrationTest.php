@@ -30,8 +30,8 @@ class PaymentReceiptMigrationTest extends TestCase
     use BuildsCheckoutIntents;
     use RefundFixtures;
 
-    /** Migrations added after B1 (B2.1 guest choices, B2.3/B2.4 actions, B3 refund decisions) sit on top: rollbacks to B1 steps pass through them first. */
-    private const LATER_MIGRATIONS = 3;
+    /** Migrations added after B1 (B2.1 guest choices, B2.3/B2.4 actions, B3 refund decisions, B6 notification outbox) sit on top: rollbacks to B1 steps pass through them first. */
+    private const LATER_MIGRATIONS = 4;
     private const B1_MIGRATIONS = 3 + self::LATER_MIGRATIONS;
 
     protected function setUp(): void
@@ -228,7 +228,7 @@ class PaymentReceiptMigrationTest extends TestCase
         $choices->verify($choice, $staff('owner'), 'Synthetic: confirmed with the booking email.', 0);
         app(\App\Services\Payment\ExceptionResolutionService::class)->routeToRefundReview($choice, $staff('admin'), 1);
 
-        $this->assertStringContainsString('Guest-choice actions, refund reviews', (string) $this->rollback(2)); // passes the B3 step (no decision yet), refused at B2.3
+        $this->assertStringContainsString('Guest-choice actions, refund reviews', (string) $this->rollback(3)); // passes the B6 + B3 steps, refused at B2.3
         $this->assertSame([1, 'acted_on'], [DB::table('payment_exception_refund_reviews')->count(), DB::table('payment_exception_choices')->value('status')]);
     }
 }
