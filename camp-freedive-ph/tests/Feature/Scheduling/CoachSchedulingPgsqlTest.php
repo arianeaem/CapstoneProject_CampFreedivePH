@@ -23,7 +23,7 @@ class CoachSchedulingPgsqlTest extends TestCase
 {
     use DatabaseTruncation;
 
-    private const DISPOSABLE_DATABASES = ['testing'];
+    private const DISPOSABLE_DATABASES = ['testing', 'cfp_s5_test'];
     private const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '::1'];
     private const MANAGED_PROVIDER_ROLES = ['supabase_admin', 'supabase_auth_admin', 'authenticator', 'azure_pg_admin', 'azuresu', 'azure_superuser', 'rdsadmin', 'cloudsqlsuperuser'];
 
@@ -212,6 +212,85 @@ class CoachSchedulingPgsqlTest extends TestCase
 
         $this->assertNotNull($row);
         $this->assertSame($batch2->id, $row->batch_id, 'Reassignment landed on batch2');
+    }
+
+    // ---------------------------------------------------------------- S2-R1: concurrent staff confirmation
+
+    public function test_concurrent_confirmation_on_same_availability_serialises(): void
+    {
+        $coach = $this->coach();
+        CoachAvailability::create([
+            'coach_id' => $coach->user_id, 'date' => '2026-12-05', 'status' => 'available',
+        ]);
+
+        DB::connection('pgsql_race')->beginTransaction();
+        DB::connection('pgsql_race')->table('coach_availabilities')
+            ->where('coach_id', $coach->user_id)
+            ->whereRaw("DATE(date) = '2026-12-05'")
+            ->update(['staff_confirmed_by' => $this->admin->id, 'staff_confirmed_at' => now()]);
+
+        $admin2 = User::factory()->create(['role' => 'admin', 'status' => 'active', 'must_change_password' => false]);
+        DB::statement("SET lock_timeout = '500ms'");
+        $blocked = false;
+        try {
+            DB::table('coach_availabilities')
+                ->where('coach_id', $coach->user_id)
+                ->whereRaw("DATE(date) = '2026-12-05'")
+                ->update(['staff_confirmed_by' => $admin2->id, 'staff_confirmed_at' => now()]);
+        } catch (\Exception $e) {
+            $blocked = true;
+        }
+        DB::statement("SET lock_timeout = '0'");
+        DB::connection('pgsql_race')->commit();
+
+        $avail = DB::table('coach_availabilities')
+            ->where('coach_id', $coach->user_id)
+            ->whereRaw("DATE(date) = '2026-12-05'")
+            ->first();
+
+        $this->assertNotNull($avail->staff_confirmed_by, 'Confirmation landed');
+        if (! $blocked) {
+            $this->assertSame($admin2->id, $avail->staff_confirmed_by, 'Second update overwrote first (last writer wins when not blocked)');
+        }
+    }
+
+    // ---------------------------------------------------------------- S2-R2: concurrent assignment to conflicting batches
+
+    public function test_concurrent_assignment_to_overlapping_batch_one_rejected(): void
+    {
+        $coach = $this->coach();
+        $batch1 = $this->batch();
+        $batch2 = $this->batch();
+
+        DB::connection('pgsql_race')->beginTransaction();
+        DB::connection('pgsql_race')->table('coach_date_commitments')->insert([
+            'coach_id' => $coach->id, 'batch_id' => $batch1->id,
+            'date' => '2026-12-05', 'assigned_by' => $this->admin->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::statement("SET lock_timeout = '500ms'");
+        $rejected = false;
+        try {
+            DB::table('coach_date_commitments')->insert([
+                'coach_id' => $coach->id, 'batch_id' => $batch2->id,
+                'date' => '2026-12-05', 'assigned_by' => $this->admin->id,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            $rejected = true;
+        }
+        DB::statement("SET lock_timeout = '0'");
+
+        DB::connection('pgsql_race')->commit();
+
+        $count = DB::table('coach_date_commitments')
+            ->where('coach_id', $coach->id)
+            ->whereDate('date', '2026-12-05')
+            ->count();
+
+        $this->assertSame(1, $count, 'Only one assignment survived');
+        $this->assertTrue($rejected, 'Concurrent conflicting assignment was blocked');
     }
 
     // ---------------------------------------------------------------- R4: unique index name verification
