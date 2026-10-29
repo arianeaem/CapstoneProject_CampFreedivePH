@@ -17,15 +17,28 @@ class CoachAvailability extends Model
         'date',
         'status',
         'notes',
+        'staff_confirmed_by',
+        'staff_confirmed_at',
     ];
 
     protected $casts = [
         'date' => 'date',
+        'staff_confirmed_at' => 'datetime',
     ];
 
     public function coach(): BelongsTo
     {
         return $this->belongsTo(User::class, 'coach_id');
+    }
+
+    public function staffConfirmedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'staff_confirmed_by');
+    }
+
+    public function isStaffConfirmed(): bool
+    {
+        return $this->staff_confirmed_by !== null;
     }
 
     public function getStatusBadgeAttribute(): array

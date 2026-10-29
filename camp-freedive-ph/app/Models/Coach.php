@@ -57,6 +57,11 @@ class Coach extends Model
         return $this->hasMany(CoachAssignment::class)->whereNull('unassigned_at');
     }
 
+    public function dateCommitments(): HasMany
+    {
+        return $this->hasMany(CoachDateCommitment::class);
+    }
+
     public function deactivationRequests(): HasMany
     {
         return $this->hasMany(DeactivationRequest::class)->latest();

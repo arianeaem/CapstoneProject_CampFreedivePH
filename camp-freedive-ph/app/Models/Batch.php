@@ -90,6 +90,11 @@ class Batch extends Model
         return $this->hasMany(ParticipantAssignment::class, 'batch_id')->where('status', 'assigned');
     }
 
+    public function coachDateCommitments(): HasMany
+    {
+        return $this->hasMany(CoachDateCommitment::class);
+    }
+
     public function openings(): HasMany
     {
         return $this->hasMany(CoachOpening::class, 'batch_id');
