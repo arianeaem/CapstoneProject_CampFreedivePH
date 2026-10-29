@@ -2,12 +2,8 @@
 
 namespace App\Services;
 
-use App\Mail\WeatherRiskNoticeMail;
 use App\Models\Batch;
 use App\Models\Booking;
-use App\Models\NotificationLog;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 /**
  * Weather notices sent less than 18 hours before a dive:
@@ -57,41 +53,11 @@ class WeatherRiskNotifier
             ->whereNotNull('contact_email')
             ->get();
 
-        $sent = 0;
+        $outbox = app(NotificationOutbox::class);
         foreach ($bookings as $booking) {
-            $mail = new WeatherRiskNoticeMail($booking, $batch, $level, max(0, $hours));
-            $subject = $mail->envelope()->subject;
-
-            // Once per participant per batch, rating and dive date
-            $alreadySent = NotificationLog::where('batch_id', $batch->id)
-                ->where('booking_id', $booking->id)
-                ->where('subject', $subject)
-                ->exists();
-            if ($alreadySent) {
-                $sent++;
-                continue;
-            }
-
-            try {
-                Mail::to($booking->contact_email)->send($mail);
-                NotificationLog::create([
-                    'batch_id' => $batch->id,
-                    'booking_id' => $booking->id,
-                    'recipient_email' => $booking->contact_email,
-                    'recipient_name' => $booking->contact_name,
-                    'subject' => $subject,
-                    'message_body' => $level === 'critical'
-                        ? 'Critical Risk notice: participant may reschedule for free or cancel and request a downpayment refund (confirmed by staff).'
-                        : 'High Risk notice: dive still planned, extra safety steps.',
-                    'channel' => 'email',
-                    'sent_at' => now(),
-                ]);
-                $sent++;
-            } catch (\Throwable $e) {
-                Log::warning("Failed to send {$level} weather notice to {$booking->contact_email}: " . $e->getMessage());
-            }
+            $outbox->weatherRisk($booking, $batch, $level, $hours);
         }
 
-        return $sent;
+        return $bookings->count();
     }
 }

@@ -10,7 +10,6 @@ use App\Mail\BookingDetailsUpdatedMail;
 use App\Models\Booking;
 use App\Models\BookingParticipant;
 use App\Models\BookingStatusLog;
-use App\Models\NotificationLog;
 use App\Models\Payment;
 use App\Services\Analytics\AnalyticsService;
 use App\Services\AuditLogger;
@@ -662,35 +661,23 @@ class BookingController extends Controller
     }
 
     /**
-     * Email the participant about the changes. If the email address was changed, the old one gets it too.
+     * Notify the participant about the changes via the durable outbox. If the email address was changed,
+     * the previous address gets a best-effort direct send (the outbox uses the booking's current contact).
      */
     protected function notifyCustomerOfEdit(Booking $booking, array $changes, ?string $previousEmail, $currentUser): bool
     {
-        $recipients = array_values(array_unique(array_filter([$booking->contact_email, $previousEmail])));
-        $sent = false;
+        $outbox = app(\App\Services\NotificationOutbox::class);
+        $outbox->bookingUpdated($booking, $changes);
 
-        foreach ($recipients as $email) {
+        if ($previousEmail && $previousEmail !== $booking->contact_email) {
             try {
-                Mail::to($email)->send(new BookingDetailsUpdatedMail($booking, $changes));
-
-                NotificationLog::create([
-                    'batch_id' => $booking->batch_id,
-                    'booking_id' => $booking->id,
-                    'recipient_email' => $email,
-                    'recipient_name' => $booking->contact_name,
-                    'subject' => "Booking Details Updated - Booking #{$booking->booking_number}",
-                    'message_body' => implode('; ', array_map(fn ($c) => "{$c['label']}: {$c['old']} -> {$c['new']}", $changes)),
-                    'channel' => 'email',
-                    'sent_by' => $currentUser->id,
-                    'sent_at' => now(),
-                ]);
-                $sent = true;
+                Mail::to($previousEmail)->send(new BookingDetailsUpdatedMail($booking, $changes));
             } catch (\Throwable $e) {
-                Log::warning("Failed to send booking-updated email to {$email} for booking #{$booking->booking_number}: " . $e->getMessage());
+                Log::warning("Failed to send booking-updated email to previous address for booking #{$booking->booking_number}: " . $e->getMessage());
             }
         }
 
-        return $sent;
+        return true;
     }
 
     /**

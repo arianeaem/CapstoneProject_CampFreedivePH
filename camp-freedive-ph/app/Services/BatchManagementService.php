@@ -2,15 +2,12 @@
 
 namespace App\Services;
 
-use App\Mail\BatchRescheduledMail;
-use App\Mail\BatchWeatherCancellationMail;
 use App\Enums\BatchStatus;
 use App\Models\Batch;
 use App\Models\BatchStatusLog;
 use App\Models\Booking;
 use App\Models\BookingRefund;
 use App\Models\BookingStatusLog;
-use App\Models\NotificationLog;
 use App\Models\User;
 use App\Services\Booking\CapacityCoordinator;
 use App\Services\Booking\DateNotOperatingException;
@@ -21,8 +18,6 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 /**
  * Handles batches (one batch = one 2-day weekend camp).
@@ -474,27 +469,7 @@ class BatchManagementService
                             . ($case ? ". Refund case #{$case->id} opened ({$case->status}); nothing refunded yet." : '. No payment to refund.'),
                     ]);
 
-                    if (!empty($booking->contact_email)) {
-                        try {
-                            Mail::to($booking->contact_email)->send(
-                                new BatchWeatherCancellationMail($booking, $batch, $note ?: 'Cancelled by Camp due to weather or operational advisory.', $category)
-                            );
-
-                            NotificationLog::create([
-                                'batch_id' => $batch->id,
-                                'booking_id' => $booking->id,
-                                'recipient_email' => $booking->contact_email,
-                                'recipient_name' => $booking->contact_name,
-                                'subject' => "Camp Cancellation Notice - Booking #{$booking->booking_number}",
-                                'message_body' => $note ?: 'Cancelled by Camp due to weather or operational advisory.',
-                                'channel' => 'email',
-                                'sent_by' => $changer->id,
-                                'sent_at' => now(),
-                            ]);
-                        } catch (\Throwable $e) {
-                            Log::warning("Failed to dispatch batch cancellation email to {$booking->contact_email} for booking #{$booking->booking_number}: " . $e->getMessage());
-                        }
-                    }
+                    app(NotificationOutbox::class)->batchCancelled($booking, $batch, $note ?: 'Cancelled by Camp due to weather or operational advisory.', $category);
 
                 } elseif ($newStatus === 'completed') {
                     $booking->update(['status' => 'completed']);
@@ -518,27 +493,7 @@ class BatchManagementService
                         'note' => "Batch {$batch->name} was rescheduled by camp. Participant notified via email to select their new preferred date via Manage Booking portal." . ($note ? " Note: {$note}" : ""),
                     ]);
 
-                    if (!empty($booking->contact_email)) {
-                        try {
-                            Mail::to($booking->contact_email)->send(
-                                new BatchRescheduledMail($booking, $batch, $note)
-                            );
-
-                            NotificationLog::create([
-                                'batch_id' => $batch->id,
-                                'booking_id' => $booking->id,
-                                'recipient_email' => $booking->contact_email,
-                                'recipient_name' => $booking->contact_name,
-                                'subject' => "Camp Schedule Rescheduled - Booking #{$booking->booking_number}",
-                                'message_body' => $note ?: "Batch {$batch->name} was rescheduled by camp.",
-                                'channel' => 'email',
-                                'sent_by' => $changer->id,
-                                'sent_at' => now(),
-                            ]);
-                        } catch (\Throwable $e) {
-                            Log::warning("Failed to dispatch batch rescheduled email to {$booking->contact_email} for booking #{$booking->booking_number}: " . $e->getMessage());
-                        }
-                    }
+                    app(NotificationOutbox::class)->batchRescheduled($booking, $batch, $note);
                 }
             }
 

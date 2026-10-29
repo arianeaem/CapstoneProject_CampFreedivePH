@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ManageBooking\RescheduleBookingRequest;
-use App\Mail\CancellationRequestedMail;
-use App\Mail\RescheduleRequestedMail;
 use App\Models\Booking;
 use App\Models\CancellationRequest;
 use App\Models\RescheduleRequest;
@@ -15,9 +13,8 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use App\Services\NotificationOutbox;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 use App\Http\Requests\ManageBooking\FindBookingRequest;
 use App\Http\Requests\ManageBooking\CancelBookingRequest;
@@ -319,11 +316,7 @@ class ManageBookingController extends Controller
         }
         $booking->refresh();
 
-        try {
-            Mail::to($booking->contact_email)->send(new RescheduleRequestedMail($booking, $rescheduleRequest));
-        } catch (\Exception $e) {
-            Log::warning('Reschedule email failed: ' . $e->getMessage());
-        }
+        app(NotificationOutbox::class)->rescheduleRequested($booking, $rescheduleRequest);
 
         app(\App\Services\AdminNotificationService::class)->customerRequest('reschedule', $booking, $rescheduleRequest->reason);
 
@@ -386,11 +379,7 @@ class ManageBookingController extends Controller
         }
         $booking->refresh();
 
-        try {
-            Mail::to($booking->contact_email)->send(new CancellationRequestedMail($booking, $cancellationRequest));
-        } catch (\Exception $e) {
-            Log::warning('Cancellation email failed: ' . $e->getMessage());
-        }
+        app(NotificationOutbox::class)->cancellationRequested($booking, $cancellationRequest);
 
         app(\App\Services\AdminNotificationService::class)->customerRequest('cancellation', $booking, $cancellationRequest->reason);
 

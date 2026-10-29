@@ -2,11 +2,7 @@
 
 namespace App\Services;
 
-use App\Mail\AdminOperationalNotificationMail;
 use App\Models\Batch;
-use App\Models\User;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Cache;
 
 class AdminNotificationService
@@ -16,21 +12,9 @@ class AdminNotificationService
         string $message,
         array $details = [],
         string $severity = 'info',
+        ?string $eventKey = null,
     ): void {
-        $admins = User::whereIn('role', ['admin', 'owner'])
-            ->where('status', 'active')
-            ->whereNotNull('email')
-            ->get();
-
-        foreach ($admins as $admin) {
-            try {
-                Mail::to($admin->email)->send(
-                    new AdminOperationalNotificationMail($eventTitle, $message, $details, $severity)
-                );
-            } catch (\Throwable $e) {
-                Log::warning("Failed to send admin notification to {$admin->email}: " . $e->getMessage());
-            }
-        }
+        app(NotificationOutbox::class)->staffAlert($eventTitle, $message, $details, $severity, eventKey: $eventKey);
     }
 
     public function newBooking(\App\Models\Booking $booking): void
@@ -89,6 +73,7 @@ class AdminNotificationService
                 'What to do' => 'Check Safety Monitoring, then cancel the batch or confirm it is safe to go',
             ],
             'critical',
+            eventKey: "admin:critical-risk:{$batch->id}:" . $batch->start_date->format('Y-m-d'),
         );
     }
 
@@ -120,6 +105,7 @@ class AdminNotificationService
                 'What to do' => 'Brief coaches on extra safety steps and recheck conditions before departure',
             ],
             'high',
+            eventKey: "admin:high-risk:{$batch->id}:" . $batch->start_date->format('Y-m-d'),
         );
     }
 

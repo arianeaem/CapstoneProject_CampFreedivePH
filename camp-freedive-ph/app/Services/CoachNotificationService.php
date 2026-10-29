@@ -2,13 +2,10 @@
 
 namespace App\Services;
 
-use App\Mail\CoachScheduleNotificationMail;
 use App\Models\Batch;
 use App\Models\CoachOpening;
 use App\Models\User;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class CoachNotificationService
 {
@@ -54,16 +51,6 @@ class CoachNotificationService
         string $message,
         ?string $bookingNumber,
     ): void {
-        if (!$coach->email) {
-            return;
-        }
-
-        try {
-            Mail::to($coach->email)->send(
-                new CoachScheduleNotificationMail($batch, $eventTitle, $message, $bookingNumber)
-            );
-        } catch (\Throwable $e) {
-            Log::warning("Failed to send coach schedule notification to {$coach->email}: " . $e->getMessage());
-        }
+        app(NotificationOutbox::class)->coachNotification($coach, $batch, $eventTitle, $message, $bookingNumber);
     }
 }

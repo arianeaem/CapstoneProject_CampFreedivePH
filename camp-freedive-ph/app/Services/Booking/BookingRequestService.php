@@ -3,10 +3,6 @@
 namespace App\Services\Booking;
 
 use App\Enums\BookingStatus;
-use App\Mail\CancellationApprovedMail;
-use App\Mail\CancellationRejectedMail;
-use App\Mail\RescheduleApprovedMail;
-use App\Mail\RescheduleRejectedMail;
 use App\Models\Batch;
 use App\Models\Booking;
 use App\Models\BookingRefund;
@@ -18,14 +14,12 @@ use App\Services\BatchManagementService;
 use App\Services\BookingPolicyEngine;
 use App\Services\Booking\BookingTransitionService;
 use App\Services\CoachNotificationService;
+use App\Services\NotificationOutbox;
 use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
 use App\Services\Refunds\RefundGuard;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 
 /**
@@ -48,6 +42,7 @@ class BookingRequestService
         protected CoachNotificationService $coachNotifier,
         protected RefundGuard $guard,
         protected PaymentExceptionService $exceptions,
+        protected NotificationOutbox $outbox,
     ) {}
 
     /**
@@ -97,7 +92,7 @@ class BookingRequestService
         );
 
         $this->tellCoaches($previousBatch, 'Booking rescheduled', "Booking #{$booking->booking_number} was rescheduled by Camp Administration. Please review the affected roster and schedule in the Coach Portal.", $booking);
-        $this->emailGuest($booking, fn (Booking $fresh) => new RescheduleApprovedMail($fresh, $rescheduleRequest));
+        $this->outbox->rescheduleApproved($booking, $rescheduleRequest);
 
         return $booking;
     }
@@ -134,7 +129,7 @@ class BookingRequestService
             ]);
         });
 
-        $this->emailGuest($booking, fn (Booking $fresh) => new RescheduleRejectedMail($fresh, $rescheduleRequest, $reason));
+        $this->outbox->rescheduleRejected($booking, $rescheduleRequest, $reason);
 
         return $reason;
     }
@@ -195,7 +190,7 @@ class BookingRequestService
 
         $underReview = $case !== null && in_array($case->status, BookingRefund::OPEN_STATUSES, true);
         $this->tellCoaches($previousBatch, 'Booking cancelled', "Booking #{$booking->booking_number} was cancelled by Camp Administration. Please review the updated roster in the Coach Portal.", $booking);
-        $this->emailGuest($booking, fn (Booking $fresh) => new CancellationApprovedMail($fresh, $cancellationRequest, 0.0, $isForfeited, $underReview));
+        $this->outbox->cancellationApproved($booking, $cancellationRequest, 0.0, $isForfeited, $underReview);
 
         return ['refund_amount' => 0.0, 'forfeited' => $isForfeited, 'case' => $case];
     }
@@ -278,7 +273,7 @@ class BookingRequestService
             ]);
         });
 
-        $this->emailGuest($booking, fn (Booking $fresh) => new CancellationRejectedMail($fresh, $cancellationRequest, $reason));
+        $this->outbox->cancellationRejected($booking, $cancellationRequest, $reason);
 
         return $reason;
     }
@@ -290,17 +285,4 @@ class BookingRequestService
         }
     }
 
-    /** @param  callable(Booking): Mailable  $makeMail */
-    protected function emailGuest(Booking $booking, callable $makeMail): void
-    {
-        if (!$booking->contact_email) {
-            return;
-        }
-
-        try {
-            Mail::to($booking->contact_email)->send($makeMail($booking->fresh()));
-        } catch (\Throwable $e) {
-            Log::warning("Failed to send booking request email to {$booking->contact_email}: " . $e->getMessage());
-        }
-    }
 }

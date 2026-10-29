@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Mail\BatchWeatherCancellationMail;
 use App\Models\Batch;
 use App\Models\BatchRiskAssessment;
 use App\Models\BatchStatusLog;
@@ -13,7 +12,6 @@ use App\Models\ForecastSnapshot;
 use App\Models\HourlyAssessment;
 use App\Models\ManualOverride;
 use App\Models\BookingRefund;
-use App\Models\NotificationLog;
 use App\Models\User;
 use App\Services\Payment\PaymentExceptionService;
 use App\Services\Refunds\RefundCaseService;
@@ -23,7 +21,6 @@ use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 /**
  * Weather and sea safety checks for our dive site in Anilao, Batangas.
@@ -779,31 +776,7 @@ class WeatherForecastService
             }
             [$booking, $bookingOldStatus] = $cancelled;
 
-            // Short summary of the email, saved in the notification log
-            $scheduledDateStr = $booking->start_date->format('M d, Y') . ' - ' . $booking->end_date->format('M d, Y');
-            $messageBody = "Hello {$booking->contact_name}, we cancelled your trip on {$scheduledDateStr} for your safety.\n\nWhy: {$cancellationReason}\n\n"
-                . (new BatchWeatherCancellationMail($booking, $batch, $cancellationReason))->optionsText();
-
-            NotificationLog::create([
-                'batch_id' => $batch->id,
-                'booking_id' => $booking->id,
-                'recipient_email' => $booking->contact_email,
-                'recipient_name' => $booking->contact_name,
-                'subject' => "Your dive on {$scheduledDateStr} has been cancelled for your safety",
-                'message_body' => $messageBody,
-                'channel' => 'email',
-                'sent_by' => $operator->id,
-                'sent_at' => now(),
-            ]);
-
-            // Send the email through the queue so the admin page doesn't have to wait
-            try {
-                Mail::to($booking->contact_email)->queue(
-                    new BatchWeatherCancellationMail($booking, $batch, $cancellationReason)
-                );
-            } catch (\Throwable $e) {
-                Log::warning("Failed to queue weather cancellation email for booking #{$booking->booking_number}: " . $e->getMessage());
-            }
+            app(NotificationOutbox::class)->batchCancelled($booking, $batch, $cancellationReason, 'weather');
 
             BookingStatusLog::create([
                 'booking_id' => $booking->id,

@@ -193,7 +193,7 @@ class CheckoutNotifier
             return; // sent, failed, or another worker holds it
         }
 
-        $n = CheckoutNotification::with(['checkoutIntent.booking', 'booking'])->findOrFail($id);
+        $n = CheckoutNotification::with(['checkoutIntent.booking', 'booking', 'batch', 'paymentException'])->findOrFail($id);
         $booking = $n->checkoutIntent?->booking ?? $n->booking;
         if ($n->kind === CheckoutNotification::CUSTOMER_BOOKING_CONFIRMED && ($booking === null || ! CapacityCoordinator::takesPlace($booking->status))) {
             // Cancelled, unpaid or unplaced since the message was recorded: never tell the guest it is confirmed
@@ -278,7 +278,6 @@ class CheckoutNotifier
         return match ($n->kind) {
             CheckoutNotification::CUSTOMER_BOOKING_CONFIRMED => new BookingConfirmedMail(($booking ?? throw new LogicException('No booking for a confirmation.'))->load('participants', 'payments')),
             CheckoutNotification::CUSTOMER_PAYMENT_RECEIVED => new CheckoutPaymentReceivedMail($intent),
-            // Same content as AdminNotificationService::newBooking; never the PIN
             CheckoutNotification::STAFF_NEW_BOOKING => new AdminOperationalNotificationMail(
                 'New booking received',
                 "Booking {$booking?->booking_number} was created for {$booking?->contact_name}.",
@@ -291,7 +290,8 @@ class CheckoutNotifier
                 ['Checkout' => $intent->reference, 'Dates' => $dates, 'Participants' => (string) $intent->pax_count],
                 'critical',
             ),
-            default => throw new LogicException("Unknown checkout message {$n->kind}."),
+            default => app(\App\Services\NotificationOutbox::class)->buildMailable($n)
+                ?? throw new LogicException("Unknown or undeliverable notification kind {$n->kind}."),
         };
     }
 }
